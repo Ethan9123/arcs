@@ -793,7 +793,7 @@ function pname(i){ const p=G.players[i]; return `<span style="color:${p.color.cs
 /* ------------------------------ 游戏状态 -------------------------------- */
 let G = null; // 全局游戏对象
 
-function newGame(numPlayers, names, useExpansion){
+function newGame(numPlayers, names, useExpansion, setupVariant){
   const map = buildMap();
   const players = [];
   for(let i=0;i<numPlayers;i++){
@@ -811,6 +811,7 @@ function newGame(numPlayers, names, useExpansion){
   G = {
     numPlayers, players, map,
     useExpansion: !!useExpansion, // 领袖与传说扩展开关（false 时基础游戏行为零变化）
+    setupVariant: setupVariant||(numPlayers+'_homelands'), // 桌面布局方案 key
     actionDeck:[], discard:[],
     court:[], courtDeck:[], courtDiscard:[], // courtDiscard：被弃置的公会卡（序幕一次性能力用完后）
     resSupply:{material:5,fuel:5,weapon:5,relic:5,psionic:5},
@@ -862,19 +863,11 @@ function setupGame(){
   G.initiative = Math.floor(Math.random()*n);
   G.turnPlayer = G.initiative;
 
-  // 出局星团（path/out-of-play）：2-3人盖 2 团，4人盖 1 团
-  const coverCount = (n>=4)?1:2;
-  // 选择不与任何起始系统冲突的星团；起始系统见下
-  const startPlan = makeStartPlan(n); // 每玩家 {A,B,C系统}
-  const usedClusters = new Set();
-  Object.values(startPlan).forEach(sp=>[sp.A,sp.B,sp.C].forEach(id=>usedClusters.add(G.map[id].cluster)));
-  const freeClusters = [1,2,3,4,5,6].filter(c=>!usedClusters.has(c));
-  shuffle(freeClusters);
-  // 2 人局：6 个出局行星的资源按类型播种到雄心盒，作为「虚拟第三方」（官方规则书 p.4 步骤K / p.19）。
-  // 物资+燃料→大亨；武器→军阀（计为战利品）；遗物→守护；通灵→共情。暴君不播种。
+  // 桌面布局：从 SETUP_PLANS 取方案（官方 Setup Card 精确复现）
+  const plan = getSetupPlan(n, G.setupVariant);
+  // 2 人局：出局星团资源播种到「虚拟第三方」（官方规则书 p.4-K）
   if(n===2) G.phantom={tycoon:0,tyrant:0,warlord:0,keeper:0,empath:0};
-  for(let i=0;i<coverCount && i<freeClusters.length;i++){
-    const c=freeClusters[i];
+  (plan.oop||[]).forEach(c=>{
     G.map['G'+c].pathMarker=true; G.map['G'+c].outOfPlay=true;
     [c+'A',c+'B',c+'C'].forEach(id=>{
       G.map[id].outOfPlay=true;
@@ -885,17 +878,16 @@ function setupGame(){
         else if(r==='psionic') G.phantom.empath++;
       }
     });
-    // path marker 连通两侧星门
     const n1=(c%6)+1, n2=((c+4)%6)+1; addAdj(G.map,'G'+n1,'G'+n2);
-  }
+  });
 
-  // 放置起始棋子
+  // 放置起始棋子（按方案）
   G.players.forEach((p,i)=>{
-    const sp=startPlan[i];
+    const sp=plan.start[i]||{A:(i+1)+'A',B:(i+1)+'B',C:(i+1)+'C'}; // 安全后备
     placeBuilding(sp.A, 'city', p); addShips(sp.A, p, 3);
     placeBuilding(sp.B, 'starport', p); addShips(sp.B, p, 3);
     addShips(sp.C, p, 2);
-    // 起始资源：A、B 行星类型各 1
+    // 起始资源：城市行星 + 星港行星各 1
     gainResource(p, G.map[sp.A].resource, true);
     gainResource(p, G.map[sp.B].resource, true);
   });
@@ -904,7 +896,7 @@ function setupGame(){
   G.players.forEach(p=>{ for(let k=0;k<6;k++) p.hand.push(G.actionDeck.pop()); sortHand(p); });
 
   G.phase='lead';
-  logMsg(`<b>第 ${G.chapter} 章</b> 开始 · 先攻：<span style="color:${G.players[G.initiative].color.css}">${G.players[G.initiative].name}</span>`,'sys');
+  logMsg(`<b>第 ${G.chapter} 章</b> 开始 · 先攻：<span style="color:${G.players[G.initiative].color.css}">${G.players[G.initiative].name}</span> · 布局：<b>${plan.name}</b>（${plan.en}）`,'sys');
   // 领袖扩展：开局先进行领袖抽选（应用 setup 效果后再 beginRound）；未开扩展时维持原样
   if(G.useExpansion){ startLeaderDraft(); return; }
   beginRound();
@@ -993,14 +985,48 @@ function dealLoreCards(){
 }
 
 // 为各玩家分配起始 A/B/C 系统，尽量分散在不同星团
+// ——— 官方桌面布局方案（Setup Cards）———
+// start[i]={A:systemId, B:systemId, C:systemId}
+//   A → 城市+3舰+获得资源；B → 星港+3舰+获得资源；C → 2舰（无建筑）
+// oop → 必须封闭（out-of-play）的星团编号列表
+const SETUP_PLANS = {
+  // ——— 2 人 ———
+  '2_homelands': { n:2, name:'本土防御', en:'Homelands',
+    start:[{A:'1A',B:'1B',C:'1C'},{A:'4A',B:'4B',C:'4C'}], oop:[2,5] },
+  '2_mixup1':   { n:2, name:'混战·甲', en:'Mix Up 1',
+    start:[{A:'1A',B:'2B',C:'1C'},{A:'2A',B:'1B',C:'2C'}], oop:[4,5] },
+  '2_mixup2':   { n:2, name:'混战·乙', en:'Mix Up 2',
+    start:[{A:'1A',B:'1B',C:'2C'},{A:'2A',B:'2B',C:'1C'}], oop:[4,5] },
+  '2_frontiers':{ n:2, name:'边疆争夺', en:'Frontiers',
+    start:[{A:'1A',B:'2B',C:'2C'},{A:'2A',B:'1B',C:'1C'}], oop:[4,5] },
+  // ——— 3 人 ———
+  '3_homelands':    { n:3, name:'本土防御', en:'Homelands',
+    start:[{A:'1A',B:'1B',C:'1C'},{A:'2A',B:'2B',C:'2C'},{A:'3A',B:'3B',C:'3C'}], oop:[5,6] },
+  '3_mixup':        { n:3, name:'混战', en:'Mix Up',
+    start:[{A:'1A',B:'2B',C:'3C'},{A:'2A',B:'3B',C:'1C'},{A:'3A',B:'1B',C:'2C'}], oop:[5,6] },
+  '3_frontiers':    { n:3, name:'边疆争夺', en:'Frontiers',
+    start:[{A:'1A',B:'1B',C:'2C'},{A:'2A',B:'2B',C:'3C'},{A:'3A',B:'3B',C:'1C'}], oop:[5,6] },
+  '3_coreconflict': { n:3, name:'核心冲突', en:'Core Conflict',
+    start:[{A:'1A',B:'2B',C:'1C'},{A:'2A',B:'3B',C:'2C'},{A:'3A',B:'1B',C:'3C'}], oop:[4,6] },
+  // ——— 4 人 ———
+  '4_mixup1':   { n:4, name:'混战·甲', en:'Mix Up 1',
+    start:[{A:'1A',B:'4B',C:'1C'},{A:'4A',B:'2B',C:'4C'},{A:'2A',B:'3B',C:'2C'},{A:'3A',B:'1B',C:'3C'}], oop:[5] },
+  '4_mixup2':   { n:4, name:'混战·乙', en:'Mix Up 2',
+    start:[{A:'4A',B:'1B',C:'4C'},{A:'1A',B:'2B',C:'1C'},{A:'2A',B:'3B',C:'2C'},{A:'3A',B:'4B',C:'3C'}], oop:[5] },
+  '4_mixup3':   { n:4, name:'混战·丙', en:'Mix Up 3',
+    start:[{A:'1A',B:'1B',C:'2C'},{A:'2A',B:'2B',C:'3C'},{A:'3A',B:'3B',C:'4C'},{A:'4A',B:'4B',C:'1C'}], oop:[5] },
+  '4_frontiers':{ n:4, name:'边疆争夺', en:'Frontiers',
+    start:[{A:'1A',B:'1B',C:'1C'},{A:'2A',B:'2B',C:'2C'},{A:'3A',B:'3B',C:'3C'},{A:'4A',B:'4B',C:'4C'}], oop:[5] },
+};
+function getSetupPlan(n, variant){
+  const key=variant||(n+'_homelands');
+  return SETUP_PLANS[key]||SETUP_PLANS[n+'_homelands']||Object.values(SETUP_PLANS).find(p=>p.n===n);
+}
 function makeStartPlan(n){
-  // 6 个星团，取互不相邻的起始团；每玩家用本团 A/B/C
-  const order=[1,4,2,5,3,6]; // 分散顺序
+  // 兼容旧调用路径（测试/教学）
+  const order=[1,4,2,5,3,6];
   const plan={};
-  for(let i=0;i<n;i++){
-    const c=order[i];
-    plan[i]={A:c+'A', B:c+'B', C:c+'C'};
-  }
+  for(let i=0;i<n;i++){ const c=order[i]; plan[i]={A:c+'A', B:c+'B', C:c+'C'}; }
   return plan;
 }
 
@@ -3141,15 +3167,34 @@ function showLoreCards(p){
 function showStartScreen(){
   const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
   let np=4; let names=['','','','']; let useExp=false;
+  let setupV='4_frontiers'; // 当前选中的布局方案
   function draw(){
+    // 若人数变化后当前方案不属于该人数，重置为对应默认值
+    if(!setupV.startsWith(np+'_')) setupV=np+'_homelands';
     m.innerHTML='';
     m.appendChild(el('h2',null,'ARCS 暗星悬弧 · 电子版'));
-    m.appendChild(el('div','hintbox','基础游戏 · 热座（同设备轮流）· 中文界面。选择人数与名称后开始。'));
+    m.appendChild(el('div','hintbox','基础游戏 · 热座（同设备轮流）· 中文界面。选择人数、布局与名称后开始。'));
     const seg=el('div','row');
     seg.appendChild(el('span',null,'玩家人数：'));
     const sg=el('div','seg');
-    [2,3,4].forEach(n=>{const b=el('button',np===n?'on':'',n+'人');b.onclick=()=>{np=n;draw();};sg.appendChild(b);});
+    [2,3,4].forEach(n=>{const b=el('button',np===n?'on':'',n+'人');b.onclick=()=>{np=n;if(!setupV.startsWith(np+'_'))setupV=np+'_homelands';draw();};sg.appendChild(b);});
     seg.appendChild(sg); m.appendChild(seg);
+    // 布局方案选择器（官方 Setup Card）
+    const planRow=el('div','row'); planRow.style.marginTop='6px';
+    planRow.appendChild(el('span',null,'🗺 布局：'));
+    const psg=el('div','seg');
+    Object.entries(SETUP_PLANS).filter(([k])=>k.startsWith(np+'_')).forEach(([key,plan])=>{
+      const b=el('button',setupV===key?'on':'',plan.name);
+      b.title=plan.en+' — '+plan.start.map((s,i)=>`P${i+1}:城市${s.A}/星港${s.B}`).join(' | ');
+      b.onclick=()=>{setupV=key;draw();}; psg.appendChild(b);
+    });
+    planRow.appendChild(psg); m.appendChild(planRow);
+    // 布局提示
+    const curPlan=SETUP_PLANS[setupV];
+    if(curPlan){
+      const hint=curPlan.start.map((s,i)=>`<b style="color:${PCOLORS[i].css}">P${i+1}</b>:城市${s.A}/星港${s.B}/舰${s.C}`).join(' &nbsp;');
+      m.appendChild(el('div','hintbox',hint));
+    }
     for(let i=0;i<np;i++){
       const r=el('div','row');
       const dot=el('span','dot');dot.style.cssText=`width:16px;height:16px;border-radius:50%;background:${PCOLORS[i].css};display:inline-block`;
@@ -3167,7 +3212,7 @@ function showStartScreen(){
     if(useExp) m.appendChild(el('div','hintbox','已启用领袖与传说扩展：开局每位玩家从 2 名领袖中选 1 名，随后各发 2 张传说卡作为个人能力。'));
     const ctl=el('div','row');ctl.style.marginTop='14px';
     const start=el('button','btn gold','开始游戏');
-    start.onclick=()=>{ w.style.display='none'; newGame(np, names.slice(0,np), useExp); render(); };
+    start.onclick=()=>{ w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); render(); };
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
     rules.onclick=showRules; ctl.appendChild(rules);
