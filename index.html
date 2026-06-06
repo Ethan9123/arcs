@@ -637,8 +637,8 @@ function applyLeaderSetup(p){
 // 其余卡为新行动/特殊建造/复杂条件，本轮仅展示卡面文本，标 TODO(lore)。
 const LORE=[
   // —— 基础 14 ——
-  {id:'toolpriests', name:'Tool-Priests', cn:'工具祭司', kind:'base', eff:[],
-   abilities:[{n:'Summon 召唤',t:'新行动·建造(TODO)',d:'每回合一次，在你控制的任意城市建造 1 艘舰船。'}]},
+  {id:'toolpriests', name:'Tool-Priests', cn:'工具祭司', kind:'base', eff:['summon'],
+   abilities:[{n:'Summon 召唤',t:'新行动·建造',d:'每回合一次，在你控制且有你城市的系统建造 1 艘舰船（已实装）。'}]},
   {id:'galacticrifles', name:'Galactic Rifles', cn:'银河步枪', kind:'base', eff:[],
    abilities:[{n:'Fire Rifles 步枪齐射',t:'新行动·战斗(TODO)',d:'如战斗般，选系统为该处新鲜忠诚舰收突袭骰，选相邻系统防御者，掷骰，每 ✷ 造 1 击（先舰后建筑）。'}]},
   {id:'sprinterdrives', name:'Sprinter Drives', cn:'疾驰引擎', kind:'base', eff:[],
@@ -655,8 +655,8 @@ const LORE=[
    abilities:[{n:'星门港',t:'被动+触发(TODO)',d:'可在星门造星港（每门最多 1）；对手舰移入你控制且有新鲜忠诚星港的星门时，俘获其 1 密探。'}]},
   {id:'cloudcities', name:'Cloud Cities', cn:'云端城市', kind:'base', eff:[],
    abilities:[{n:'云端城市',t:'被动(TODO)',d:'可在行星建造槽外建城市（每行星最多 1），花费 1 个该行星类型资源。'}]},
-  {id:'livingstructures', name:'Living Structures', cn:'活体建筑', kind:'base', eff:[],
-   abilities:[{n:'Nurture 培育',t:'新行动·建造(TODO)',d:'课税 1 忠诚城市。'},
+  {id:'livingstructures', name:'Living Structures', cn:'活体建筑', kind:'base', eff:['nurture','prune'],
+   abilities:[{n:'Nurture 培育',t:'新行动·建造',d:'课税 1 忠诚城市（已实装）。'},
               {n:'Prune 修剪',t:'新行动·修复(TODO)',d:'忠诚星港↔忠诚城市互换。'}]},
   {id:'gatestations', name:'Gate Stations', cn:'星门站', kind:'base', eff:[],
    abilities:[{n:'星门站',t:'被动(TODO)',d:'可在星门造城市（每门最多 1）；星门城市类型匹配其星簇所有城市。'}]},
@@ -673,8 +673,8 @@ const LORE=[
    abilities:[{n:'Guide 引导',t:'新行动·移动(TODO)',d:'将任意数量任意舰（即使非忠诚）从有新鲜忠诚星港的系统移到相邻或反向，忽略移动修正。'}]},
   {id:'raiderexosuits', name:'Raider Exosuits', cn:'劫掠者外骨骼', kind:'ext', eff:['exosuit'],
    abilities:[{n:'劫掠者外骨骼',t:'触发·进攻',d:'进攻时若本系统无守方建筑，可收至多 1 颗劫掠骰（仍遵守每舰 1 骰上限）。'}]},
-  {id:'survivaloverrides', name:'Survival Overrides', cn:'生存覆写', kind:'ext', eff:[],
-   abilities:[{n:'Martyr 殉道',t:'新行动·移动(TODO)',d:'摧毁地图 1 艘新鲜忠诚舰，以摧毁其所在系统 1 艘非忠诚舰并取为战利品（你的舰不成战利品）。'}]},
+  {id:'survivaloverrides', name:'Survival Overrides', cn:'生存覆写', kind:'ext', eff:['martyr'],
+   abilities:[{n:'Martyr 殉道',t:'新行动·移动',d:'摧毁地图 1 艘新鲜忠诚舰，以摧毁其所在系统 1 艘非忠诚舰并取为战利品（你的舰不成战利品，已实装）。'}]},
   {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:['empathvision','clearoutrage:psionic'],
    abilities:[{n:'共情者之眼',t:'条件触发+序幕',d:'共情被宣告期间，掷任何骰可重掷任意数量一次（本版自动重掷所有空白/无收益骰）。序幕：可弃此卡清除通灵民愤（已实装）。'}]},
   {id:'empathsbond', name:"Empath's Bond", cn:'共情者羁绊', kind:'ext', eff:['empathbond'],
@@ -689,8 +689,8 @@ const LORE=[
    abilities:[{n:'霸主恐怖',t:'条件序幕(TODO)',d:'霸主被宣告期间，序幕可消耗战利品（归还）每个施加一次影响。'}]},
   {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:['clearoutrage:weapon'],
    abilities:[{n:'暴君傲慢',t:'条件序幕',d:'暴君被宣告期间，序幕可消耗俘虏（归还）每个 secure 一次（TODO）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
-  {id:'tyrantsauthority', name:"Tyrant's Authority", cn:'暴君权威', kind:'ext', eff:[],
-   abilities:[{n:'Annex 吞并',t:'条件新行动·建造(TODO)',d:'暴君被宣告期间，将你控制的任意城市/星港替换为忠诚城市/星港。'}]},
+  {id:'tyrantsauthority', name:"Tyrant's Authority", cn:'暴君权威', kind:'ext', eff:['annex'],
+   abilities:[{n:'Annex 吞并',t:'条件新行动·建造',d:'暴君被宣告期间，将你控制的任意城市/星港替换为忠诚城市/星港（城市归还玩家板，已实装）。'}]},
   {id:'tycoonsambition', name:"Tycoon's Ambition", cn:'大亨野心', kind:'ext', eff:['tycoondeclare'],
    abilities:[{n:'大亨野心',t:'条件序幕',d:'大亨被宣告期间，行动前可弃光物资+燃料以宣告恰好 1 个未宣告雄心（不影响主导牌点数，已实装）。'}]},
   {id:'tycoonscharm', name:"Tycoon's Charm", cn:'大亨魅力', kind:'ext', eff:['charmgain','clearoutrage:material','clearoutrage:fuel'],
@@ -1399,6 +1399,7 @@ function renderActionBar(){
     if(G.preludeOpen){ const pb=el('button','btn sm','序幕✨'); pb.disabled=!!G.pending; pb.onclick=openPrelude; bar.appendChild(pb); }
     const done=el('button','btn gold sm','结束行动'); done.onclick=endActorTurn; bar.appendChild(done);
     if(hasGuildAbilities(G.players[G.actor])){ const ab=el('button','btn sm','议会卡能力'); ab.disabled=!!G.pending; ab.onclick=openGuildAbilities; bar.appendChild(ab); }
+    if(hasExpActions(G.players[G.actor])){ const xb=el('button','btn sm','✨扩展行动'); xb.disabled=!!G.pending||G.actionsLeft<=0; xb.onclick=openExpActions; bar.appendChild(xb); }
     if(G.pending){ const c=el('button','btn ghost sm','取消当前'); c.onclick=cancelAction; bar.appendChild(c); }
   } else if(G.phase==='follow'){
     const b=el('button','btn ghost sm','跳过本回合（不出牌）'); b.onclick=followPass; bar.appendChild(b);
@@ -2861,6 +2862,118 @@ function openGuildAbilities(){ const me=G.players[G.actor]; const list=[];
       b.onclick=()=>{ closeModal(); d.run(me,c); }; m.appendChild(b); });
     const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc); }); }
 
+/* ============ 扩展·新行动（领袖与传说，消耗 1 行动点）============
+   每张「新行动」绑定一个基础行动类型(build/move/repair)，仅当本回合主导花色含该行动时可用（规则书：New Action）。*/
+function expActionList(p){
+  if(!G.useExpansion||!p||G.phase!=='actions'||!G.actionSuit) return [];
+  const baseActs=SUITS[G.actionSuit].actions; const out=[];
+  const has=(k)=>leaderHas(p,k)||loreHas(p,k);
+  if(has('summon')&&baseActs.includes('build')) out.push({key:'summon',label:'📜工具祭司·召唤：在你控制且有你城市的系统建 1 舰（每回合一次）',used:!!(p._abil&&p._abil._summon)});
+  if(has('nurture')&&baseActs.includes('build')) out.push({key:'nurture',label:'📜活体建筑·培育：课税你的 1 座忠诚城市'});
+  if(has('prune')&&baseActs.includes('repair')) out.push({key:'prune',label:'📜活体建筑·修剪：忠诚城市↔太空港 互换'});
+  if(has('martyr')&&baseActs.includes('move')) out.push({key:'martyr',label:'📜生存覆写·殉道：毁己方1新鲜舰→毁同系统1敌舰(战利品)'});
+  if(has('annex')&&baseActs.includes('build')&&ambitionDeclared('tyrant')) out.push({key:'annex',label:'👑暴君权威·吞并：你控制的城/港换为忠诚（暴君宣告中）'});
+  return out;
+}
+function hasExpActions(p){ return expActionList(p).length>0; }
+function openExpActions(){
+  const me=G.players[G.actor]; const list=expActionList(me);
+  openModal(m=>{ m.appendChild(el('h2',null,'扩展新行动 · 领袖/传说'));
+    m.appendChild(el('div','hintbox','领袖/传说卡提供的「新行动」，每个消耗 1 次行动（须本回合主导花色含对应基础行动）。'));
+    if(!list.length) m.appendChild(el('div','hintbox','当前没有可用的扩展新行动。'));
+    list.forEach(it=>{ const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+      b.innerHTML=it.label+(it.used?' <span style="opacity:.55;font-size:12px">（本回合已用）</span>':'');
+      b.disabled=(G.actionsLeft<=0)||it.used;
+      b.onclick=()=>{ closeModal(); EXP_ACTION_RUN[it.key](me); }; m.appendChild(b); });
+    const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
+function expSysBrief(id){ const s=G.map[id];
+  const ships=Object.entries(s.pieces.ships).filter(([c,n])=>n>0).map(([c,n])=>`${(PCOLORS.find(p=>p.key===c)||{name:c}).name}舰${n}`).join(' ');
+  const blds=s.pieces.buildings.map(b=>`${(PCOLORS.find(p=>p.key===b.owner)||{name:b.owner}).name}${b.type==='city'?'城':'港'}`).join(' ');
+  return [s.resource?RESOURCES[s.resource].name:'', ships, blds].filter(Boolean).join(' · '); }
+function expPickSystem(title, hint, ids, cb){
+  if(!ids.length){ toast('没有合法目标'); return; }
+  openModal(m=>{ m.appendChild(el('h2',null,title)); if(hint) m.appendChild(el('div','hintbox',hint));
+    ids.forEach(id=>{ const b=el('button','btn',`${id}　${expSysBrief(id)}`); b.style.cssText='display:block;width:100%;margin:5px 0;text-align:left';
+      b.onclick=()=>{ closeModal(); cb(id); }; m.appendChild(b); });
+    const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
+// 殉道：在系统 id 牺牲己方 1 新鲜舰，摧毁敌色 ec 的 1 舰（计入战利品）。抽出供测试。
+function martyrResolve(me, id, ec){
+  const s=G.map[id]; const col=me.color.key;
+  s.pieces.ships[col]--; me.supply.ships++;                 // 己方新鲜舰 → 归还补给（不成战利品）
+  const ep=G.players.find(p=>p.color.key===ec);
+  s.pieces.ships[ec]--; const ed=dmgMap(s);                 // 敌舰 −1（优先保留新鲜被毁：仅当受损数超过总数才下调）
+  if((ed[ec]||0)>s.pieces.ships[ec]) ed[ec]=s.pieces.ships[ec];
+  if(s.pieces.ships[ec]<=0){ delete s.pieces.ships[ec]; if(ed[ec]!=null) delete ed[ec]; }
+  if(ep) ep.supply.ships++; me.trophies++;
+  return ep;
+}
+// 修剪：把系统 id 内你的忠诚建筑 b 改为另一类型（受补给限制）。抽出供测试。
+function pruneSwap(me, b){ const to=b.type==='city'?'starport':'city';
+  if((to==='city'?me.supply.cities:me.supply.starports)<=0) return false;
+  if(b.type==='city') me.supply.cities++; else me.supply.starports++;
+  b.type=to; b.damaged=false;
+  if(to==='city') me.supply.cities--; else me.supply.starports--; return true; }
+const EXP_ACTION_RUN={
+  summon(me){ const col=me.color.key;
+    if(me.supply.ships<=0){ toast('没有可用舰船补给'); return; }
+    const ids=controlledSystems(me).filter(id=>G.map[id].pieces.buildings.some(b=>b.owner===col&&b.type==='city'));
+    expPickSystem('召唤 · 选择系统','在你控制且有你城市的系统建造 1 艘舰船。', ids, id=>{
+      addShips(id,me,1,false); if(!me._abil)me._abil={}; me._abil._summon=true;
+      consumeAction(`${pname(G.actor)} 工具祭司·召唤：在 ${id} 建造 1 艘舰船`); });
+  },
+  nurture(me){ const col=me.color.key; const ids=[];
+    for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+      if(s.pieces.buildings.some(b=>b.owner===col&&b.type==='city') && isLoyalSystem(id,me) && s.resource && G.resSupply[s.resource]>0) ids.push(id); }
+    expPickSystem('培育 · 课税忠诚城市','选择你的 1 座忠诚城市课税（获得该行星资源）。', ids, id=>{
+      const s=G.map[id]; let msg=`${pname(G.actor)} 活体建筑·培育：课税 ${id}`;
+      if(gainResource(me,s.resource)) msg+=`，获得 ${RESOURCES[s.resource].name}`; consumeAction(msg); });
+  },
+  prune(me){ const col=me.color.key; const opts=[];
+    for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+      s.pieces.buildings.forEach(b=>{ if(b.owner===col){ const to=b.type==='city'?'starport':'city';
+        if((to==='city'?me.supply.cities:me.supply.starports)>0) opts.push({id,b}); } }); }
+    if(!opts.length){ toast('没有可互换的忠诚建筑（或缺少对应补给）'); return; }
+    openModal(m=>{ m.appendChild(el('h2',null,'修剪 · 城市↔太空港 互换'));
+      m.appendChild(el('div','hintbox','选择你的 1 座忠诚建筑，替换为另一种类型（受补给限制）。'));
+      opts.forEach(o=>{ const b=el('button','btn',`${o.id}：${o.b.type==='city'?'城市→太空港':'太空港→城市'}`); b.style.cssText='display:block;width:100%;margin:5px 0;text-align:left';
+        b.onclick=()=>{ closeModal(); const to=o.b.type==='city'?'太空港':'城市'; if(pruneSwap(me,o.b)) consumeAction(`${pname(G.actor)} 活体建筑·修剪：${o.id} 的建筑改为${to}`); };
+        m.appendChild(b); });
+      const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+    });
+  },
+  martyr(me){ const col=me.color.key; const ids=[];
+    for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+      if(freshShips(s,col)>0 && Object.keys(s.pieces.ships).some(c=>c!==col&&s.pieces.ships[c]>0)) ids.push(id); }
+    expPickSystem('殉道 · 选择系统','摧毁你 1 艘新鲜舰，以摧毁该系统 1 艘敌舰（计入战利品）。', ids, id=>{
+      const s=G.map[id]; const enemies=Object.keys(s.pieces.ships).filter(c=>c!==col&&s.pieces.ships[c]>0);
+      const fin=(ec)=>{ const ep=martyrResolve(me,id,ec); consumeAction(`${pname(G.actor)} 生存覆写·殉道：在 ${id} 牺牲 1 舰，摧毁 ${ep?ep.name:ec} 1 舰（+1 战利品）`); };
+      if(enemies.length===1) fin(enemies[0]);
+      else openModal(m=>{ m.appendChild(el('h2',null,'殉道 · 选择摧毁的敌方'));
+        enemies.forEach(ec=>{ const pl=G.players.find(p=>p.color.key===ec); const b=el('button','btn',pl?pl.name:ec); b.style.cssText='display:block;margin:5px 0';
+          b.onclick=()=>{ closeModal(); fin(ec); }; m.appendChild(b); });
+        const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc); }); });
+  },
+  annex(me){ const col=me.color.key;
+    if(!ambitionDeclared('tyrant')){ toast('需暴君已宣告'); return; }
+    const opts=[]; controlledSystems(me).forEach(id=>{ const s=G.map[id];
+      s.pieces.buildings.forEach(b=>{ if(b.owner!==col && (b.type==='city'?me.supply.cities:me.supply.starports)>0) opts.push({id,b}); }); });
+    if(!opts.length){ toast('没有可吞并的建筑（需你控制系统中有敌方城/港且你有对应补给）'); return; }
+    openModal(m=>{ m.appendChild(el('h2',null,'吞并 · 替换为忠诚建筑'));
+      m.appendChild(el('div','hintbox','将你控制的系统中 1 座敌方城市/太空港替换为你的忠诚同类建筑（敌方建筑归还其补给）。'));
+      opts.forEach(o=>{ const ow=G.players.find(p=>p.color.key===o.b.owner); const b=el('button','btn',`${o.id}：${ow?ow.name:o.b.owner}的${o.b.type==='city'?'城市':'太空港'} → 你的`); b.style.cssText='display:block;width:100%;margin:5px 0;text-align:left';
+        b.onclick=()=>{ closeModal();
+          if(o.b.type==='city'){ if(ow)ow.supply.cities++; me.supply.cities--; } else { if(ow)ow.supply.starports++; me.supply.starports--; }
+          o.b.owner=col; o.b.damaged=false;
+          consumeAction(`${pname(G.actor)} 暴君权威·吞并：${o.id} 的${o.b.type==='city'?'城市':'太空港'}归你所有`); };
+        m.appendChild(b); });
+      const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+    });
+  },
+};
 function openCountModal(title,min,max,cb){
   let v=max;
   openModal(m=>{ m.appendChild(el('h2',null,title));
