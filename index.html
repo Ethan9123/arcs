@@ -675,26 +675,26 @@ const LORE=[
    abilities:[{n:'劫掠者外骨骼',t:'触发·进攻',d:'进攻时若本系统无守方建筑，可收至多 1 颗劫掠骰（仍遵守每舰 1 骰上限）。'}]},
   {id:'survivaloverrides', name:'Survival Overrides', cn:'生存覆写', kind:'ext', eff:[],
    abilities:[{n:'Martyr 殉道',t:'新行动·移动(TODO)',d:'摧毁地图 1 艘新鲜忠诚舰，以摧毁其所在系统 1 艘非忠诚舰并取为战利品（你的舰不成战利品）。'}]},
-  {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:['empathvision'],
-   abilities:[{n:'共情者之眼',t:'条件触发+序幕',d:'共情被宣告期间，掷任何骰可重掷任意数量一次（本版自动重掷所有空白/无收益骰）。序幕（TODO）：可弃此卡清除通灵民愤。'}]},
+  {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:['empathvision','clearoutrage:psionic'],
+   abilities:[{n:'共情者之眼',t:'条件触发+序幕',d:'共情被宣告期间，掷任何骰可重掷任意数量一次（本版自动重掷所有空白/无收益骰）。序幕：可弃此卡清除通灵民愤（已实装）。'}]},
   {id:'empathsbond', name:"Empath's Bond", cn:'共情者羁绊', kind:'ext', eff:['empathbond'],
    abilities:[{n:'共情者羁绊',t:'条件被动',d:'共情被宣告期间，可像忠诚一样课税任意城市（已实装）；用任意星港造舰/弹射（TODO）。'}]},
-  {id:'keeperstrust', name:"Keeper's Trust", cn:'守护者信任', kind:'ext', eff:['keepertrust'],
-   abilities:[{n:'守护者信任',t:'条件被动+序幕',d:'守护被宣告期间，对手不能偷你与他们已有相同类型的资源。序幕（TODO）：可弃此卡清除遗物民愤。'}]},
+  {id:'keeperstrust', name:"Keeper's Trust", cn:'守护者信任', kind:'ext', eff:['keepertrust','clearoutrage:relic'],
+   abilities:[{n:'守护者信任',t:'条件被动+序幕',d:'守护被宣告期间，对手不能偷你与他们已有相同类型的资源。序幕：可弃此卡清除遗物民愤（已实装）。'}]},
   {id:'keeperssolidarity', name:"Keeper's Solidarity", cn:'守护者团结', kind:'ext', eff:['keepersolidarity'],
    abilities:[{n:'守护者团结',t:'条件被动',d:'守护被宣告期间，只要你有相同类型资源（遗物），对手不能偷你公会卡。'}]},
-  {id:'warlordscruelty', name:"Warlord's Cruelty", cn:'霸主残暴', kind:'ext', eff:['recurtax'],
-   abilities:[{n:'霸主残暴',t:'条件被动',d:'霸主被宣告期间，可课税本回合已课税的城市（已实装）。序幕（TODO）：可弃此卡清除武器民愤。'}]},
+  {id:'warlordscruelty', name:"Warlord's Cruelty", cn:'霸主残暴', kind:'ext', eff:['recurtax','clearoutrage:weapon'],
+   abilities:[{n:'霸主残暴',t:'条件被动+序幕',d:'霸主被宣告期间，可课税本回合已课税的城市（已实装）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
   {id:'warlordsterror', name:"Warlord's Terror", cn:'霸主恐怖', kind:'ext', eff:[],
    abilities:[{n:'霸主恐怖',t:'条件序幕(TODO)',d:'霸主被宣告期间，序幕可消耗战利品（归还）每个施加一次影响。'}]},
-  {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:[],
-   abilities:[{n:'暴君傲慢',t:'条件序幕(TODO)',d:'暴君被宣告期间，序幕可消耗俘虏（归还）每个 secure 一次。序幕：可弃此卡清除武器民愤。'}]},
+  {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:['clearoutrage:weapon'],
+   abilities:[{n:'暴君傲慢',t:'条件序幕',d:'暴君被宣告期间，序幕可消耗俘虏（归还）每个 secure 一次（TODO）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
   {id:'tyrantsauthority', name:"Tyrant's Authority", cn:'暴君权威', kind:'ext', eff:[],
    abilities:[{n:'Annex 吞并',t:'条件新行动·建造(TODO)',d:'暴君被宣告期间，将你控制的任意城市/星港替换为忠诚城市/星港。'}]},
-  {id:'tycoonsambition', name:"Tycoon's Ambition", cn:'大亨野心', kind:'ext', eff:[],
-   abilities:[{n:'大亨野心',t:'条件序幕(TODO)',d:'大亨被宣告期间，行动前可弃光物资+燃料以宣告恰好 1 个未宣告雄心（不放零标记）。'}]},
-  {id:'tycoonscharm', name:"Tycoon's Charm", cn:'大亨魅力', kind:'ext', eff:[],
-   abilities:[{n:'大亨魅力',t:'条件序幕(TODO)',d:'大亨被宣告期间，序幕可弃任意数量物资+燃料，每弃 1 个获得 1 资源。序幕：可弃此卡清除物资+燃料民愤。'}]},
+  {id:'tycoonsambition', name:"Tycoon's Ambition", cn:'大亨野心', kind:'ext', eff:['tycoondeclare'],
+   abilities:[{n:'大亨野心',t:'条件序幕',d:'大亨被宣告期间，行动前可弃光物资+燃料以宣告恰好 1 个未宣告雄心（不影响主导牌点数，已实装）。'}]},
+  {id:'tycoonscharm', name:"Tycoon's Charm", cn:'大亨魅力', kind:'ext', eff:['charmgain','clearoutrage:material','clearoutrage:fuel'],
+   abilities:[{n:'大亨魅力',t:'条件序幕',d:'大亨被宣告期间，序幕可弃任意数量物资+燃料，每弃 1 个获得 1 资源（已实装）。序幕：可弃此卡清除物资+燃料民愤（已实装）。'}]},
 ];
 function loreById(id){ return LORE.find(L=>L.id===id); }
 // 该玩家持有的传说卡里是否有指定机制 eff（扩展关闭或无卡时恒 false）
@@ -1897,9 +1897,90 @@ function openPrelude(){
       const b=el('button','btn'+(o.enabled?'':' ghost')); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left'; b.disabled=!o.enabled;
       b.innerHTML=`<b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].icon} ${RESOURCES[rt].name}</b> → ${o.desc}`+(o.enabled?(o.loyal?'　<span style="opacity:.7;font-size:12px">忠诚:可用任意资源支付</span>':''):`　<span style="opacity:.55;font-size:12px">(${o.reason})</span>`);
       b.onclick=()=>{ closeModal(); doPreludeSpend(rt); }; m.appendChild(b); });
+    // —— 扩展·序幕能力（领袖与传说，均免点数、不结束序幕）——
+    if(G.useExpansion){
+      // 弃卡清除民愤（Empath's Vision/Keeper's Trust/Warlord's Cruelty/Tyrant's Ego/Tycoon's Charm）
+      preludeClearOutrageOptions(me).forEach(opt=>{
+        const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+        b.innerHTML=`📜 弃「${opt.name}」清除 <b>${opt.types.map(rt=>RESOURCES[rt].name).join('+')}</b> 民愤`;
+        b.onclick=()=>{ closeModal(); preludeClearOutrage(me,opt.cardId); openPrelude(); }; m.appendChild(b);
+      });
+      // Tycoon's Ambition：弃光物资+燃料宣告 1 个未宣告雄心
+      if(loreHas(me,'tycoondeclare') && ambitionDeclared('tycoon') && G.markersAvailable.length>0
+         && AMB_ORDER.some(k=>!G.declaredThisChapter[k]) && (me.res.material+me.res.fuel)>0){
+        const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+        b.innerHTML='📜 <b>大亨野心</b>：弃光物资+燃料 → 宣告 1 个未宣告雄心';
+        b.onclick=()=>{ closeModal(); openTycoonAmbition(me); }; m.appendChild(b);
+      }
+      // Tycoon's Charm：弃物资/燃料换资源
+      if(loreHas(me,'charmgain') && ambitionDeclared('tycoon') && (me.res.material+me.res.fuel)>0){
+        const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+        b.innerHTML='📜 <b>大亨魅力</b>：弃物资/燃料 → 每个换 1 资源';
+        b.onclick=()=>{ closeModal(); openTycoonCharm(me); }; m.appendChild(b);
+      }
+    }
     if(G.weaponBattle) m.appendChild(el('div','hintbox','✦ 本回合已解锁：可用本牌点数发动战斗（见行动栏）。'));
     const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
   });
+}
+// 扩展·序幕：弃卡清除民愤 —— 选项与执行
+function preludeClearOutrageOptions(me){
+  if(!G.useExpansion) return [];
+  const out=[];
+  (me.loreCards||[]).forEach(id=>{ const L=loreById(id); if(!L) return;
+    const types=L.eff.filter(e=>e.indexOf('clearoutrage:')===0).map(e=>e.split(':')[1]).filter(rt=>me.outraged&&me.outraged[rt]);
+    if(types.length) out.push({cardId:id, name:L.cn, types});
+  });
+  return out;
+}
+function preludeClearOutrage(me, cardId){
+  const L=loreById(cardId); if(!L) return false;
+  const types=L.eff.filter(e=>e.indexOf('clearoutrage:')===0).map(e=>e.split(':')[1]).filter(rt=>me.outraged[rt]);
+  if(!types.length) return false;
+  types.forEach(rt=>{ me.outraged[rt]=false; });
+  const i=(me.loreCards||[]).indexOf(cardId); if(i>=0) me.loreCards.splice(i,1);
+  logMsg(`${pname(G.actor)} 序幕·弃「${L.cn}」清除 ${types.map(rt=>RESOURCES[rt].name).join('+')} 民愤`,'act');
+  render(); return true;
+}
+// Tycoon's Ambition：弃光物资+燃料 → 宣告 1 个未宣告雄心（不归零主导牌）
+function declareAmbitionNoZero(pIdx, ambKey){
+  if(!G.markersAvailable.length) return null;
+  let bi=0; for(let i=1;i<G.markersAvailable.length;i++) if(G.markersAvailable[i].f>G.markersAvailable[bi].f) bi=i;
+  const mk=G.markersAvailable.splice(bi,1)[0];
+  G.ambitionBox[ambKey].push(mk); G.declaredThisChapter[ambKey]=true;
+  onDeclareAmbition(pIdx, ambKey);
+  return mk;
+}
+function openTycoonAmbition(me){
+  const avail=AMB_ORDER.filter(k=>!G.declaredThisChapter[k]);
+  if(!avail.length || !G.markersAvailable.length){ toast('无可宣告雄心或无可用标记'); openPrelude(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'大亨野心 · 弃光物资+燃料宣告雄心'));
+    m.appendChild(el('div','hintbox','弃光你全部物资与燃料，宣告恰好 1 个尚未宣告的雄心（不影响主导牌点数）。'));
+    avail.forEach(k=>{ const b=el('button','btn',`${AMBITIONS[k].icon} ${AMBITIONS[k].name}`); b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.onclick=()=>{ closeModal();
+        const mf=me.res.material+me.res.fuel; G.resSupply.material+=me.res.material; G.resSupply.fuel+=me.res.fuel; me.res.material=0; me.res.fuel=0;
+        declareAmbitionNoZero(G.actor,k);
+        logMsg(`${pname(G.actor)} 大亨野心：弃光 ${mf} 物资+燃料，宣告 <b>${AMBITIONS[k].name}</b>（不归零主导牌）`,'act');
+        openPrelude(); }; m.appendChild(b); });
+    const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); openPrelude(); }; m.appendChild(cc);
+  });
+}
+// Tycoon's Charm：每弃 1 物资/燃料换 1 资源（优先弃燃料）
+function tycoonCharmDiscard1(me){ if(me.res.fuel>0){ me.res.fuel--; G.resSupply.fuel++; return 'fuel'; } if(me.res.material>0){ me.res.material--; G.resSupply.material++; return 'material'; } return null; }
+function openTycoonCharm(me){
+  const draw=()=>openModal(m=>{
+    m.appendChild(el('h2',null,'大亨魅力 · 弃物资/燃料换资源'));
+    m.appendChild(el('div','hintbox',`每弃 1 个物资或燃料，获得 1 个你选择的资源。剩余可弃：物资 ${me.res.material} + 燃料 ${me.res.fuel}。`));
+    const canDiscard=(me.res.material+me.res.fuel)>0;
+    RES_ORDER.forEach(rt=>{ const able=canDiscard&&G.resSupply[rt]>0;
+      const b=el('button','btn'+(able?'':' ghost')); b.disabled=!able; b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.innerHTML=`弃 1 → 获得 <b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].icon} ${RESOURCES[rt].name}</b>`;
+      b.onclick=()=>{ const d=tycoonCharmDiscard1(me); if(d){ gainResource(me,rt); logMsg(`${pname(G.actor)} 大亨魅力：弃 ${RESOURCES[d].name} 换 ${RESOURCES[rt].name}`,'act'); } draw(); };
+      m.appendChild(b); });
+    const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
+  });
+  draw();
 }
 function preludePay(me, pr){ me.res[pr]=(me.res[pr]||0)-1; if(me.res[pr]<0) me.res[pr]=0; G.resSupply[pr]=(G.resSupply[pr]||0)+1; G._preludePaid=pr; }
 function abortPrelude(){ // 序幕免点数行动被放弃/取消：退还已花资源并清除标记
