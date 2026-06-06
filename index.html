@@ -566,7 +566,7 @@ const LEADERS=[
               {n:'Cryptic 神秘',t:'Setup',d:'开局在物资+燃料民愤槽各放 1 密探。'}]},
   {id:'fueldrinker', name:'Fuel-Drinker', cn:'饮燃者', kind:'base', eff:['taxbonus:fuel','lavish'],
    abilities:[{n:'Insatiable 贪得无厌',t:'触发',d:'Copy/Pivot 课税时额外 +1 燃料。'},
-              {n:'Lavish 挥霍',t:'触发(TODO)',d:'结算后若大亨被结算，弃光所有燃料。'}]},
+              {n:'Lavish 挥霍',t:'触发',d:'结算后若本章结算了大亨，弃光所有燃料（归还供应，已实装）。'}]},
   {id:'upstart', name:'Upstart', cn:'新贵', kind:'base', eff:['ambitious','callow'],
    abilities:[{n:'Ambitious 野心',t:'触发(TODO)',d:'宣告雄心时可获得任意 1 资源（须在任何行动前宣告）。'},
               {n:'Callow 稚嫩',t:'被动',d:'只能课税你控制的忠诚城市。'}]},
@@ -671,20 +671,20 @@ const LORE=[
    abilities:[{n:'预测传感器',t:'触发·防御(TODO)',d:'防御时攻击者收骰前，可将任意数量相邻系统的新鲜忠诚舰移入战斗系统。'}]},
   {id:'forcebeams', name:'Force Beams', cn:'力场光束', kind:'ext', eff:[],
    abilities:[{n:'Guide 引导',t:'新行动·移动(TODO)',d:'将任意数量任意舰（即使非忠诚）从有新鲜忠诚星港的系统移到相邻或反向，忽略移动修正。'}]},
-  {id:'raiderexosuits', name:'Raider Exosuits', cn:'劫掠者外骨骼', kind:'ext', eff:[],
-   abilities:[{n:'劫掠者外骨骼',t:'触发·进攻(TODO)',d:'进攻时若无防御建筑，可收至多 1 颗劫掠骰（非额外骰，仍遵守每舰 1 骰上限）。'}]},
+  {id:'raiderexosuits', name:'Raider Exosuits', cn:'劫掠者外骨骼', kind:'ext', eff:['exosuit'],
+   abilities:[{n:'劫掠者外骨骼',t:'触发·进攻',d:'进攻时若本系统无守方建筑，可收至多 1 颗劫掠骰（仍遵守每舰 1 骰上限）。'}]},
   {id:'survivaloverrides', name:'Survival Overrides', cn:'生存覆写', kind:'ext', eff:[],
    abilities:[{n:'Martyr 殉道',t:'新行动·移动(TODO)',d:'摧毁地图 1 艘新鲜忠诚舰，以摧毁其所在系统 1 艘非忠诚舰并取为战利品（你的舰不成战利品）。'}]},
-  {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:[],
-   abilities:[{n:'共情者之眼',t:'条件触发+序幕(TODO)',d:'共情被宣告期间，掷任何骰可重掷任意数量一次。序幕：可弃此卡清除通灵民愤。'}]},
-  {id:'empathsbond', name:"Empath's Bond", cn:'共情者羁绊', kind:'ext', eff:[],
-   abilities:[{n:'共情者羁绊',t:'条件被动(TODO)',d:'共情被宣告期间，可像忠诚一样课税任意城市、用任意星港造舰和弹射。'}]},
+  {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:['empathvision'],
+   abilities:[{n:'共情者之眼',t:'条件触发+序幕',d:'共情被宣告期间，掷任何骰可重掷任意数量一次（本版自动重掷所有空白/无收益骰）。序幕（TODO）：可弃此卡清除通灵民愤。'}]},
+  {id:'empathsbond', name:"Empath's Bond", cn:'共情者羁绊', kind:'ext', eff:['empathbond'],
+   abilities:[{n:'共情者羁绊',t:'条件被动',d:'共情被宣告期间，可像忠诚一样课税任意城市（已实装）；用任意星港造舰/弹射（TODO）。'}]},
   {id:'keeperstrust', name:"Keeper's Trust", cn:'守护者信任', kind:'ext', eff:['keepertrust'],
    abilities:[{n:'守护者信任',t:'条件被动+序幕',d:'守护被宣告期间，对手不能偷你与他们已有相同类型的资源。序幕（TODO）：可弃此卡清除遗物民愤。'}]},
   {id:'keeperssolidarity', name:"Keeper's Solidarity", cn:'守护者团结', kind:'ext', eff:['keepersolidarity'],
    abilities:[{n:'守护者团结',t:'条件被动',d:'守护被宣告期间，只要你有相同类型资源（遗物），对手不能偷你公会卡。'}]},
-  {id:'warlordscruelty', name:"Warlord's Cruelty", cn:'霸主残暴', kind:'ext', eff:[],
-   abilities:[{n:'霸主残暴',t:'条件被动+序幕(TODO)',d:'霸主被宣告期间，可课税本回合已课税的城市。序幕：可弃此卡清除武器民愤。'}]},
+  {id:'warlordscruelty', name:"Warlord's Cruelty", cn:'霸主残暴', kind:'ext', eff:['recurtax'],
+   abilities:[{n:'霸主残暴',t:'条件被动',d:'霸主被宣告期间，可课税本回合已课税的城市（已实装）。序幕（TODO）：可弃此卡清除武器民愤。'}]},
   {id:'warlordsterror', name:"Warlord's Terror", cn:'霸主恐怖', kind:'ext', eff:[],
    abilities:[{n:'霸主恐怖',t:'条件序幕(TODO)',d:'霸主被宣告期间，序幕可消耗战利品（归还）每个施加一次影响。'}]},
   {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:[],
@@ -1466,6 +1466,23 @@ function declareAmbition(pIdx,ambKey){
     G.lead.zero=true; if(G.played[0]) G.played[0].zero=true;
     logMsg(`${pname(pIdx)} 宣告雄心 <b>${AMBITIONS[ambKey].name}</b>（标记 ${mk.f}/${mk.s}；此牌点数→0）`,'act');
   }
+  onDeclareAmbition(pIdx,ambKey); // 扩展：宣告后触发领袖钩子（Upstart/Ambitious 获 1 资源等）
+}
+// 宣告雄心后的统一触发钩子（主导宣告 declareAmbition 与 Vox·民众呼声 两条路径共用）。
+// 领袖 Upstart/Ambitious（扩展）：成功宣告雄心后，可获得任意 1 个资源（弹模态让其选择；供应空的资源不可选）。
+function ambitiousGain(me,rt){ return gainResource(me,rt); } // 薄封装，便于无头测试直接断言
+function onDeclareAmbition(pIdx,ambKey){
+  const me=G.players[pIdx];
+  if(G.useExpansion && leaderHas(me,'ambitious')){
+    const avail=RES_ORDER.filter(r=>G.resSupply[r]>0);
+    if(!avail.length){ logMsg(`${pname(pIdx)} 领袖·野心：资源供应已空，无法获得资源`,'sys'); return; }
+    openModal(m=>{
+      m.appendChild(el('h2',null,'领袖·野心 · 获得 1 资源'));
+      m.appendChild(el('div','hintbox','你宣告了雄心：选择获得任意 1 个资源（受供应限制）。'));
+      avail.forEach(rt=>{ const b=el('button','btn',`${RESOURCES[rt].icon} ${RESOURCES[rt].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
+        b.onclick=()=>{ closeModal(); if(ambitiousGain(me,rt)) logMsg(`${pname(pIdx)} 领袖·野心：获得 ${RESOURCES[rt].name}`,'act'); }; m.appendChild(b); });
+    });
+  }
 }
 // 取走当前最高（首位最大）的雄心标记
 function takeTopMarker(){ if(!G.markersAvailable.length) return null;
@@ -1603,6 +1620,10 @@ function endChapter(){
   toast(`📊 第 ${G.chapter} 章结算中…`, 2200);
   SFX.chapter();
   scoreAmbitions();
+  // 领袖 Fuel-Drinker/Lavish（扩展）：若本章结算了「大亨」，持此领袖者弃光全部燃料（归还供应）
+  if(G.useExpansion && G.ambitionBox.tycoon.length>0){
+    G.players.forEach((p,i)=>{ if(leaderHas(p,'lavish') && p.res.fuel>0){ const n=p.res.fuel; G.resSupply.fuel+=n; p.res.fuel=0; logMsg(`${pname(i)} 领袖·挥霍：大亨已结算，弃光 ${n} 燃料`,'sys'); } });
+  }
   applyCartelDiscards();
   if(G.ambitionBox.warlord.length>0) G.players.forEach(p=>{ if(p.trophies){logMsg(`${pname(G.players.indexOf(p))} 返还 ${p.trophies} 战利品`,'sys'); p.trophies=0;} });
   if(G.ambitionBox.tyrant.length>0) G.players.forEach(p=>{ if(p.captives){logMsg(`${pname(G.players.indexOf(p))} 返还 ${p.captives} 俘虏`,'sys'); p.captives=0;} });
@@ -1795,16 +1816,21 @@ function legalTargets(type){
     if(type==='tax'){
       // 课税合法目标 = (a)你的忠诚城市（系统你控制或自由，且资源供给非空）；或 (b)你控制的系统中的敌方城市（资源可空——仍可俘获密探）。每城每回合限一次。
       const taxed=me._abil&&me._abil._taxed;
+      const retax=canRetax(me); // Warlord's Cruelty：忽略「本回合已课税」限制
+      const notTaxed=(owner)=>retax||!(taxed&&taxed.has(id+':'+owner));
       const cities=s.pieces.buildings.filter(b=>b.type==='city');
-      let ownLoyal=cities.some(b=>b.owner===col)&&isLoyalSystem(id,me)&&s.resource&&G.resSupply[s.resource]>0&&!(taxed&&taxed.has(id+':'+col));
+      let ownLoyal=cities.some(b=>b.owner===col)&&isLoyalSystem(id,me)&&s.resource&&G.resSupply[s.resource]>0&&notTaxed(col);
       const rc=(controllerOf(id)===col)?cities.find(b=>b.owner!==col):null;
-      let rivalOK=rc&&!(taxed&&taxed.has(id+':'+rc.owner));
+      let rivalOK=rc&&notTaxed(rc.owner);
       // 领袖课税限制（扩展）：与 doTax 的 leaderTaxBlock 一致，提前从合法集中剔除被禁城市
       if(G.useExpansion){
         if(ownLoyal && leaderTaxBlock(me,id,{owner:col})) ownLoyal=false;
         if(rivalOK && leaderTaxBlock(me,id,rc)) rivalOK=false;
       }
-      if(ownLoyal||rivalOK) set.add(id);
+      // 传说 Empath's Bond（扩展）：共情已宣告时，可课任意系统的任意城市（资源供给非空、未课税即可）
+      let bondOK=false;
+      if(empathBondActive(me) && s.resource && G.resSupply[s.resource]>0) bondOK=cities.some(b=>notTaxed(b.owner));
+      if(ownLoyal||rivalOK||bondOK) set.add(id);
     } else if(type==='build'){
       const ship = canBuildShipAt(me,s,id,col); // 忠诚太空港可造船（受每港每回合 1 艘上限）；系统被敌方控制则造为「受损」（规则书 p.6）
       const bld = s.kind==='planet' && hasLoyalPiece(s,col) && emptySlots(id)>0 && (me.supply.cities>0||me.supply.starports>0); // 有忠诚棋子(舰船或建筑)的行星空槽可建城/港（规则书 p.12）
@@ -1923,22 +1949,28 @@ function leaderTaxBlock(me,id,target){
   if(leaderHas(me,'principled') && target.owner===col) return '有原则：不能课税你自己的忠诚城市';
   return null;
 }
+// 传说·条件型课税放宽（扩展，均需对应雄心已宣告）
+function canRetax(me){ return G.useExpansion && loreHas(me,'recurtax') && ambitionDeclared('warlord'); }      // Warlord's Cruelty：可重复课税本回合已课税的城市
+function empathBondActive(me){ return G.useExpansion && loreHas(me,'empathbond') && ambitionDeclared('empath'); } // Empath's Bond：可课任意城市（视为忠诚，不抓俘虏）
 function doTax(id){
   const me=G.players[G.actor]; const s=G.map[id]; const col=me.color.key;
   if(!G.pending.legal.has(id)){ toast('请选择你控制的城市'); return; }
   const ab=(me._abil=me._abil||{}); const taxed=ab._taxed||(ab._taxed=new Set());
+  const retax=canRetax(me); const notTaxed=(owner)=>retax||!taxed.has(id+':'+owner);
   const cities=s.pieces.buildings.filter(b=>b.type==='city');
   // 敌方城市优先（可额外俘虏）：仅当你控制该系统时其敌方城市才可课税
-  const rivalCity=(controllerOf(id)===col)?cities.find(b=>b.owner!==col&&!taxed.has(id+':'+b.owner)):null;
-  const ownCity=cities.find(b=>b.owner===col&&!taxed.has(id+':'+col));
-  const target=rivalCity||ownCity;
+  const rivalCity=(controllerOf(id)===col)?cities.find(b=>b.owner!==col&&notTaxed(b.owner)):null;
+  const ownCity=cities.find(b=>b.owner===col&&notTaxed(col));
+  let target=rivalCity||ownCity; let bondTax=false;
+  // 传说 Empath's Bond（扩展）：无常规目标时，可课任意未课税城市（视为忠诚，不抓俘虏）
+  if(!target && empathBondActive(me)){ target=cities.find(b=>notTaxed(b.owner)); if(target) bondTax=true; }
   if(!target){ toast('该城本回合已课税'); return; }
   const block=leaderTaxBlock(me,id,target);
-  if(block){ toast(block); return; }
-  taxed.add(id+':'+target.owner);
-  let msg=`${pname(G.actor)} 课税 ${id}`;
+  if(block && !bondTax){ toast(block); return; }
+  if(!retax) taxed.add(id+':'+target.owner);
+  let msg=`${pname(G.actor)} 课税 ${id}${bondTax?'（共情者羁绊）':''}${retax?'（霸主残暴·重复课税）':''}`;
   if(gainResource(me,s.resource)) msg+=`，获得 ${RESOURCES[s.resource].name}`; else msg+='（资源供给已空，未获得）';
-  if(target.owner!==col){ // 你控制的敌方城市 → 俘获该敌方 1 个密探（即使没拿到资源）
+  if(target.owner!==col && !bondTax){ // 你控制的敌方城市 → 俘获该敌方 1 个密探（Empath's Bond 不抓俘虏）
     const rival=G.players.find(p=>p.color.key===target.owner);
     if(rival&&rival.supply.agents>0){ rival.supply.agents--; me.captives++; msg+=`，俘获 ${pname(G.players.indexOf(rival))} 1 密探`; }
     else msg+='（对方密探补给已空，未俘获）';
@@ -2006,7 +2038,9 @@ function doMovePick(id){
     if(!G.pending.legal.has(id)){ toast('请选择你的忠诚舰船所在系统'); return; }
     G.pending.src=id; G.pending.step='dest';
     const s=G.map[id];
-    const loyalStarport=s.pieces.buildings.some(b=>b.owner===col&&b.type==='starport'); // 忠诚太空港 → 弹射
+    let loyalStarport=s.pieces.buildings.some(b=>b.owner===col&&b.type==='starport'); // 忠诚太空港 → 弹射
+    // 领袖 Shaper/Ancient（扩展）：不能从星港弹射移动（回退为普通相邻），但可从星门弹射照常。
+    if(G.useExpansion && leaderHas(me,'ancient') && loyalStarport && s.kind!=='gate') loyalStarport=false;
     const dst=loyalStarport?catapultReach(id,col):new Set(s.neighbors.filter(nb=>!G.map[nb].outOfPlay));
     G.highlight=dst; G.pending.legal=dst; G.pending.catapult=loyalStarport;
     setPrompt(loyalStarport
@@ -2062,6 +2096,12 @@ function raidAllowed(defC,sysId){
   const defBldg=s.pieces.buildings.some(b=>b.owner===defC);
   const defBldgAnywhere=Object.values(G.map).some(x=>!x.outOfPlay&&x.pieces.buildings.some(b=>b.owner===defC));
   return defBldg||!defBldgAnywhere;
+}
+// 传说 Raider Exosuits（扩展）：进攻方持此卡且本系统无守方建筑、且常规规则本不允许劫掠骰时，额外解锁劫掠骰（至多 1 颗，由 openBattleDice 限制）。
+function exosuitRaidEnabled(atk,defC,sysId){
+  const s=G.map[sysId]; if(!s||!atk) return false;
+  const noDefBldg=!s.pieces.buildings.some(b=>b.owner===defC);
+  return G.useExpansion && loreHas(atk,'exosuit') && noDefBldg && !raidAllowed(defC,sysId);
 }
 // SVG 系统闪烁（战斗发起时红光脉冲）
 function flashSystem(id){
@@ -2150,7 +2190,11 @@ function openBattleDice(id,defC){
   const me=G.players[G.actor]; const col=me.color.key; const s=G.map[id];
   const md=battleMaxDice(me,s); const maxDice=md.max; const gateBonus=md.gateBonus; const rebelBonus=md.rebelBonus;
   const waryLimit=(G.useExpansion&&leaderHas(me,'wary')); // Corsair/Wary：进攻时强攻骰不能多于突袭骰
-  const raidOK=raidAllowed(defC,id);
+  const raidNormal=raidAllowed(defC,id);
+  // 传说 Raider Exosuits（扩展）：本系统无守方建筑时也可收劫掠骰，但至多 1 颗
+  const exosuitRaid=exosuitRaidEnabled(me,defC,id);
+  const raidOK=raidNormal||exosuitRaid;
+  const raidCap=exosuitRaid?1:6; // 外骨骼仅 1 颗
   const a={skirmish:0,assault:0,raid:0};
   openModal(m=>{
     m.appendChild(el('h2',null,'战斗 · '+id));
@@ -2161,6 +2205,7 @@ function openBattleDice(id,defC){
       const minus=el('button','btn ghost sm','−'),plus=el('button','btn ghost sm','＋');
       minus.onclick=()=>{ a[k]=Math.max(0,a[k]-1); val.textContent=a[k]; upd(); };
       plus.onclick=()=>{ if(k==='raid'&&!raidOK){toast('劫掠骰不可用');return;}
+        if(k==='raid'&&a.raid>=raidCap){toast(exosuitRaid?'劫掠者外骨骼：至多 1 颗劫掠骰':'劫掠骰已达上限');return;}
         if(k==='assault'&&waryLimit&&a.assault>=a.skirmish){toast('谨慎：强攻骰不能多于突袭骰');return;}
         if((a.skirmish+a.assault+a.raid)<maxDice&&a[k]<6){a[k]++; val.textContent=a[k]; upd();} };
       r.appendChild(minus); r.appendChild(val); r.appendChild(plus); m.appendChild(r);
@@ -2247,6 +2292,8 @@ function runBattle(id,defC,alloc,preResult){
   if(r.interLoss>0) html+=`<br><i>遭守方拦截：按其 ${r.interLoss} 艘新鲜舰各 1 次反伤</i>`;
   if(r.res._rerolled>0) html+=`<br><i>「游击部队」重掷了 ${r.res._rerolled} 颗空白游击骰</i>`;
   if(r.res._torpReroll>0) html+=`<br><i>📜「寻的鱼雷」重掷了 ${r.res._torpReroll} 颗强攻骰</i>`;
+  if(r.res._trickyReroll>0) html+=`<br><i>「狡诈」(私掠者)：重掷了 ${r.res._trickyReroll} 颗无收益劫掠骰</i>`;
+  if(r.res._visionReroll>0) html+=`<br><i>📜「共情者之眼」：重掷了 ${r.res._visionReroll} 颗骰</i>`;
   if(r.res._mirrorAdd>0) html+=`<br><i>📜「镜面装甲」(守)：攻方掷强攻骰 → 自损面 +1 ◯</i>`;
   if(r.res._railgunAdd>0) html+=`<br><i>📜「轨道炮阵列」(守)：守方有新鲜忠诚舰 → 攻方必受 1 击</i>`;
   if(r.res._signalCut>0) html+=`<br><i>📜「信号破坏者」(攻)：进攻舰全新鲜 → 忽略 1 个自损面 ◯</i>`;
@@ -2316,10 +2363,17 @@ function resolveBattle(sysId,defColor,alloc){
   const defFresh0=freshShips(s,defColor);
   const skFaces=[]; const skFaceIdx=[];
   const asFaces=[]; const asFaceIdx=[]; // 强攻骰面（供寻的鱼雷重掷）
+  const raFaces=[]; const raFaceIdx=[]; // 劫掠骰面（供 Corsair/Tricky 重掷）
+  // 领袖 Corsair/Tricky（扩展）：进攻战斗可重掷劫掠骰，数量 ≤ 你拥有的不同资源种类数
+  const trickyOn=(G.useExpansion && leaderHas(atk,'tricky'));
+  // 传说 Empath's Vision（扩展）：共情已宣告期间，掷骰方可重掷任意数量骰一次（无预算）。需把三类骰都纳入数组。
+  const visionOn=(lore && loreHas(atk,'empathvision') && ambitionDeclared('empath'));
+  // 突袭骰始终纳入数组（游击部队重掷用）；强攻骰在鱼雷/Vision 时纳入；劫掠骰在 Tricky/Vision 时纳入
   for(const dt of ['skirmish','assault','raid']){ const n=alloc[dt]||0;
     for(let i=0;i<n;i++){ const f=rollDie(dt);
       if(dt==='skirmish'){ skFaces.push(f); skFaceIdx.push(faceLog.length-1); }
-      else if(dt==='assault' && lore && loreHas(atk,'seekertorp')){ asFaces.push(f); asFaceIdx.push(faceLog.length-1); }
+      else if(dt==='assault' && lore && (loreHas(atk,'seekertorp')||visionOn)){ asFaces.push(f); asFaceIdx.push(faceLog.length-1); }
+      else if(dt==='raid' && (trickyOn||visionOn)){ raFaces.push(f); raFaceIdx.push(faceLog.length-1); }
       else addFace(f); } }
   let rerolled=0; // 游击部队：每 1 武器标志（武器资源＋武器图标公会卡）可重掷 1 颗空白游击骰（自动重掷无收益骰）
   if(ownsEff(atk,'skirmishreroll')){
@@ -2340,7 +2394,16 @@ function resolveBattle(sysId,defColor,alloc){
       }
     }
   }
-  skFaces.forEach(addFace); asFaces.forEach(addFace); res._rerolled=rerolled; res._torpReroll=torpReroll;
+  // 领袖 Corsair/Tricky（扩展）：进攻方重掷无收益（无钥匙且无建筑命中）的劫掠骰，预算=拥有的不同资源种类数。
+  let trickyReroll=0;
+  if(trickyOn && raFaces.length){
+    let budget=RES_ORDER.filter(r=>(atk.res[r]||0)>0).length; // distinct 资源种类数
+    for(let i=0;i<raFaces.length && budget>0;i++){
+      const f=raFaces[i]; const noGain=!((f.key||0)>0 || (f.bldg||0)>0); // 仅命中 intercept 等无收益面才重掷
+      if(noGain){ const nf=Object.assign({},DICE['raid'].faces[Math.floor(Math.random()*6)],{_rerolled:1}); raFaces[i]=nf; faceLog[raFaceIdx[i]].face=nf; budget--; trickyReroll++; }
+    }
+  }
+  skFaces.forEach(addFace); asFaces.forEach(addFace); raFaces.forEach(addFace); res._rerolled=rerolled; res._torpReroll=torpReroll; res._trickyReroll=trickyReroll;
   // —— 传说·自损面修正（攻方收骰前，规则书各卡）——
   let mirrorAdd=0, signalCut=0, railgunAdd=0;
   if(lore){
@@ -2416,15 +2479,24 @@ function openInfluence(){
       const d=el('button','btn ghost'); d.style.cssText='flex:1;text-align:left';
       d.innerHTML=`<b>${c.name}</b>${c.t==='vox'?' <span style="color:#d9b6ef">[帝国之声]</span>':''} <span style="opacity:.7">[${effKindLabel(c.eff)}]</span>　密探：${Object.entries(c.agents).filter(([k,n])=>n>0).map(([k,n])=>`<span style="color:${PCOLORS.find(p=>p.key===k).css}">${n}</span>`).join(' ')||'无'}`;
       d.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; SFX.key(); closeModal();
-        consumeAction(`${pname(G.actor)} 影响：在「${c.name}」放置密探`); };
+        // 领袖 Noble/Influential（扩展）：本次行动来自 Copy/Pivot 时可施加两次影响（放第 2 个密探，受供给限制）
+        let extra='';
+        if(G.useExpansion && leaderHas(me,'influential') && (G.actionFollowMode==='copy'||G.actionFollowMode==='pivot') && me.supply.agents>0){
+          c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; SFX.key(); extra='（影响力：放置第 2 个密探）';
+        }
+        consumeAction(`${pname(G.actor)} 影响：在「${c.name}」放置密探${extra}`); };
       const q=el('button','btn ghost sm','？'); q.onclick=()=>showCourtCard(c);
       row.appendChild(d); row.appendChild(q); m.appendChild(row); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); abortPrelude(); render(); }; m.appendChild(cc);
   });
 }
+// 领袖 Demagogue/Paranoid（扩展）：不能攫取「你的忠诚密探只有 1 个」的公会卡（Vox 卡照常；Ransack 时忽略此限制——仅作用于正常 secure 行动）。
+function paranoidBlocksSecure(me,c){
+  return G.useExpansion && leaderHas(me,'paranoid') && c.t!=='vox' && (c.agents[me.color.key]||0)===1;
+}
 function openSecure(){
   const me=G.players[G.actor]; const col=me.color.key;
-  const ok=G.court.filter(c=>majorityOn(c,col));
+  const ok=G.court.filter(c=>majorityOn(c,col) && !paranoidBlocksSecure(me,c));
   if(!ok.length){ toast('没有你占多数密探的议会卡'); return; }
   openModal(m=>{
     m.appendChild(el('h2',null,'收纳议会卡'));
@@ -2439,6 +2511,7 @@ function majorityOn(c,col){ const mine=c.agents[col]||0; if(mine<=0) return fals
   for(const k in c.agents){ if(k!==col&&c.agents[k]>=mine) return false; } return true; }
 function doSecure(c){
   const me=G.players[G.actor]; const col=me.color.key; let captured=0;
+  if(paranoidBlocksSecure(me,c)){ toast('偏执：不能攫取你只有 1 个忠诚密探的公会卡'); return; }
   for(const k in c.agents){ if(k!==col&&c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); rp.supply.agents+=c.agents[k]; captured+=c.agents[k]; } }
   me.captives+=captured; me.supply.agents+=(c.agents[col]||0);
   const idx=G.court.indexOf(c); G.court.splice(idx,1);
@@ -2482,7 +2555,7 @@ function runVoxEffect(c, done){
       m.appendChild(el('div','hintbox','立即宣告任意 1 个野心（取走当前最高标记放入对应雄心盒）。'));
       AMB_ORDER.forEach(k=>{ const b=el('button','btn',`${AMBITIONS[k].icon} ${AMBITIONS[k].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
         b.onclick=()=>{ closeModal(); const mk=takeTopMarker(); if(mk){ G.ambitionBox[k].push(mk); G.declaredThisChapter[k]=true;
-          logMsg(`${pname(G.actor)} 民众呼声：宣告 <b>${AMBITIONS[k].name}</b>（标记 ${mk.f}/${mk.s}）`,'act'); } done(); };
+          logMsg(`${pname(G.actor)} 民众呼声：宣告 <b>${AMBITIONS[k].name}</b>（标记 ${mk.f}/${mk.s}）`,'act'); onDeclareAmbition(G.actor,k); } done(); };
         m.appendChild(b); });
       const cc=el('button','btn ghost','不宣告'); cc.onclick=()=>{closeModal(); done();}; m.appendChild(cc);
     });
