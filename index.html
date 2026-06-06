@@ -578,10 +578,10 @@ const LEADERS=[
               {n:'Violent 暴烈',t:'计分修正',d:'结算「共情」时第二名不得分；若你为第一名则按次位分得分。'}]},
   {id:'feastbringer', name:'Feastbringer', cn:'飨宴使', kind:'base', eff:['charismatic','generous'],
    abilities:[{n:'Charismatic 魅力',t:'触发(TODO)',d:'Copy/Pivot 攫取时可在攫取前/后施加影响。'},
-              {n:'Generous 慷慨',t:'成本(TODO)',d:'宣告雄心须给权力最少的对手 1 张公会卡。'}]},
+              {n:'Generous 慷慨',t:'成本',d:'宣告雄心须给权力最少的对手 1 张公会卡（已实装）。'}]},
   {id:'demagogue', name:'Demagogue', cn:'煽动者', kind:'base', eff:['bold','paranoid'],
-   abilities:[{n:'Bold 大胆',t:'触发(TODO)',d:'宣告雄心时可对议会任意数量卡施加一次影响。'},
-              {n:'Paranoid 偏执',t:'被动(TODO)',d:'不能攫取只有 1 个忠诚密探的公会卡（Vox 照常；Ransack 时忽略）。'}]},
+   abilities:[{n:'Bold 大胆',t:'触发',d:'宣告雄心时可对议会任意数量卡施加一次影响（已实装）。'},
+              {n:'Paranoid 偏执',t:'被动',d:'不能攫取只有 1 个忠诚密探的公会卡（Vox 照常；Ransack 时忽略，已实装）。'}]},
   // —— 扩展 8 ——
   {id:'archivist', name:'Archivist', cn:'档案官', kind:'ext', eff:['academic','learned'],
    abilities:[{n:'Learned 博学',t:'Setup(TODO)',d:'开局抽 5 传说留 2 弃 3。'},
@@ -593,9 +593,9 @@ const LEADERS=[
    abilities:[{n:'Tricky 狡诈',t:'触发(TODO)',d:'进攻战斗时可重掷劫掠骰，数量≤你拥有的不同资源种类数。'},
               {n:'Wary 谨慎',t:'被动',d:'进攻时强攻骰不能多于突袭骰。'}]},
   {id:'noble', name:'Noble', cn:'贵族', kind:'ext', eff:['proud','connected','influential'],
-   abilities:[{n:'Connected 人脉',t:'触发(TODO)',d:'宣告未被宣告的雄心时，抽并攫取议会牌堆顶卡（不能立即用其序幕）。'},
-              {n:'Influential 影响力',t:'触发(TODO)',d:'Copy/Pivot 施加影响时可施加两次。'},
-              {n:'Proud 骄傲',t:'计分修正',d:'计分只有唯一第一名（非并列）才得分。'}]},
+   abilities:[{n:'Connected 人脉',t:'触发',d:'宣告未被宣告的雄心时，抽并攫取议会牌堆顶卡（不能立即用其序幕，已实装）。'},
+              {n:'Influential 影响力',t:'触发',d:'Copy/Pivot 施加影响时可施加两次（已实装）。'},
+              {n:'Proud 骄傲',t:'计分修正',d:'计分只有唯一第一名（非并列）才得分（已实装）。'}]},
   {id:'anarchist', name:'Anarchist', cn:'无政府者', kind:'ext', eff:['decentralized','inspiring','principled'],
    abilities:[{n:'Decentralized 去中心',t:'Setup',d:'开局废弃玩家板最左 2 座城市。'},
               {n:'Inspiring 鼓舞',t:'被动(TODO)',d:'在有忠诚舰船的星系可无视控制权课税对手城市，并可像忠诚城市那样课税空建筑槽。'},
@@ -685,10 +685,10 @@ const LORE=[
    abilities:[{n:'守护者团结',t:'条件被动',d:'守护被宣告期间，只要你有相同类型资源（遗物），对手不能偷你公会卡。'}]},
   {id:'warlordscruelty', name:"Warlord's Cruelty", cn:'霸主残暴', kind:'ext', eff:['recurtax','clearoutrage:weapon'],
    abilities:[{n:'霸主残暴',t:'条件被动+序幕',d:'霸主被宣告期间，可课税本回合已课税的城市（已实装）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
-  {id:'warlordsterror', name:"Warlord's Terror", cn:'霸主恐怖', kind:'ext', eff:[],
-   abilities:[{n:'霸主恐怖',t:'条件序幕(TODO)',d:'霸主被宣告期间，序幕可消耗战利品（归还）每个施加一次影响。'}]},
-  {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:['clearoutrage:weapon'],
-   abilities:[{n:'暴君傲慢',t:'条件序幕',d:'暴君被宣告期间，序幕可消耗俘虏（归还）每个 secure 一次（TODO）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
+  {id:'warlordsterror', name:"Warlord's Terror", cn:'霸主恐怖', kind:'ext', eff:['warlordterror'],
+   abilities:[{n:'霸主恐怖',t:'条件序幕',d:'霸主被宣告期间，序幕可消耗战利品（归还）每个施加一次影响（已实装）。'}]},
+  {id:'tyrantsego', name:"Tyrant's Ego", cn:'暴君傲慢', kind:'ext', eff:['tyrantego','clearoutrage:weapon'],
+   abilities:[{n:'暴君傲慢',t:'条件序幕',d:'暴君被宣告期间，序幕可消耗俘虏（归还）每个收纳 1 次议会卡（已实装）。序幕：可弃此卡清除武器民愤（已实装）。'}]},
   {id:'tyrantsauthority', name:"Tyrant's Authority", cn:'暴君权威', kind:'ext', eff:['annex'],
    abilities:[{n:'Annex 吞并',t:'条件新行动·建造',d:'暴君被宣告期间，将你控制的任意城市/星港替换为忠诚城市/星港（城市归还玩家板，已实装）。'}]},
   {id:'tycoonsambition', name:"Tycoon's Ambition", cn:'大亨野心', kind:'ext', eff:['tycoondeclare'],
@@ -1474,6 +1474,28 @@ function declareAmbition(pIdx,ambKey){
 function ambitiousGain(me,rt){ return gainResource(me,rt); } // 薄封装，便于无头测试直接断言
 function onDeclareAmbition(pIdx,ambKey){
   const me=G.players[pIdx];
+  // Noble/Connected（扩展）：宣告雄心时自动收纳议会牌堆顶卡（无需行动点，本序幕不能立即用其序幕能力）
+  if(G.useExpansion && leaderHas(me,'connected')){
+    if(G.courtDeck.length){
+      const c=G.courtDeck.pop(); const col=me.color.key; let captured=0;
+      for(const k in c.agents){ if(k!==col&&c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); rp.supply.agents+=c.agents[k]; captured+=c.agents[k]; } }
+      me.captives+=captured; me.supply.agents+=(c.agents[col]||0);
+      (me.guildCards=me.guildCards||[]).push(c);
+      c._freshlySecured=true; // 规则：本序幕不能立即用其序幕能力
+      logMsg(`${pname(pIdx)} 领袖·人脉：收纳「${c.name}」（俘获 ${captured} 密探；本序幕不可立即用其序幕）`,'sys');
+    } else {
+      logMsg(`${pname(pIdx)} 领袖·人脉：议会牌堆已空`,'sys');
+    }
+  }
+  // Feastbringer/Generous（扩展）：宣告雄心的代价——给权力最少的对手 1 张公会卡（有公会卡才须给）
+  if(G.useExpansion && leaderHas(me,'generous') && (me.guildCards||[]).length>0){
+    openGenerousCost(pIdx); return; // modal链继续，后续能力（Ambitious）在 Generous 无公会卡路径才触发
+  }
+  // Demagogue/Bold（扩展）：宣告雄心时可对任意数量议会卡各施加 1 次影响
+  if(G.useExpansion && leaderHas(me,'bold') && G.court.length>0 && me.supply.agents>0){
+    openBoldInfluence(pIdx); return;
+  }
+  // Upstart/Ambitious（扩展）：宣告雄心后可获得任意 1 资源
   if(G.useExpansion && leaderHas(me,'ambitious')){
     const avail=RES_ORDER.filter(r=>G.resSupply[r]>0);
     if(!avail.length){ logMsg(`${pname(pIdx)} 领袖·野心：资源供应已空，无法获得资源`,'sys'); return; }
@@ -1484,6 +1506,54 @@ function onDeclareAmbition(pIdx,ambKey){
         b.onclick=()=>{ closeModal(); if(ambitiousGain(me,rt)) logMsg(`${pname(pIdx)} 领袖·野心：获得 ${RESOURCES[rt].name}`,'act'); }; m.appendChild(b); });
     });
   }
+}
+// 领袖·Demagogue/Bold：宣告雄心时可对任意数量议会卡各施加 1 次影响（循环选牌弹窗）
+function openBoldInfluence(pIdx){
+  const me=G.players[pIdx];
+  const loop=()=>{
+    if(me.supply.agents<=0 || !G.court.length){ render(); return; }
+    openModal(m=>{
+      m.appendChild(el('h2',null,'领袖·大胆 · 影响任意数量议会卡'));
+      m.appendChild(el('div','hintbox',`宣告雄心后：可对任意数量议会卡各施加 1 次影响（1 个密探/卡）。剩余密探：${me.supply.agents}。完成后点「完成」。`));
+      G.court.forEach(c=>{
+        const row=el('div'); row.style.cssText='display:flex;gap:6px;align-items:center;margin:5px 0';
+        const b=el('button','btn'); b.style.cssText='flex:1;text-align:left';
+        b.innerHTML=`<b>${c.name}</b>　<span style="opacity:.7;font-size:12px">密探：${Object.entries(c.agents).filter(([k,n])=>n>0).map(([k,n])=>`<span style="color:${PCOLORS.find(p=>p.key===k).css}">${n}</span>`).join(' ')||'无'}</span>`;
+        b.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; SFX.key();
+          logMsg(`${pname(pIdx)} 领袖·大胆：在「${c.name}」放置密探（余 ${me.supply.agents} 个）`,'act');
+          closeModal(); loop(); }; row.appendChild(b); m.appendChild(row); });
+      const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); }; m.appendChild(done);
+    });
+  };
+  loop();
+}
+// 领袖·Feastbringer/Generous：宣告雄心的代价——给权力最少对手 1 张公会卡
+function openGenerousCost(pIdx){
+  const me=G.players[pIdx];
+  const rivals=G.players.map((p,i)=>({p,i})).filter(x=>x.i!==pIdx);
+  if(!rivals.length) return;
+  const minPow=Math.min(...rivals.map(x=>x.p.power));
+  const weakest=rivals.filter(x=>x.p.power===minPow);
+  if(weakest.length===1){ openGenerousGive(pIdx,weakest[0].i); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'领袖·慷慨 · 选择给予对象（权力并列）'));
+    m.appendChild(el('div','hintbox','有并列最低权力的玩家，请选择给予其中哪位 1 张公会卡。'));
+    weakest.forEach(x=>{ const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.innerHTML=`<b style="color:${x.p.color.css}">${pname(x.i)}</b>（权力 ${x.p.power}）`;
+      b.onclick=()=>{ closeModal(); openGenerousGive(pIdx,x.i); }; m.appendChild(b); });
+  });
+}
+function openGenerousGive(pIdx,rivalIdx){
+  const me=G.players[pIdx]; const rival=G.players[rivalIdx];
+  openModal(m=>{
+    m.appendChild(el('h2',null,`领袖·慷慨 · 给 ${pname(rivalIdx)} 1 张公会卡`));
+    m.appendChild(el('div','hintbox','选择给予对方的公会卡（这是宣告雄心的代价）。'));
+    (me.guildCards||[]).forEach(c=>{ const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.innerHTML=`<b>${c.name}</b>　<span style="opacity:.7;font-size:12px">${c.cn||''} — ${effKindLabel(c.eff)}</span>`;
+      b.onclick=()=>{ closeModal(); const ci=(me.guildCards||[]).indexOf(c); if(ci>=0) me.guildCards.splice(ci,1);
+        (rival.guildCards=rival.guildCards||[]).push(c);
+        logMsg(`${pname(pIdx)} 领袖·慷慨：将「${c.name}」赠予 ${pname(rivalIdx)}`,'act'); render(); }; m.appendChild(b); });
+  });
 }
 // 取走当前最高（首位最大）的雄心标记
 function takeTopMarker(){ if(!G.markersAvailable.length) return null;
@@ -1919,6 +1989,19 @@ function openPrelude(){
         b.innerHTML='📜 <b>大亨魅力</b>：弃物资/燃料 → 每个换 1 资源';
         b.onclick=()=>{ closeModal(); openTycoonCharm(me); }; m.appendChild(b);
       }
+      // Warlord's Terror：消耗战利品施加影响（每个战利品 1 次）
+      if(loreHas(me,'warlordterror') && ambitionDeclared('warlord') && me.trophies>0 && G.court.length>0 && me.supply.agents>0){
+        const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+        b.innerHTML=`📜 <b>霸主恐怖</b>：消耗战利品（共 ${me.trophies} 个）→ 每个施加 1 次影响`;
+        b.onclick=()=>{ closeModal(); openWarlordTerror(me); }; m.appendChild(b);
+      }
+      // Tyrant's Ego：消耗俘虏收纳议会卡（每个俘虏 1 次）
+      if(loreHas(me,'tyrantego') && ambitionDeclared('tyrant') && me.captives>0 &&
+         G.court.some(c=>majorityOn(c,me.color.key)&&!paranoidBlocksSecure(me,c))){
+        const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
+        b.innerHTML=`📜 <b>暴君傲慢</b>：消耗俘虏（共 ${me.captives} 个）→ 每个收纳 1 张议会卡`;
+        b.onclick=()=>{ closeModal(); openTyrantEgo(me); }; m.appendChild(b);
+      }
     }
     if(G.weaponBattle) m.appendChild(el('div','hintbox','✦ 本回合已解锁：可用本牌点数发动战斗（见行动栏）。'));
     const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
@@ -1982,6 +2065,46 @@ function openTycoonCharm(me){
     const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
   });
   draw();
+}
+// 霸主恐怖(Warlord's Terror)：序幕中消耗战利品施加影响（每个战利品施加 1 次，战利品归还供应）
+function openWarlordTerror(me){
+  if(me.trophies<=0||!G.court.length||me.supply.agents<=0){ closeModal(); openPrelude(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'霸主恐怖 · 消耗战利品施加影响'));
+    m.appendChild(el('div','hintbox',`战利品：${me.trophies}　密探余量：${me.supply.agents}。每消耗 1 个战利品可施加 1 次影响；战利品归还（减少你的战利品计数）。完成后点「完成」。`));
+    G.court.forEach(c=>{
+      const row=el('div'); row.style.cssText='display:flex;gap:6px;align-items:center;margin:5px 0';
+      const b=el('button','btn'); b.style.cssText='flex:1;text-align:left';
+      b.innerHTML=`<b>${c.name}</b>　<span style="opacity:.7;font-size:12px">密探：${Object.entries(c.agents).filter(([k,n])=>n>0).map(([k,n])=>`<span style="color:${PCOLORS.find(p=>p.key===k).css}">${n}</span>`).join(' ')||'无'}</span>`;
+      b.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; me.trophies--; SFX.key();
+        logMsg(`${pname(G.actor)} 霸主恐怖：消耗 1 战利品在「${c.name}」放置密探（剩余战利品：${me.trophies}）`,'act');
+        closeModal(); openWarlordTerror(me); }; row.appendChild(b); m.appendChild(row); });
+    const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
+  });
+}
+// 暴君傲慢(Tyrant's Ego)：序幕中消耗俘虏收纳议会卡（每俘虏收纳 1 张，俘虏归还——减少俘虏计数）
+function openTyrantEgo(me){
+  const col=me.color.key; const securable=G.court.filter(c=>majorityOn(c,col)&&!paranoidBlocksSecure(me,c));
+  if(me.captives<=0||!securable.length){ closeModal(); openPrelude(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'暴君傲慢 · 消耗俘虏收纳议会卡'));
+    m.appendChild(el('div','hintbox',`俘虏：${me.captives}。每消耗 1 个俘虏收纳 1 张你占多数密探的议会卡（俘虏归还——减少你的俘虏计数）。完成后点「完成」。`));
+    securable.forEach(c=>{ const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.innerHTML=`<b>${c.name}</b>　<span style="opacity:.7;font-size:12px">${c.t==='vox'?'帝国之声·':''}${effKindLabel(c.eff)}</span>`;
+      b.onclick=()=>{ closeModal(); me.captives--; doTyrantEgoSecure(me,c); }; m.appendChild(b); });
+    const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
+  });
+}
+function doTyrantEgoSecure(me,c){
+  const col=me.color.key; let captured=0;
+  for(const k in c.agents){ if(k!==col&&c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); rp.supply.agents+=c.agents[k]; captured+=c.agents[k]; } }
+  me.captives+=captured; me.supply.agents+=(c.agents[col]||0);
+  const idx=G.court.indexOf(c); G.court.splice(idx,1);
+  if(G.courtDeck.length) G.court.splice(idx,0,G.courtDeck.pop());
+  const base=`${pname(G.actor)} 暴君傲慢：消耗俘虏收纳「${c.name}」（俘获 ${captured} 密探）`;
+  if(c.t==='vox'){ logMsg(base,'act'); runVoxEffect(c,()=>{ openTyrantEgo(me); }); return; }
+  (me.guildCards=me.guildCards||[]).push(c);
+  logMsg(base,'act'); openTyrantEgo(me);
 }
 function preludePay(me, pr){ me.res[pr]=(me.res[pr]||0)-1; if(me.res[pr]<0) me.res[pr]=0; G.resSupply[pr]=(G.resSupply[pr]||0)+1; G._preludePaid=pr; }
 function abortPrelude(){ // 序幕免点数行动被放弃/取消：退还已花资源并清除标记
