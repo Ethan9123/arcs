@@ -169,6 +169,18 @@
   }
   .res-float{position:fixed;pointer-events:none;font-size:15px;font-weight:800;
     color:#d9b25a;z-index:70;animation:res-float .9s ease-out forwards}
+  /* ---- 新手教学 ---- */
+  .tut-spot{position:fixed;z-index:87;border-radius:12px;pointer-events:none;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.80),0 0 0 3px #d9b25a,0 0 22px 4px #d9b25a55;
+    transition:left .26s,top .26s,width .26s,height .26s}
+  #tut-blocker{position:fixed;inset:0;z-index:85;display:none;cursor:default}
+  #tut-box{position:fixed;z-index:90;background:#141a28;border:2px solid #d9b25a;
+    border-radius:14px;padding:18px 20px;width:338px;
+    box-shadow:0 10px 36px #000d;display:none;transition:left .26s,top .26s}
+  #tut-title{margin:0 0 8px;color:#d9b25a;font-size:15px;font-weight:800;line-height:1.3}
+  #tut-body{font-size:13px;line-height:1.78;color:#dbe3f3;margin-bottom:14px}
+  #tut-footer{display:flex;justify-content:space-between;align-items:center;gap:4px}
+  #tut-progress{font-size:11px;color:#8b96ad;white-space:nowrap;flex:none}
 </style>
 </head>
 <body>
@@ -190,6 +202,19 @@
 </div>
 <div id="modalWrap"><div id="modal"></div></div>
 <div id="toast" class="toast"></div>
+<div id="tut-blocker"></div>
+<div id="tut-box">
+  <div id="tut-title"></div>
+  <div id="tut-body"></div>
+  <div id="tut-footer">
+    <button class="btn ghost sm" id="tut-exit">退出教学</button>
+    <span id="tut-progress"></span>
+    <div style="display:flex;gap:5px">
+      <button class="btn ghost sm" id="tut-prev" style="width:32px;padding:4px 6px">←</button>
+      <button class="btn gold sm" id="tut-next">明白了 →</button>
+    </div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -881,6 +906,9 @@ function renderTop(){
   const muteBtn=el('button','btn ghost sm',SFX._muted?'🔇':'🔊'); muteBtn.title=SFX._muted?'已静音':'点击静音';
   muteBtn.style.marginLeft='4px';
   muteBtn.onclick=()=>{ SFX._muted=!SFX._muted; SFX._c(); renderTop(); }; t.appendChild(muteBtn);
+  const tutBtn=el('button','btn ghost sm','📚'); tutBtn.title='新手教学';
+  tutBtn.style.marginLeft='4px';
+  tutBtn.onclick=()=>TUT.start(); t.appendChild(tutBtn);
 }
 function phaseName(p){return {setup:'布置',lead:'主导出牌',follow:'跟随',actions:'执行行动',battle:'战斗',score:'结算',end:'终局'}[p]||p;}
 
@@ -2157,6 +2185,10 @@ function showStartScreen(){
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
     rules.onclick=showRules; ctl.appendChild(rules);
+    const tut=el('button','btn ghost','📚 新手教学');
+    tut.style.background='linear-gradient(135deg,#1d2a45,#2a3a5a)';
+    tut.onclick=()=>{ w.style.display='none'; TUT.start(); };
+    ctl.appendChild(tut);
     m.appendChild(ctl);
   }
   draw();
@@ -2185,7 +2217,200 @@ function showRules(){
   });
 }
 
-window.addEventListener('DOMContentLoaded', showStartScreen);
+/* ====================== 新手教学系统 ====================== */
+function tutInitDemo(){
+  // 用2人演示局渲染真实游戏背景
+  newGame(2, ['你（红方）','演示·蓝方']);
+  // 给玩家0加一些资源，方便展示
+  G.players[0].res.fuel=2; G.players[0].res.material=1; G.players[0].res.weapon=1;
+  G.players[1].res.relic=1; G.players[1].res.fuel=1;
+  G.players[0].trophies=2; G.players[0].captives=1; G.players[0].power=3;
+  G.players[1].power=1;
+}
+
+const TUT={
+  on:false, step:0,
+
+  STEPS:[
+    { title:'👋 欢迎来到 ARCS 暗星悬弧！',
+      body:`这是一款 <b>2-4 人热座太空征服桌游</b>，每局约 60 分钟。<br><br>
+            <b>🎯 目标</b>：游戏共 3 章，每章末进行「雄心计分」——<br>
+            3 章结束时<b>权力值最高</b>的玩家获胜！<br><br>
+            我会带你了解所有核心规则，<b>约 5 分钟</b>。<br>
+            随时可点「退出教学」，直接开始游戏。`,
+      sel:null },
+
+    { title:'🌌 棋盘：你的星域',
+      body:`左侧是<b>星际棋盘</b>，由不同系统组成：<br><br>
+            ⬤ <b>圆形</b> = <b>行星系统</b>（有资源，可建城市 / 太空港）<br>
+            ◆ <b>菱形</b> = <b>星门</b>（战略通道，连接各星系）<br>
+            <b>—— 连线</b> = 舰船可移动 / 战斗的路径<br><br>
+            棋子：<b>▲ 三角</b>=舰船（倒置=受损）　<b>■</b>=城市　<b>◆</b>=太空港`,
+      sel:'#board', pos:'right' },
+
+    { title:'👥 玩家面板与资源',
+      body:`右上角显示每位玩家的状态：<br><br>
+            • <b>五种资源</b>：■物资 ▲燃料 ✦武器 ❖遗物 ✺通灵<br>
+            • <b>⚓ 俘虏</b> = 课税敌方城市 / 俘获密探时获得<br>
+            • <b>🏆 战利品</b> = 摧毁敌方棋子时获得<br>
+            • <b>金色数字</b> = 当前权力值<br>
+            • <b>金色边框</b> = 当前行动玩家<br><br>
+            资源在<b>每章末雄心计分时</b>才算分！`,
+      sel:'#players', pos:'left' },
+
+    { title:'🎯 雄心：得分的核心',
+      body:`每章末，<b>已宣告的雄心</b>按名次给分：<br><br>
+            💰 <b>大亨</b>：燃料 + 物资数量最多者得分<br>
+            ⛓ <b>暴君</b>：俘虏最多者<br>
+            ⚔ <b>霸主</b>：战利品（摧毁的敌方棋子）最多<br>
+            🛡 <b>守护</b>：遗物 + 通灵最多<br>
+            🤝 <b>共情</b>：武器最多<br><br>
+            <b>宣告越早，标记面值越高</b>（最高 5/3→最低 2/0）！`,
+      sel:'#ambitions', pos:'left' },
+
+    { title:'🃏 手牌：行动的来源',
+      body:`每人持有 <b>6 张行动牌</b>：<br><br>
+            • <b>花色（颜色）</b> → 决定能执行什么类型的行动<br>
+            • <b>数字 1–7</b> → <b>越小次数越多</b><br><br>
+            点数对应：<br>
+            <code>1-2号 = 4次行动　3-4号 = 3次</code><br>
+            <code>5-6号 = 2次行动　  7号 = 1次</code><br><br>
+            💡 小数字牌珍贵，留到关键时机！`,
+      sel:'#hand', pos:'top' },
+
+    { title:'👆 主导出牌',
+      body:`每回合，<b>先攻玩家</b>先出一张牌「主导」：<br><br>
+            该牌的<b>花色</b>决定本回合所有人可执行的行动类型，<br>
+            该牌的<b>点数</b>决定你的行动次数。<br><br>
+            <b>四种花色的行动：</b><br>
+            <span style="color:var(--adm)">■ 行政</span>：课税 / 影响 / 修理 / 收纳<br>
+            <span style="color:var(--agg)">■ 侵略</span>：移动 / 战斗 / 收纳<br>
+            <span style="color:var(--con)">■ 建设</span>：建造 / 修理<br>
+            <span style="color:var(--mob)">■ 动员</span>：移动 / 影响`,
+      sel:'#hand', pos:'top' },
+
+    { title:'↩️ 跟随：三种方式',
+      body:`主导后，其他玩家依次选择：<br><br>
+            <b>🔵 跟进</b>：出<b>同花色</b>的牌 → 获得该牌点数次行动<br>
+            <b>🟡 超越</b>：出<b>不同花色</b>且<b>更大数字</b>的牌 → 获得行动，且可<b>夺取先攻！</b><br>
+            <b>⚫ 不跟</b>：不出牌，只能拿 1 个任意资源<br><br>
+            💡 出「7」超越 → <b>免费夺取先攻！</b><br>
+            宣告雄心时，出牌的点数临时计为 0（不额外增加行动）。`,
+      sel:'#hand', pos:'top' },
+
+    { title:'⚡ 七种行动',
+      body:`用行动次数执行（<b>同一行动可重复</b>）：<br><br>
+            💰 <b>课税</b>：在你城市所在星球取 1 个资源<br>
+            🚀 <b>移动</b>：将舰船移到相邻系统<br>
+            ⚔️ <b>战斗</b>：在有敌人的系统投骰攻击<br>
+            🏗️ <b>建造</b>：建造舰船 / 城市 / 太空港<br>
+            👥 <b>影响</b>：在议会牌上放密探<br>
+            📋 <b>收纳</b>：拿走你占多数密探的议会卡<br>
+            🔧 <b>修理</b>：修复受损舰船或建筑`,
+      sel:'#actionBar', pos:'left' },
+
+    { title:'⚔️ 战斗骰子',
+      body:`战斗耗 1 行动，骰数 ≤ 你在该系统的舰船数：<br><br>
+            <span style="color:#4a8ef5">■ <b>突袭（蓝）</b></span>：命中稳定，无自伤 → <b>新手推荐</b><br>
+            <span style="color:#e56157">■ <b>强攻（红）</b></span>：高命中但有自伤 → 决定性一击<br>
+            <span style="color:#e5aa40">■ <b>劫掠（橙）</b></span>：打建筑 + 抢资源（需满足条件）<br><br>
+            骰面：⚔命中 / 🔥自伤 / 🛡拦截 / 🏠建筑 / 🔑钥匙<br>
+            击毁 1 艘敌舰 = 1 个<b>战利品</b>（霸主雄心用）`,
+      sel:'#board', pos:'right' },
+
+    { title:'🏛️ 议会牌与密探',
+      body:`底部议会区有若干公会卡：<br><br>
+            1. 用<b>影响</b>行动在卡上放置密探<br>
+            2. 你的密探<b>占多数</b>时，用<b>收纳</b>行动拿走该卡<br>
+            3. 收纳后：获得卡牌的<b>持续能力</b>，敌方密探成为<b>俘虏</b><br><br>
+            ⚡ <b>帝国之声（Vox）卡</b>：收纳即触发强力效果后弃置。<br>
+            🔑 部分卡有序幕能力，可在行动前免费激活一次。`,
+      sel:'#court', pos:'top' },
+
+    { title:'📊 章节结束与计分',
+      body:`所有手牌打完后，章节结束：<br><br>
+            1️⃣ <b>雄心计分</b>：已宣告的雄心按名次发权力值<br>
+            2️⃣ <b>城市奖励</b>：建了 4+ 城市的玩家额外加分<br>
+            3️⃣ <b>标记升级</b>：面值最低的标记翻面（下章分更高）<br>
+            4️⃣ <b>重新发牌</b>：每人重发 6 张手牌<br><br>
+            共 3 章，第3章末最终计分，<b>权力值最高者获胜</b>！`,
+      sel:'#side', pos:'left' },
+
+    { title:'🚀 已掌握核心规则！',
+      body:`<b>开始游戏前的关键提示：</b><br><br>
+            ✅ <b>每章必须宣告至少一次雄心</b>（否则那章得0分）<br>
+            ✅ 先<b>建太空港 → 造舰船 → 扩张 → 建城市 → 课税</b><br>
+            ✅ 小数字牌行动多，<b>留给关键时机</b>使用<br>
+            ✅ 战斗时<b>骰数 = 舰船数</b>，先布兵再攻<br>
+            ✅ 游戏中随时查看右上角的 <b>📖 规则</b> 按钮<br><br>
+            <b>点击「开始游戏」，选好人数，征服星域！⭐</b>`,
+      sel:null },
+  ],
+
+  start(){
+    this.on=true; this.step=0;
+    tutInitDemo();
+    render();
+    $('#tut-blocker').style.display='block';
+    this._show(0);
+  },
+
+  _show(i){
+    if(i<0||i>=this.STEPS.length){ this._end(); return; }
+    this.step=i;
+    const s=this.STEPS[i];
+    $('#tut-title').textContent=s.title;
+    $('#tut-body').innerHTML=s.body;
+    $('#tut-progress').textContent=`${i+1} / ${this.STEPS.length}`;
+    $('#tut-prev').disabled=(i===0);
+    $('#tut-next').textContent=(i===this.STEPS.length-1)?'开始游戏！🎮':'明白了 →';
+    $('#tut-box').style.display='block';
+    this._spotlight(s.sel, s.pos||'right');
+  },
+
+  _spotlight(sel, pos){
+    $$('.tut-spot').forEach(e=>e.remove());
+    const box=$('#tut-box'), bw=338, bh=310;
+    const vw=window.innerWidth, vh=window.innerHeight;
+    if(!sel){
+      box.style.left=Math.max(8,(vw-bw)/2)+'px';
+      box.style.top=Math.max(8,(vh-bh)/2)+'px'; return;
+    }
+    const target=document.querySelector(sel);
+    if(!target){ box.style.left=Math.max(8,(vw-bw)/2)+'px'; box.style.top=Math.max(8,(vh-bh)/2)+'px'; return; }
+    const r=target.getBoundingClientRect(), pad=8;
+    const spot=document.createElement('div'); spot.className='tut-spot';
+    spot.style.cssText=`left:${r.left-pad}px;top:${r.top-pad}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px`;
+    document.body.appendChild(spot);
+    let bx, by;
+    if(pos==='right')  { bx=r.right+16;        by=r.top; }
+    else if(pos==='left') { bx=r.left-bw-16;   by=r.top; }
+    else if(pos==='top')  { bx=r.left;          by=r.top-bh-16; }
+    else if(pos==='bottom'){ bx=r.left;         by=r.bottom+16; }
+    else                  { bx=(vw-bw)/2;       by=(vh-bh)/2; }
+    bx=Math.max(8,Math.min(bx,vw-bw-8));
+    by=Math.max(8,Math.min(by,vh-bh-8));
+    box.style.left=bx+'px'; box.style.top=by+'px';
+  },
+
+  next(){ if(this.step===this.STEPS.length-1) this._end(); else this._show(this.step+1); },
+  prev(){ if(this.step>0) this._show(this.step-1); },
+
+  _end(){
+    this.on=false;
+    $('#tut-box').style.display='none';
+    $('#tut-blocker').style.display='none';
+    $$('.tut-spot').forEach(e=>e.remove());
+    showStartScreen();
+  }
+};
+
+window.addEventListener('DOMContentLoaded', ()=>{
+  $('#tut-exit').onclick=()=>TUT._end();
+  $('#tut-prev').onclick=()=>TUT.prev();
+  $('#tut-next').onclick=()=>TUT.next();
+  showStartScreen();
+});
 </script>
 </body>
 </html>
