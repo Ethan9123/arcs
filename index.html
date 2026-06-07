@@ -590,7 +590,7 @@ const LEADERS=[
    abilities:[{n:'Ruthless 无情',t:'触发(TODO)',d:'每回合一次，课税任意城市/星港造舰时可击毁该建筑以再次执行该行动。'},
               {n:'Hated 受憎恨',t:'Setup',d:'开局废弃 2 忠诚舰 + 3 忠诚密探。'}]},
   {id:'corsair', name:'Corsair', cn:'私掠者', kind:'ext', eff:['tricky','wary'],
-   abilities:[{n:'Tricky 狡诈',t:'触发(TODO)',d:'进攻战斗时可重掷劫掠骰，数量≤你拥有的不同资源种类数。'},
+   abilities:[{n:'Tricky 狡诈',t:'触发',d:'进攻战斗时可重掷劫掠骰，数量≤你拥有的不同资源种类数。'},
               {n:'Wary 谨慎',t:'被动',d:'进攻时强攻骰不能多于突袭骰。'}]},
   {id:'noble', name:'Noble', cn:'贵族', kind:'ext', eff:['proud','connected','influential'],
    abilities:[{n:'Connected 人脉',t:'触发',d:'宣告未被宣告的雄心时，抽并攫取议会牌堆顶卡（不能立即用其序幕，已实装）。'},
@@ -598,14 +598,14 @@ const LEADERS=[
               {n:'Proud 骄傲',t:'计分修正',d:'计分只有唯一第一名（非并列）才得分（已实装）。'}]},
   {id:'anarchist', name:'Anarchist', cn:'无政府者', kind:'ext', eff:['decentralized','inspiring','principled'],
    abilities:[{n:'Decentralized 去中心',t:'Setup',d:'开局废弃玩家板最左 2 座城市。'},
-              {n:'Inspiring 鼓舞',t:'被动(TODO)',d:'在有忠诚舰船的星系可无视控制权课税对手城市，并可像忠诚城市那样课税空建筑槽。'},
+              {n:'Inspiring 鼓舞',t:'被动',d:'在有忠诚舰船的星系可无视控制权课税对手城市，并可像忠诚城市那样课税空建筑槽。'},
               {n:'Principled 有原则',t:'被动',d:'不能课税忠诚城市（你自己的城市）。'}]},
   {id:'shaper', name:'Shaper', cn:'塑造者', kind:'ext', eff:['mythic','ancient'],
    abilities:[{n:'Mythic 神话',t:'触发(TODO)',d:'课税城市后可放 1 个资源到行星资源图标上，从此该行星类型变为该资源。'},
-              {n:'Ancient 远古',t:'被动(TODO)',d:'不能从星港弹射移动，但可从星门弹射。'}]},
+              {n:'Ancient 远古',t:'被动',d:'不能从星港弹射移动，但可从星门弹射。'}]},
   {id:'agitator', name:'Agitator', cn:'鼓动者', kind:'ext', eff:['taxbonus:weapon','irregular'],
    abilities:[{n:'Firebrand 煽风者',t:'触发',d:'Copy/Pivot 课税时额外 +1 武器。'},
-              {n:'Irregular 游击',t:'防御触发(TODO)',d:'对手攻击你掷出突袭符号时，不受新鲜防御舰反伤，改为每你的武器图标受 1 击伤，然后你弃 1 武器资源。'}]},
+              {n:'Irregular 游击',t:'防御触发',d:'对手攻击你掷出突袭符号时，不受新鲜防御舰反伤，改为每你的武器图标受 1 击伤，然后你弃 1 武器资源。'}]},
   {id:'quartermaster', name:'Quartermaster', cn:'军需官', kind:'ext', eff:['resilient','greedy'],
    abilities:[{n:'Resilient 坚韧',t:'触发',d:'任何有你参与的战斗后，按你控制的星港数（含对手的），每个修复战斗星系内 1 艘忠诚舰。'},
               {n:'Greedy 贪婪',t:'Setup',d:'开局在物资民愤槽放 1 密探。'}]},
@@ -1927,7 +1927,14 @@ function legalTargets(type){
       // 传说 Empath's Bond（扩展）：共情已宣告时，可课任意系统的任意城市（资源供给非空、未课税即可）
       let bondOK=false;
       if(empathBondActive(me) && s.resource && G.resSupply[s.resource]>0) bondOK=cities.some(b=>notTaxed(b.owner));
-      if(ownLoyal||rivalOK||bondOK) set.add(id);
+      // 领袖 Anarchist/Inspiring（扩展）：在有忠诚舰船的系统，无视控制权课税对手城市，或课税空建筑槽
+      let inspiringOK=false;
+      if(G.useExpansion && leaderHas(me,'inspiring') && (s.pieces.ships[col]>0)){
+        const iRival=cities.find(b=>b.owner!==col && notTaxed(b.owner));
+        if(iRival && !leaderTaxBlock(me,id,iRival)) inspiringOK=true;
+        else if(emptySlots(id)>0 && s.resource && G.resSupply[s.resource]>0 && notTaxed('_empty')) inspiringOK=true;
+      }
+      if(ownLoyal||rivalOK||bondOK||inspiringOK) set.add(id);
     } else if(type==='build'){
       const ship = canBuildShipAt(me,s,id,col); // 忠诚太空港可造船（受每港每回合 1 艘上限）；系统被敌方控制则造为「受损」（规则书 p.6）
       const bld = s.kind==='planet' && hasLoyalPiece(s,col) && emptySlots(id)>0 && (me.supply.cities>0||me.supply.starports>0); // 有忠诚棋子(舰船或建筑)的行星空槽可建城/港（规则书 p.12）
@@ -2192,14 +2199,31 @@ function doTax(id){
   // 敌方城市优先（可额外俘虏）：仅当你控制该系统时其敌方城市才可课税
   const rivalCity=(controllerOf(id)===col)?cities.find(b=>b.owner!==col&&notTaxed(b.owner)):null;
   const ownCity=cities.find(b=>b.owner===col&&notTaxed(col));
-  let target=rivalCity||ownCity; let bondTax=false;
+  let target=rivalCity||ownCity; let bondTax=false; let inspiringTax=false;
   // 传说 Empath's Bond（扩展）：无常规目标时，可课任意未课税城市（视为忠诚，不抓俘虏）
   if(!target && empathBondActive(me)){ target=cities.find(b=>notTaxed(b.owner)); if(target) bondTax=true; }
+  // 领袖 Anarchist/Inspiring（扩展）：有忠诚舰时无视控制权课税对手城市，或课税空建筑槽
+  const inspires=G.useExpansion && leaderHas(me,'inspiring') && (s.pieces.ships[col]>0);
+  if(!target && inspires){
+    const iRival=cities.find(b=>b.owner!==col && notTaxed(b.owner));
+    if(iRival && !leaderTaxBlock(me,id,iRival)){ target=iRival; inspiringTax=true; }
+  }
+  if(!target && inspires && emptySlots(id)>0 && s.resource && s.kind==='planet' && notTaxed('_empty')){
+    // 空建筑槽课税：获得行星资源，无城市目标，单独处理后返回
+    if(!retax) taxed.add(id+':_empty');
+    let imsg=`${pname(G.actor)} 鼓舞：课税 ${id} 空建筑槽`;
+    if(gainResource(me,s.resource)) imsg+=`，获得 ${RESOURCES[s.resource].name}`; else imsg+='（资源供给已空）';
+    if(G.useExpansion && (G.actionFollowMode==='copy'||G.actionFollowMode==='pivot')){
+      const bonus=leaderHas(me,'taxbonus:weapon')?'weapon':null;
+      if(bonus && gainResource(me,bonus)) imsg+=`；领袖加成 +${RESOURCES[bonus].name}`;
+    }
+    SFX.tax(); consumeAction(imsg); return;
+  }
   if(!target){ toast('该城本回合已课税'); return; }
   const block=leaderTaxBlock(me,id,target);
-  if(block && !bondTax){ toast(block); return; }
+  if(block && !bondTax && !inspiringTax){ toast(block); return; }
   if(!retax) taxed.add(id+':'+target.owner);
-  let msg=`${pname(G.actor)} 课税 ${id}${bondTax?'（共情者羁绊）':''}${retax?'（霸主残暴·重复课税）':''}`;
+  let msg=`${pname(G.actor)} 课税 ${id}${bondTax?'（共情者羁绊）':''}${inspiringTax?'（鼓舞·无视控制权）':''}${retax?'（霸主残暴·重复课税）':''}`;
   if(gainResource(me,s.resource)) msg+=`，获得 ${RESOURCES[s.resource].name}`; else msg+='（资源供给已空，未获得）';
   if(target.owner!==col && !bondTax){ // 你控制的敌方城市 → 俘获该敌方 1 个密探（Empath's Bond 不抓俘虏）
     const rival=G.players.find(p=>p.color.key===target.owner);
@@ -2524,6 +2548,7 @@ function runBattle(id,defC,alloc,preResult){
   if(r.res._rerolled>0) html+=`<br><i>「游击部队」重掷了 ${r.res._rerolled} 颗空白游击骰</i>`;
   if(r.res._torpReroll>0) html+=`<br><i>📜「寻的鱼雷」重掷了 ${r.res._torpReroll} 颗强攻骰</i>`;
   if(r.res._trickyReroll>0) html+=`<br><i>「狡诈」(私掠者)：重掷了 ${r.res._trickyReroll} 颗无收益劫掠骰</i>`;
+  if(r.res._irregularHits>0) html+=`<br><i>「游击」(鼓动者·防御触发)：突袭骰触发，每武器图标受 1 击，共 ${r.res._irregularHits} 击（守方需弃 1 武器资源）</i>`;
   if(r.res._visionReroll>0) html+=`<br><i>📜「共情者之眼」：重掷了 ${r.res._visionReroll} 颗骰</i>`;
   if(r.res._mirrorAdd>0) html+=`<br><i>📜「镜面装甲」(守)：攻方掷强攻骰 → 自损面 +1 ◯</i>`;
   if(r.res._railgunAdd>0) html+=`<br><i>📜「轨道炮阵列」(守)：守方有新鲜忠诚舰 → 攻方必受 1 击</i>`;
@@ -2542,6 +2567,11 @@ function runBattle(id,defC,alloc,preResult){
     // 传说·维修无人机（Repair Drones）：仅攻击方战后修复 1 艘忠诚进攻舰
     const drep=loreRepairDrones(G.players[G.actor], id);
     if(drep>0) logMsg(`${pname(G.actor)} 传说·维修无人机：战后修复 ${drep} 艘忠诚进攻舰`,'bat');
+    // 领袖 Agitator/Irregular（扩展）：突袭骰触发，守方弃 1 武器资源
+    if(r.res._irregularHits>0 && def && leaderHas(def,'irregular')){
+      if((def.res.weapon||0)>0){ def.res.weapon--; G.resSupply.weapon++;
+        logMsg(`${pname(defIdx)} 领袖·游击：弃 1 武器资源（突袭骰触发）`,'bat'); }
+    }
   }
   // 领袖 Elder/Beloved（扩展）：对手攻击你时不能洗劫(Ransack)你的议会卡
   const def=(defIdx>=0?G.players[defIdx]:null);
@@ -2648,11 +2678,15 @@ function resolveBattle(sysId,defColor,alloc){
   res._mirrorAdd=mirrorAdd; res._signalCut=signalCut; res._railgunAdd=railgunAdd;
   // —— 结算顺序（规则书 p.14）：①自伤 → ②拦截（每战一次，=守方「新鲜舰」数）→ ③命中守方舰（新鲜→受损→摧毁；舰尽溢出建筑）→ ④命中建筑 → ⑤劫掠 ——
   const def0fresh=freshShips(s,defColor);                                 // 拦截基数：守方战前「新鲜舰」数
-  const interLoss=(res.intercept>0 && def0fresh>0) ? def0fresh : 0;       // 任意拦截面即触发；伤害=守方新鲜舰数；每战仅一次
+  // 领袖 Agitator/Irregular（扩展）：守方持有时，攻方掷突袭骰 → 无新鲜舰反伤；改为守方每武器图标受 1 击，弃 1 武器资源（见 runBattle）
+  const irregularOn=(G.useExpansion && def && leaderHas(def,'irregular') && (res.intercept||0)>0);
+  const interLoss=(res.intercept>0 && def0fresh>0 && !irregularOn) ? def0fresh : 0;
+  const irregularHits=irregularOn ? weaponIcons(def) : 0;
   const atkR=applyShipHits(sysId, atk.color.key, res.self+interLoss, def); // 攻方舰：新鲜→受损→摧毁；被摧毁→守方战利品
-  const defR=applyShipHits(sysId, defColor, res.hit, atk);                 // 守方舰：被摧毁→攻方战利品；舰尽则 overflow 转建筑
+  const defR=applyShipHits(sysId, defColor, res.hit+irregularHits, atk);   // 守方舰：被摧毁→攻方战利品；舰尽则 overflow 转建筑
   const bld=damageBuildings(sysId, defColor, res.bldg+defR.overflow, atk); // 摧毁建筑→攻方战利品；摧毁城市→民愤
   const stolen=0; // 劫掠改为模态框交互，此处不再自动偷取
+  res._irregularHits=irregularHits;
   return {res, atkDmg:atkR.damaged, atkLost:atkR.destroyed, defDmg:defR.damaged, defKilled:defR.destroyed, bldgDestroyed:bld.destroyed, outrages:bld.outrages, stolen, interLoss, faces:faceLog};
 }
 // 建筑命中：新鲜→受损（翻面）；受损→摧毁（移除，归还原主补给；并计入 destroyer 战利品）。
