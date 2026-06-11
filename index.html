@@ -18,7 +18,7 @@
   /* ---- 左：棋盘 ---- */
   #boardWrap{flex:1;position:relative;min-width:0;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 45%,#15203a 0%,#0b0e17 70%)}
-  #board{width:min(100%,96vh);height:min(100%,96vh)}
+  #board{width:100%;height:100%;max-width:100%;max-height:100%}
   /* ---- 右：信息面板 ---- */
   #side{width:360px;min-width:360px;background:var(--panel);border-left:1px solid var(--line);
     display:flex;flex-direction:column;height:100vh}
@@ -253,7 +253,7 @@
     html,body{font-size:14px}
     #app{flex-direction:column;height:100vh;height:100dvh}
     #boardWrap{flex:none;height:56vh;height:56dvh;width:100%}
-    #board{width:min(100%,56vh);height:min(100%,56vh)}
+    #board{width:100%;height:100%}
     #side{width:auto;min-width:0;width:100%;flex:1;min-height:0;height:auto;
       border-left:none;border-top:1px solid var(--line);overflow-y:auto;
       transform:translateX(100%);position:fixed;top:0;right:0;bottom:0;left:0;
@@ -291,7 +291,6 @@
   }
   @media (max-width:480px){
     #boardWrap{height:50vh;height:50dvh}
-    #board{width:min(100%,50vh);height:min(100%,50vh)}
     #top .chip{font-size:10px}
   }
 </style>
@@ -300,7 +299,7 @@
 <div id="app">
   <div id="boardWrap">
     <div id="top"></div>
-    <svg id="board" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet"></svg>
+    <svg id="board" viewBox="0 0 3481 1860" preserveAspectRatio="xMidYMid meet"></svg>
     <div id="court"></div>
   </div>
   <div id="side">
@@ -400,38 +399,42 @@ const POWER_TO_WIN = {2:33, 3:30, 4:27};
 
 /* ----------------------------- 地图生成 --------------------------------- */
 // 6 星团，每团 = 1 星门 + 3 行星(A/B/C)。环形邻接。
-// 行星资源类型分布（可调整以贴合实体板）
+// 行星资源类型分布（已对照官方实体板逐颗核对：武器×4/燃料×4/物资×4/遗物×3/通灵×3）
 const PLANET_LAYOUT = {
-  1:{A:'material',B:'fuel',   C:'weapon'},
-  2:{A:'psionic', B:'relic',  C:'material'},
-  3:{A:'fuel',    B:'weapon', C:'psionic'},
-  4:{A:'relic',   B:'material',C:'fuel'},
-  5:{A:'weapon',  B:'psionic',C:'relic'},
-  6:{A:'material',B:'fuel',   C:'weapon'},
+  1:{A:'weapon',  B:'fuel',  C:'material'},
+  2:{A:'psionic', B:'weapon',C:'relic'},
+  3:{A:'material',B:'fuel',  C:'weapon'},
+  4:{A:'relic',   B:'fuel',  C:'material'},
+  5:{A:'weapon',  B:'relic', C:'psionic'},
+  6:{A:'material',B:'fuel',  C:'psionic'},
 };
-const PLANET_SLOTS = { // 每行星建筑槽数
-  '1A':2,'1B':1,'1C':1,'2A':1,'2B':2,'2C':1,'3A':2,'3B':1,'3C':1,
-  '4A':1,'4B':2,'4C':1,'5A':2,'5B':1,'5C':1,'6A':1,'6B':2,'6C':1,
+const PLANET_SLOTS = { // 每行星建筑槽数（官方板）
+  '1A':2,'1B':1,'1C':2,'2A':1,'2B':1,'2C':2,'3A':1,'3B':1,'3C':2,
+  '4A':2,'4B':2,'4C':1,'5A':1,'5B':1,'5C':2,'6A':1,'6B':2,'6C':1,
+};
+// 官方棋盘图上各系统的像素坐标（assets/board.jpg，3481×1860 半分辨率坐标系）
+const BOARD_POS = {
+  G1:[1797,513], G2:[2096,808], G3:[2062,1130], G4:[1601,1349], G5:[1263,1019], G6:[1330,681],
+  '1A':[1565,230],'1B':[1930,260],'1C':[2200,200],
+  '2A':[2480,420],'2B':[2700,630],'2C':[2600,920],
+  '3A':[2640,1190],'3B':[2350,1250],'3C':[2350,1560],
+  '4A':[1900,1530],'4B':[1500,1530],'4C':[1280,1480],
+  '5A':[740,1390],'5B':[900,1110],'5C':[720,890],
+  '6A':[905,670],'6B':[830,330],'6C':[1180,300],
 };
 
 function buildMap(){
   const sys = {};
-  const cx=500, cy=500;
-  const Rg=205, Rp=355;
   for(let c=1;c<=6;c++){
-    const base = -90 + (c-1)*60;       // 度
-    const ga = base*Math.PI/180;
     const gid = 'G'+c;
     sys[gid] = {id:gid, kind:'gate', cluster:c, label:''+c,
-      x:cx+Rg*Math.cos(ga), y:cy+Rg*Math.sin(ga),
+      x:BOARD_POS[gid][0], y:BOARD_POS[gid][1],
       neighbors:[], slots:0, resource:null, pieces:newPieceSlot(), outOfPlay:false, pathMarker:false};
-    const planetDefs=[['A',-19,Rp-22],['B',0,Rp],['C',19,Rp-22]];
-    for(const [pl,da,rad] of planetDefs){
-      const pa=(base+da)*Math.PI/180;
+    for(const pl of ['A','B','C']){
       const pid=c+''+pl;
       sys[pid]={id:pid, kind:'planet', cluster:c, idsym:pl, label:pid,
         resource:PLANET_LAYOUT[c][pl], slots:PLANET_SLOTS[pid]||1,
-        x:cx+rad*Math.cos(pa), y:cy+rad*Math.sin(pa),
+        x:BOARD_POS[pid][0], y:BOARD_POS[pid][1],
         neighbors:[], pieces:newPieceSlot(), outOfPlay:false, pathMarker:false, buildings:[]};
     }
   }
@@ -921,13 +924,18 @@ function startLeaderDraft(){
     openModal(m=>{
       m.appendChild(el('h2',null,'领袖抽选 · '+p.name));
       m.appendChild(el('div','hintbox',`${p.name}，从下列 2 名领袖中选 1 名（点击查看能力，选定后立即应用开局效果）：`));
+      const row=el('div'); row.style.cssText='display:flex;gap:10px;justify-content:center;flex-wrap:wrap';
       [a,b].forEach(L=>{
-        const b1=el('button','btn'); b1.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
-        b1.innerHTML=`<b>${L.cn} ${L.name}</b>　<span style="opacity:.7;font-size:12px">${L.abilities.map(x=>x.n).join(' · ')}</span>`;
+        const b1=el('button','btn'); b1.style.cssText='display:block;flex:1;min-width:180px;max-width:300px;margin:6px 0;text-align:center;padding:8px';
+        const im=cardImgEl(`assets/leader/${L.id}.jpg`,300);
+        if(im) b1.appendChild(im);
+        const tx=el('div'); tx.innerHTML=`<b>${L.cn} ${L.name}</b><br><span style="opacity:.7;font-size:11px">${L.abilities.map(x=>x.n).join(' · ')}</span>`;
+        b1.appendChild(tx);
         b1.onclick=()=>{ closeModal(); assignLeader(p,L.id);
           logMsg(`${pname(pIdx)} 选择领袖 <b>${L.cn} ${L.name}</b>`,'sys'); step(qi+1); };
-        m.appendChild(b1);
+        row.appendChild(b1);
       });
+      m.appendChild(row);
     });
   };
   step(0);
@@ -967,8 +975,10 @@ function dealLoreCards(){
       m.appendChild(el('h2',null,'博学 · '+p.name+' 留 2 弃 3'));
       m.appendChild(el('div','hintbox',`${p.name}（档案官·博学）：从 5 张传说中点选 <b>2</b> 张保留（已选 ${chosen.length}/2）。`));
       draw.forEach(L=>{ const picked=chosen.indexOf(L.id)>=0;
-        const b=el('button',picked?'btn gold':'btn'); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left';
-        b.innerHTML=`${picked?'☑ ':'☐ '}<b>${L.cn} ${L.name}</b>　<span style="opacity:.7;font-size:11px">${L.abilities.map(x=>x.n).join(' · ')}</span>`;
+        const b=el('button',picked?'btn gold':'btn'); b.style.cssText='display:flex;align-items:center;gap:8px;width:100%;margin:6px 0;text-align:left';
+        const im=cardImgEl(`assets/lore/${L.id}.jpg`,86); if(im){ im.style.margin='0'; b.appendChild(im); }
+        const tx=el('span'); tx.innerHTML=`${picked?'☑ ':'☐ '}<b>${L.cn} ${L.name}</b>　<span style="opacity:.7;font-size:11px">${L.abilities.map(x=>x.n).join(' · ')}</span>`;
+        b.appendChild(tx);
         b.onclick=()=>{ const i=chosen.indexOf(L.id);
           if(i>=0) chosen.splice(i,1); else { if(chosen.length>=2){ toast('最多留 2 张'); return; } chosen.push(L.id); }
           renderPick(); };
@@ -1192,59 +1202,66 @@ function showCourtCard(c){
   });
 }
 
+// 官方棋盘图加载状态：ok=已加载 / fail=不存在（公网无素材版回退程序化绘制）
+let _boardImgState='pending';
+(function(){ if(typeof Image==='undefined'){ _boardImgState='fail'; return; } // 无头测试环境
+  const im=new Image();
+  im.onload=()=>{ _boardImgState='ok'; if(typeof G!=='undefined'&&G&&G.map) render(); };
+  im.onerror=()=>{ _boardImgState='fail'; if(typeof G!=='undefined'&&G&&G.map) render(); };
+  im.src='assets/board.jpg'; })();
 function renderBoard(){
   const svg=$('#board'); svg.innerHTML='';
-  // 背景中心
-  svg.appendChild(svgEl('circle',{cx:500,cy:500,r:78,fill:'#0c1322',stroke:'#27406e','stroke-width':2}));
-  const t=svgEl('text',{x:500,y:506,'text-anchor':'middle',fill:'#9fb4e0','font-size':22,'font-weight':800,'letter-spacing':3}); t.textContent='ARCS'; svg.appendChild(t);
-
-  // 先画邻接连线
-  const drawn=new Set();
-  for(const id in G.map){ const s=G.map[id];
-    for(const nb of s.neighbors){ const key=[id,nb].sort().join('-'); if(drawn.has(key))continue; drawn.add(key);
-      const o=G.map[nb];
-      const faint=(s.outOfPlay||o.outOfPlay);
-      svg.appendChild(svgEl('line',{x1:s.x,y1:s.y,x2:o.x,y2:o.y,stroke:faint?'#1d2740':'#34406a','stroke-width':faint?1:2}));
+  if(_boardImgState!=='fail'){
+    // 官方棋盘图为底（中文 TTS 纹理，含雄心栏/章节/计分轨）
+    svg.appendChild(svgEl('image',{href:'assets/board.jpg',x:0,y:0,width:3481,height:1860,preserveAspectRatio:'none'}));
+  } else {
+    // 回退：暗色底 + 邻接连线 + 中心标识（无素材环境）
+    svg.appendChild(svgEl('rect',{x:0,y:0,width:3481,height:1860,fill:'#0b0f1a'}));
+    const t=svgEl('text',{x:1683,y:945,'text-anchor':'middle',fill:'#9fb4e0','font-size':72,'font-weight':800,'letter-spacing':10}); t.textContent='ARCS'; svg.appendChild(t);
+    const drawn=new Set();
+    for(const id in G.map){ const s=G.map[id];
+      for(const nb of s.neighbors){ const key=[id,nb].sort().join('-'); if(drawn.has(key))continue; drawn.add(key);
+        const o=G.map[nb]; const faint=(s.outOfPlay||o.outOfPlay);
+        svg.appendChild(svgEl('line',{x1:s.x,y1:s.y,x2:o.x,y2:o.y,stroke:faint?'#1d2740':'#34406a','stroke-width':faint?3:5}));
+      }
     }
   }
-  // 画系统
   for(const id in G.map){ drawSystem(svg, G.map[id]); }
 }
 
 function drawSystem(svg, s){
   const g=svgEl('g',{class:'sys-node', 'data-sys':s.id});
   const isGate=s.kind==='gate';
-  const r=isGate?26:30;
-  // 资源色环
-  const rc = s.kind==='planet' ? RESOURCES[s.resource].color : '#5b6b8c';
+  const imgOn=_boardImgState!=='fail';
+  const r=isGate?72:95;
+  const rc = s.kind==='planet' ? RESOURCES[s.resource].color : '#8ba6d4';
   if(s.outOfPlay){
-    g.appendChild(svgEl('circle',{cx:s.x,cy:s.y,r:r,fill:'#0c1018',stroke:'#283250','stroke-width':2,'stroke-dasharray':'4 4'}));
-    const x=svgEl('text',{x:s.x,y:s.y+5,'text-anchor':'middle',fill:'#46557a','font-size':12}); x.textContent='出局'; g.appendChild(x);
+    g.appendChild(svgEl('circle',{cx:s.x,cy:s.y,r:r,fill:'#000c',stroke:'#283250','stroke-width':5,'stroke-dasharray':'12 10'}));
+    const x=svgEl('text',{x:s.x,y:s.y+12,'text-anchor':'middle',fill:'#46557a','font-size':34}); x.textContent='出局'; g.appendChild(x);
     svg.appendChild(g); return;
   }
   if(isGate){
-    g.appendChild(svgEl('rect',{x:s.x-r,y:s.y-r,width:2*r,height:2*r,rx:7,fill:'#16203a',stroke:'#3a5ea0','stroke-width':2,transform:`rotate(45 ${s.x} ${s.y})`}));
-    const t=svgEl('text',{x:s.x,y:s.y+5,'text-anchor':'middle',fill:'#9fc0ff','font-size':16,'font-weight':800}); t.textContent=s.label; g.appendChild(t);
+    g.appendChild(svgEl('rect',{x:s.x-r,y:s.y-r,width:2*r,height:2*r,rx:18,fill:imgOn?'#10182a55':'#16203a',stroke:'#3a5ea0','stroke-width':5,transform:`rotate(45 ${s.x} ${s.y})`}));
+    const t=svgEl('text',{x:s.x,y:s.y+14,'text-anchor':'middle',fill:'#9fc0ff','font-size':44,'font-weight':800}); t.textContent=s.label; g.appendChild(t);
+  } else if(imgOn){
+    // 图上行星：细描边圈 + 角标 id（不遮挡卡面美术；资源/槽位以板图为准）
+    g.appendChild(svgEl('circle',{cx:s.x,cy:s.y,r:r,fill:'none',stroke:rc,'stroke-width':4,opacity:.75,'stroke-dasharray':'2 7','stroke-linecap':'round'}));
+    const lb=svgEl('text',{x:s.x,y:s.y-r-12,'text-anchor':'middle',fill:'#e8e0c8','font-size':30,'font-weight':800,stroke:'#000',
+      'stroke-width':5,'paint-order':'stroke'}); lb.textContent=s.id; g.appendChild(lb);
   } else {
-    g.appendChild(svgEl('circle',{cx:s.x,cy:s.y,r:r,fill:'#121a2c',stroke:rc,'stroke-width':3}));
-    // 资源图标
-    const ic=svgEl('text',{x:s.x,y:s.y-4,'text-anchor':'middle',fill:rc,'font-size':15,'font-weight':700});
+    g.appendChild(svgEl('circle',{cx:s.x,cy:s.y,r:r,fill:'#121a2c',stroke:rc,'stroke-width':7}));
+    const ic=svgEl('text',{x:s.x,y:s.y-10,'text-anchor':'middle',fill:rc,'font-size':40,'font-weight':700});
     ic.textContent=resGlyph(s.resource); g.appendChild(ic);
-    const lb=svgEl('text',{x:s.x,y:s.y+12,'text-anchor':'middle',fill:'#7f8ea8','font-size':9}); lb.textContent=s.id; g.appendChild(lb);
-    // 建筑槽点
+    const lb=svgEl('text',{x:s.x,y:s.y+34,'text-anchor':'middle',fill:'#7f8ea8','font-size':26}); lb.textContent=s.id; g.appendChild(lb);
     for(let i=0;i<s.slots;i++){
-      const sx=s.x-7+i*14, sy=s.y+r-3;
-      g.appendChild(svgEl('circle',{cx:sx,cy:sy,r:2.4,fill:'#2c3960'}));
+      g.appendChild(svgEl('circle',{cx:s.x-18+i*36,cy:s.y+r-8,r:6,fill:'#2c3960'}));
     }
   }
-  // 棋子徽标（环绕系统）
   drawPieces(g, s, r);
-  // 合法目标高亮
   if(G.highlight&&G.highlight.has(s.id)){
-    g.insertBefore(svgEl('circle',{cx:s.x,cy:s.y,r:r+7,fill:'none',stroke:'#d9b25a','stroke-width':3,opacity:0.95,'stroke-dasharray':'5 4'}), g.firstChild);
+    g.insertBefore(svgEl('circle',{cx:s.x,cy:s.y,r:r+18,fill:'#d9b25a14',stroke:'#d9b25a','stroke-width':8,opacity:0.95,'stroke-dasharray':'14 10'}), g.firstChild);
   }
-  // 命中区
-  const hit=svgEl('circle',{cx:s.x,cy:s.y,r:r+10,fill:'transparent',class:'sys-hit','data-sys':s.id});
+  const hit=svgEl('circle',{cx:s.x,cy:s.y,r:r+26,fill:'transparent',class:'sys-hit','data-sys':s.id});
   hit.addEventListener('click',()=>onSystemClick(s.id));
   g.appendChild(hit);
   svg.appendChild(g);
@@ -1252,35 +1269,34 @@ function drawSystem(svg, s){
 
 function drawPieces(g, s, r){
   // 建筑：在系统下方排列
-  let bx=s.x-(s.pieces.buildings.length-1)*8;
   s.pieces.buildings.forEach((b,i)=>{
     const col=PCOLORS.find(c=>c.key===b.owner).hex;
-    const yy=s.y+r+10;
-    const xx=s.x-(s.pieces.buildings.length-1)*9+i*18;
+    const yy=s.y+r+26;
+    const xx=s.x-(s.pieces.buildings.length-1)*24+i*48;
     if(b.type==='city'){
-      const p=svgEl('rect',{x:xx-6,y:yy-6,width:12,height:12,rx:2,fill:col,stroke:'#000a','stroke-width':1});
+      const p=svgEl('rect',{x:xx-16,y:yy-16,width:32,height:32,rx:5,fill:col,stroke:'#000c','stroke-width':3});
       if(b.damaged)p.setAttribute('opacity','.45'); g.appendChild(p);
     } else {
-      const p=svgEl('polygon',{points:diamondPts(xx,yy,7),fill:col,stroke:'#000a','stroke-width':1});
+      const p=svgEl('polygon',{points:diamondPts(xx,yy,19),fill:col,stroke:'#000c','stroke-width':3});
       if(b.damaged)p.setAttribute('opacity','.45'); g.appendChild(p);
     }
   });
-  // 船：系统上方按颜色分组。新鲜=正立三角(实心)；受损=倒置三角(半透明虚边，示意「侧翻」)，各自标数。
+  // 船：系统上方按颜色分组。新鲜=正立三角(实心)；受损=倒置三角(半透明虚边)，各自标数。
   let ships=Object.entries(s.pieces.ships).filter(([c,n])=>n>0);
   ships.forEach(([c,n],i)=>{
     const col=PCOLORS.find(cc=>cc.key===c).hex;
     const fresh=freshShips(s,c), dmg=dmgShipsN(s,c);
-    const ang=-90+(i-(ships.length-1)/2)*26; const baseR=r+14;
+    const ang=-90+(i-(ships.length-1)/2)*30; const baseR=r+38;
     const fx=s.x+baseR*Math.cos(ang*Math.PI/180), fy=s.y+baseR*Math.sin(ang*Math.PI/180);
     if(fresh>0){
-      g.appendChild(svgEl('polygon',{points:triPts(fx,fy,7),fill:col,stroke:'#000a','stroke-width':1}));
-      const tn=svgEl('text',{x:fx,y:fy+3.5,'text-anchor':'middle',fill:'#000','font-size':9,'font-weight':800}); tn.textContent=fresh; g.appendChild(tn);
+      g.appendChild(svgEl('polygon',{points:triPts(fx,fy,19),fill:col,stroke:'#000c','stroke-width':3}));
+      const tn=svgEl('text',{x:fx,y:fy+10,'text-anchor':'middle',fill:'#000','font-size':25,'font-weight':800}); tn.textContent=fresh; g.appendChild(tn);
     }
     if(dmg>0){
-      const dr=baseR+(fresh>0?16:0);
+      const dr=baseR+(fresh>0?42:0);
       const dx=s.x+dr*Math.cos(ang*Math.PI/180), dy=s.y+dr*Math.sin(ang*Math.PI/180);
-      g.appendChild(svgEl('polygon',{points:triPtsDown(dx,dy,7),fill:col,opacity:'.45',stroke:'#000a','stroke-width':1,'stroke-dasharray':'2 1.5'}));
-      const tn=svgEl('text',{x:dx,y:dy-1.5,'text-anchor':'middle',fill:'#000','font-size':8,'font-weight':800}); tn.textContent=dmg; g.appendChild(tn);
+      g.appendChild(svgEl('polygon',{points:triPtsDown(dx,dy,19),fill:col,opacity:'.5',stroke:'#000c','stroke-width':3,'stroke-dasharray':'5 4'}));
+      const tn=svgEl('text',{x:dx,y:dy-4,'text-anchor':'middle',fill:'#000','font-size':22,'font-weight':800}); tn.textContent=dmg; g.appendChild(tn);
     }
   });
 }
@@ -3583,10 +3599,18 @@ function openCountModal(title,min,max,cb){
 }
 
 // 弹出某领袖的全部能力（名/类型/描述）
+// 卡面图元素：加载失败时自动移除（公网无素材版自动回退纯文本）
+function cardImgEl(src, h){
+  const im=document.createElement('img'); im.src=src;
+  im.style.cssText=`display:block;height:${h||280}px;max-width:100%;object-fit:contain;margin:4px auto;border-radius:8px;box-shadow:0 2px 10px #0008`;
+  im.onerror=()=>{ im.remove(); };
+  return im;
+}
 function showLeaderCard(leaderId){
   const L=leaderById(leaderId); if(!L) return;
   openModal(m=>{
     m.appendChild(el('h2',null,`👑 ${L.cn} ${L.name}`));
+    m.appendChild(cardImgEl(`assets/leader/${L.id}.jpg`,400));
     L.abilities.forEach(ab=>{
       const d=el('div','hintbox'); d.style.cssText='text-align:left;margin:6px 0';
       d.innerHTML=`<b style="color:#d9b25a">${ab.n}</b> <span style="opacity:.7;font-size:11px">[${ab.t}]</span><br><span style="font-size:12.5px;line-height:1.6">${ab.d}</span>`;
@@ -3603,7 +3627,9 @@ function showLoreCards(p){
     p.loreCards.forEach(id=>{ const L=loreById(id); if(!L) return;
       const card=el('div','hintbox'); card.style.cssText='text-align:left;margin:6px 0';
       const abil=L.abilities.map(ab=>`<b style="color:#7fd4c4">${ab.n}</b> <span style="opacity:.7;font-size:11px">[${ab.t}]</span><br><span style="font-size:12.5px;line-height:1.6">${ab.d}</span>`).join('<br>');
-      card.innerHTML=`<div style="color:#7fd4c4;font-weight:700;margin-bottom:3px">${L.cn} ${L.name}</div>${abil}`;
+      card.innerHTML=`<div style="color:#7fd4c4;font-weight:700;margin-bottom:3px">${L.cn} ${L.name}</div>`;
+      card.appendChild(cardImgEl(`assets/lore/${L.id}.jpg`,260));
+      const ad=el('div'); ad.innerHTML=abil; card.appendChild(ad);
       m.appendChild(card);
     });
     const c=el('button','btn gold','关闭'); c.style.marginTop='8px'; c.onclick=()=>closeModal(); m.appendChild(c);
