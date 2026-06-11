@@ -2408,8 +2408,10 @@ function maybeRuthless(me, id, bldg, actionType, msg){
       let destMsg=`${pname(G.actor)} 无情：击毁 ${id} 的${bType}`;
       const doRepeat=()=>{ G._ruthlessRepeat=()=>consumeAction(msg); G.pending=null; G.highlight=null;
         if(actionType==='tax') beginAction('tax'); else beginAction('build'); };
-      if(bldg.type==='city' && s.resource){
-        const oMsg=provokeOutrage(me, s.resource); destMsg+=`；引发民愤（${oMsg}）`;
+      // 摧毁城市 → 民愤：星门站城市触发其全部星簇类型，普通/云端城市触发行星类型
+      const rtypes=bldg.type==='city'?(bldg._gateStation?(bldg._gsTypes||[]):(s.resource?[s.resource]:[])):[];
+      if(rtypes.length){
+        const oMsg=rtypes.map(r=>provokeOutrage(me,r)).join('；'); destMsg+=`；引发民愤（${oMsg}）`;
         logMsg(destMsg,'act');
         if(isRival) maybeRansack(1, bldg.owner, doRepeat); else doRepeat();
       } else { logMsg(destMsg,'act'); doRepeat(); }
@@ -2445,8 +2447,8 @@ function doMovePick(id){
         ?Math.min((srcSys.pieces.ships[col]||0)-dmgShipsN(srcSys,col),n):0;
       const moved=moveShips(src,id,me,n); // 补给中性搬运，保留受损状态
       SFX.move();
-      consumeAction(`${pname(G.actor)} ${cata?'弹射移动':'移动'} ${moved} 艘舰船 ${src}→${id}`);
-      // 传说 Gate Ports（扩展）：移入对手控制且有新鲜忠诚星港的星门时，被俘获 1 密探
+      const moveMsg=`${pname(G.actor)} ${cata?'弹射移动':'移动'} ${moved} 艘舰船 ${src}→${id}`;
+      // 传说 Gate Ports（扩展）：移入对手控制且有新鲜忠诚星港的星门时，被俘获 1 密探（在消耗行动前结算）
       if(G.useExpansion && G.map[id].kind==='gate'){
         G.players.forEach(p=>{ if(p===me||!loreHas(p,'gateports')) return;
           if(controllerOf(id)!==p.color.key) return;
@@ -2456,13 +2458,16 @@ function doMovePick(id){
             logMsg(`${pname(G.players.indexOf(p))} 星门港：${pname(G.actor)} 舰进入 ${id}，俘获 1 密探`,'act'); }
         });
       }
-      if(willMoveFresh>0) doSprinterDrives(me,id,willMoveFresh); });
+      // 疾驰引擎结算完毕后才消耗行动点（否则最后一个行动点会先切回合，弹窗错位到下家回合）
+      if(willMoveFresh>0) doSprinterDrives(me,id,willMoveFresh,()=>consumeAction(moveMsg));
+      else consumeAction(moveMsg); });
   }
 }
-function doSprinterDrives(me, fromSys, maxLeft){
+function doSprinterDrives(me, fromSys, maxLeft, onDone){
+  onDone=onDone||function(){};
   const col=me.color.key; const s=G.map[fromSys];
   const freshHere=Math.min(maxLeft,(s.pieces.ships[col]||0)-dmgShipsN(s,col));
-  if(freshHere<=0) return;
+  if(freshHere<=0){ onDone(); return; }
   openModal(m=>{
     m.appendChild(el('h2',null,'传说·疾驰引擎'));
     m.appendChild(el('div','hintbox',`${freshHere} 艘新鲜忠诚舰可从 ${fromSys} 再移动一次（不触发本效果）。选目标系统，或跳过。`));
@@ -2475,12 +2480,13 @@ function doSprinterDrives(me, fromSys, maxLeft){
           const mv=moveShips(fromSys,nb,me,n); SFX.move();
           logMsg(`${pname(G.actor)} 疾驰引擎：${mv} 艘新鲜舰 ${fromSys}→${nb}`,'act');
           render();
-          if(freshHere-n>0) doSprinterDrives(me,fromSys,freshHere-n);
+          if(freshHere-n>0) doSprinterDrives(me,fromSys,freshHere-n,onDone);
+          else onDone();
         });
       };
       m.appendChild(btn);
     });
-    const skip=el('button','btn ghost','跳过'); skip.onclick=()=>closeModal(); m.appendChild(skip);
+    const skip=el('button','btn ghost','跳过'); skip.onclick=()=>{ closeModal(); onDone(); }; m.appendChild(skip);
   });
 }
 // 领袖 Warrior/Tactical（扩展）：Copy/Pivot 战斗时额外免费移动一次；分批选择源→目标→数量，不消耗行动点
