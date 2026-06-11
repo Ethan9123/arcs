@@ -368,11 +368,11 @@ function guildIcons(p, ...kinds){ return (p.guildCards||[]).filter(c=>kinds.incl
 // 垄断联盟（g03/g06）：堆置于本牌上的资源「视为你所有」（计入大亨），但不可动用/被偷/被劫/被民愤。
 function cartelStash(p){ return (p.guildCards||[]).reduce((n,c)=>n+(typeof c.eff==='string'&&c.eff.startsWith('cartel:')?(c.stash|0):0),0); }
 const AMBITIONS = {
-  tycoon: {name:'大亨', en:'Tycoon', icon:'💰', desc:'燃料+物资 图标，含公会卡', count:p=>p.res.fuel+p.res.material+guildIcons(p,'fuel','material')+cartelStash(p)},
+  tycoon: {name:'大亨', en:'Tycoon', icon:'💰', desc:'燃料+物资 图标，含公会卡', count:p=>p.res.fuel+p.res.material+guildIcons(p,'fuel','material')+cartelStash(p)+(['fuel','material'].includes(p._ahRes)?1:0)},
   tyrant: {name:'暴君', en:'Tyrant', icon:'⛓', desc:'俘虏 数量',            count:p=>p.captives},
   warlord:{name:'军阀', en:'Warlord',icon:'⚔', desc:'战利品 数量',          count:p=>p.trophies},
-  keeper: {name:'守护', en:'Keeper', icon:'❖', desc:'遗物 图标，含公会卡',    count:p=>p.res.relic+guildIcons(p,'relic')},
-  empath: {name:'共情', en:'Empath', icon:'☯', desc:'通灵 图标，含公会卡',    count:p=>p.res.psionic+guildIcons(p,'psionic')},
+  keeper: {name:'守护', en:'Keeper', icon:'❖', desc:'遗物 图标，含公会卡',    count:p=>p.res.relic+guildIcons(p,'relic')+(p._ahRes==='relic'?1:0)},
+  empath: {name:'共情', en:'Empath', icon:'☯', desc:'通灵 图标，含公会卡',    count:p=>p.res.psionic+guildIcons(p,'psionic')+(p._ahRes==='psionic'?1:0)},
 };
 const AMB_ORDER = ['tycoon','tyrant','warlord','keeper','empath'];
 
@@ -568,26 +568,26 @@ const LEADERS=[
    abilities:[{n:'Insatiable 贪得无厌',t:'触发',d:'Copy/Pivot 课税时额外 +1 燃料。'},
               {n:'Lavish 挥霍',t:'触发',d:'结算后若本章结算了大亨，弃光所有燃料（归还供应，已实装）。'}]},
   {id:'upstart', name:'Upstart', cn:'新贵', kind:'base', eff:['ambitious','callow'],
-   abilities:[{n:'Ambitious 野心',t:'触发(TODO)',d:'宣告雄心时可获得任意 1 资源（须在任何行动前宣告）。'},
+   abilities:[{n:'Ambitious 野心',t:'触发',d:'宣告雄心时可获得任意 1 资源（须在任何行动前宣告）。'},
               {n:'Callow 稚嫩',t:'被动',d:'只能课税你控制的忠诚城市。'}]},
   {id:'rebel', name:'Rebel', cn:'叛军', kind:'base', eff:['committed','disorganized'],
    abilities:[{n:'Committed 坚定',t:'被动',d:'战斗额外 +2 骰。'},
               {n:'Disorganized 散漫',t:'被动',d:'一次移动不超过 2 艘舰船。'}]},
   {id:'warrior', name:'Warrior', cn:'战士', kind:'base', eff:['violent','tactical'],
-   abilities:[{n:'Tactical 战术',t:'触发(TODO)',d:'Copy/Pivot 战斗时可在战斗前/后移动。'},
+   abilities:[{n:'Tactical 战术',t:'触发',d:'Copy/Pivot 战斗时可在战斗前/后额外移动一次（不消耗行动点）。'},
               {n:'Violent 暴烈',t:'计分修正',d:'结算「共情」时第二名不得分；若你为第一名则按次位分得分。'}]},
   {id:'feastbringer', name:'Feastbringer', cn:'飨宴使', kind:'base', eff:['charismatic','generous'],
-   abilities:[{n:'Charismatic 魅力',t:'触发(TODO)',d:'Copy/Pivot 攫取时可在攫取前/后施加影响。'},
+   abilities:[{n:'Charismatic 魅力',t:'触发',d:'Copy/Pivot 攫取时可在攫取前/后额外施加一次影响（不消耗行动点）。'},
               {n:'Generous 慷慨',t:'成本',d:'宣告雄心须给权力最少的对手 1 张公会卡（已实装）。'}]},
   {id:'demagogue', name:'Demagogue', cn:'煽动者', kind:'base', eff:['bold','paranoid'],
    abilities:[{n:'Bold 大胆',t:'触发',d:'宣告雄心时可对议会任意数量卡施加一次影响（已实装）。'},
               {n:'Paranoid 偏执',t:'被动',d:'不能攫取只有 1 个忠诚密探的公会卡（Vox 照常；Ransack 时忽略，已实装）。'}]},
   // —— 扩展 8 ——
   {id:'archivist', name:'Archivist', cn:'档案官', kind:'ext', eff:['academic','learned'],
-   abilities:[{n:'Learned 博学',t:'Setup(TODO)',d:'开局抽 5 传说留 2 弃 3。'},
+   abilities:[{n:'Learned 博学',t:'Setup',d:'开局抽 5 传说留 2 弃 3。'},
               {n:'Academic 学者',t:'计分修正',d:'结算「大亨」时第二名不得分；若你为第一名则按次位分得分。'}]},
   {id:'overseer', name:'Overseer', cn:'监工', kind:'ext', eff:['ruthless','hated'],
-   abilities:[{n:'Ruthless 无情',t:'触发(TODO)',d:'每回合一次，课税任意城市/星港造舰时可击毁该建筑以再次执行该行动。'},
+   abilities:[{n:'Ruthless 无情',t:'触发',d:'每回合一次，课税任意城市/星港造舰时可击毁该建筑以再次执行该行动（摧毁忠诚城市→民愤；摧毁对手城市→民愤+洗劫）。'},
               {n:'Hated 受憎恨',t:'Setup',d:'开局废弃 2 忠诚舰 + 3 忠诚密探。'}]},
   {id:'corsair', name:'Corsair', cn:'私掠者', kind:'ext', eff:['tricky','wary'],
    abilities:[{n:'Tricky 狡诈',t:'触发',d:'进攻战斗时可重掷劫掠骰，数量≤你拥有的不同资源种类数。'},
@@ -601,7 +601,7 @@ const LEADERS=[
               {n:'Inspiring 鼓舞',t:'被动',d:'在有忠诚舰船的星系可无视控制权课税对手城市，并可像忠诚城市那样课税空建筑槽。'},
               {n:'Principled 有原则',t:'被动',d:'不能课税忠诚城市（你自己的城市）。'}]},
   {id:'shaper', name:'Shaper', cn:'塑造者', kind:'ext', eff:['mythic','ancient'],
-   abilities:[{n:'Mythic 神话',t:'触发(TODO)',d:'课税城市后可放 1 个资源到行星资源图标上，从此该行星类型变为该资源。'},
+   abilities:[{n:'Mythic 神话',t:'触发',d:'课税城市后可放 1 个资源到行星资源图标上，从此该行星类型变为该资源（每行星仅一次）。'},
               {n:'Ancient 远古',t:'被动',d:'不能从星港弹射移动，但可从星门弹射。'}]},
   {id:'agitator', name:'Agitator', cn:'鼓动者', kind:'ext', eff:['taxbonus:weapon','irregular'],
    abilities:[{n:'Firebrand 煽风者',t:'触发',d:'Copy/Pivot 课税时额外 +1 武器。'},
@@ -634,43 +634,43 @@ function applyLeaderSetup(p){
 // 已实装机制键：buildfresh(隐匿港湾) / repairdrones(维修无人机) / seekertorp(寻的鱼雷) /
 //   mirror(镜面装甲) / signalbreaker(信号破坏者) / railgun(轨道炮阵列) /
 //   keepertrust(守护者信任·防偷同类资源) / keepersolidarity(守护者团结·防偷公会卡)。
-// 其余卡为新行动/特殊建造/复杂条件，本轮仅展示卡面文本，标 TODO(lore)。
+// 所有传说卡效果已实装（基础 14 + 扩展 14），无剩余 TODO。
 const LORE=[
   // —— 基础 14 ——
   {id:'toolpriests', name:'Tool-Priests', cn:'工具祭司', kind:'base', eff:['summon'],
    abilities:[{n:'Summon 召唤',t:'新行动·建造',d:'每回合一次，在你控制且有你城市的系统建造 1 艘舰船（已实装）。'}]},
-  {id:'galacticrifles', name:'Galactic Rifles', cn:'银河步枪', kind:'base', eff:[],
-   abilities:[{n:'Fire Rifles 步枪齐射',t:'新行动·战斗(TODO)',d:'如战斗般，选系统为该处新鲜忠诚舰收突袭骰，选相邻系统防御者，掷骰，每 ✷ 造 1 击（先舰后建筑）。'}]},
-  {id:'sprinterdrives', name:'Sprinter Drives', cn:'疾驰引擎', kind:'base', eff:[],
-   abilities:[{n:'疾驰',t:'触发·移动(TODO)',d:'移动新鲜忠诚舰时，可让其中任意几艘再移动一次（受损舰随移一次但不再多移；在所有 Catapult 后结算）。'}]},
+  {id:'galacticrifles', name:'Galactic Rifles', cn:'银河步枪', kind:'base', eff:['firerifles'],
+   abilities:[{n:'Fire Rifles 步枪齐射',t:'新行动·战斗',d:'如战斗般，选系统为该处新鲜忠诚舰收突袭骰，选相邻系统防御者，掷骰，每 ✷ 造 1 击（先舰后建筑）。'}]},
+  {id:'sprinterdrives', name:'Sprinter Drives', cn:'疾驰引擎', kind:'base', eff:['sprinterdrives'],
+   abilities:[{n:'疾驰',t:'触发·移动',d:'移动新鲜忠诚舰时，可让其中任意几艘再移动一次（受损舰随移一次但不再多移；在所有 Catapult 后结算；本效果移动的舰不再触发本效果）。'}]},
   {id:'mirrorplating', name:'Mirror Plating', cn:'镜面装甲', kind:'base', eff:['mirror'],
    abilities:[{n:'镜面装甲',t:'触发·防御',d:'防御战斗时若攻击者掷了任意强攻骰，向其掷骰加 1 个自损面 ◯。'}]},
   {id:'hiddenharbors', name:'Hidden Harbors', cn:'隐匿港湾', kind:'base', eff:['buildfresh'],
-   abilities:[{n:'隐匿港湾',t:'被动+触发',d:'你建造的舰始终新鲜（即使在敌方控制的系统）；防御时若有新鲜防御星港，攻击者不能收劫掠骰（后半 TODO）。'}]},
+   abilities:[{n:'隐匿港湾',t:'被动+触发',d:'你建造的舰始终新鲜（即使在敌方控制的系统）；防御时若有新鲜防御星港，攻击者不能收劫掠骰。'}]},
   {id:'signalbreaker', name:'Signal Breaker', cn:'信号破坏者', kind:'base', eff:['signalbreaker'],
    abilities:[{n:'信号破坏者',t:'触发·进攻',d:'进攻时若战斗开始所有进攻舰新鲜，忽略掷出的 1 个自损面 ◯。'}]},
   {id:'repairdrones', name:'Repair Drones', cn:'维修无人机', kind:'base', eff:['repairdrones'],
    abilities:[{n:'维修无人机',t:'触发',d:'你作为攻击方战斗后，修复 1 艘忠诚进攻舰。'}]},
-  {id:'gateports', name:'Gate Ports', cn:'星门港', kind:'base', eff:[],
-   abilities:[{n:'星门港',t:'被动+触发(TODO)',d:'可在星门造星港（每门最多 1）；对手舰移入你控制且有新鲜忠诚星港的星门时，俘获其 1 密探。'}]},
-  {id:'cloudcities', name:'Cloud Cities', cn:'云端城市', kind:'base', eff:[],
-   abilities:[{n:'云端城市',t:'被动(TODO)',d:'可在行星建造槽外建城市（每行星最多 1），花费 1 个该行星类型资源。'}]},
+  {id:'gateports', name:'Gate Ports', cn:'星门港', kind:'base', eff:['gateports'],
+   abilities:[{n:'星门港',t:'被动+触发',d:'可在你控制的星门建造星港（每门最多 1 座，需忠诚棋子）；对手舰移入你控制且有新鲜忠诚星港的星门时，俘获其 1 密探。'}]},
+  {id:'cloudcities', name:'Cloud Cities', cn:'云端城市', kind:'base', eff:['cloudcities'],
+   abilities:[{n:'云端城市',t:'被动',d:'可在行星建造槽外建城市（每行星最多 1 座云端城市），花费 1 个该行星类型资源；需有忠诚棋子。'}]},
   {id:'livingstructures', name:'Living Structures', cn:'活体建筑', kind:'base', eff:['nurture','prune'],
    abilities:[{n:'Nurture 培育',t:'新行动·建造',d:'课税 1 忠诚城市（已实装）。'},
-              {n:'Prune 修剪',t:'新行动·修复(TODO)',d:'忠诚星港↔忠诚城市互换。'}]},
-  {id:'gatestations', name:'Gate Stations', cn:'星门站', kind:'base', eff:[],
-   abilities:[{n:'星门站',t:'被动(TODO)',d:'可在星门造城市（每门最多 1）；星门城市类型匹配其星簇所有城市。'}]},
+              {n:'Prune 修剪',t:'新行动·修复',d:'忠诚星港↔忠诚城市互换。'}]},
+  {id:'gatestations', name:'Gate Stations', cn:'星门站', kind:'base', eff:['gatestations'],
+   abilities:[{n:'星门站',t:'被动',d:'可在星门造城市（每门最多 1）；星门城市类型匹配其星簇所有城市（课税时选资源类型；被毁触发所有匹配类型民愤）。'}]},
   {id:'railgunarrays', name:'Railgun Arrays', cn:'轨道炮阵列', kind:'base', eff:['railgun'],
    abilities:[{n:'轨道炮阵列',t:'触发·防御',d:'防御时，攻击者收骰前，若有任何新鲜忠诚防御舰，攻击者必须受 1 击。'}]},
-  {id:'ancientholdings', name:'Ancient Holdings', cn:'远古领地', kind:'base', eff:[],
-   abilities:[{n:'远古领地',t:'被动(TODO)',d:'此卡有 1 个资源槽，劫掠成本 4 钥匙（可存 1 资源，计入雄心，可花费）。'}]},
+  {id:'ancientholdings', name:'Ancient Holdings', cn:'远古领地', kind:'base', eff:['ancientholdings'],
+   abilities:[{n:'远古领地',t:'被动',d:'此卡有 1 个资源槽（可存 1 资源，计入雄心，可取出花费）；劫掠成本 4 钥匙。点击玩家面板 🏛 管理。'}]},
   {id:'seekertorpedoes', name:'Seeker Torpedoes', cn:'寻的鱼雷', kind:'base', eff:['seekertorp'],
    abilities:[{n:'寻的鱼雷',t:'触发·进攻',d:'进攻掷骰后，每艘新鲜忠诚进攻舰可重掷至多 1 颗强攻骰。'}]},
   // —— 扩展 14 ——
-  {id:'predictivesensors', name:'Predictive Sensors', cn:'预测传感器', kind:'ext', eff:[],
-   abilities:[{n:'预测传感器',t:'触发·防御(TODO)',d:'防御时攻击者收骰前，可将任意数量相邻系统的新鲜忠诚舰移入战斗系统。'}]},
-  {id:'forcebeams', name:'Force Beams', cn:'力场光束', kind:'ext', eff:[],
-   abilities:[{n:'Guide 引导',t:'新行动·移动(TODO)',d:'将任意数量任意舰（即使非忠诚）从有新鲜忠诚星港的系统移到相邻或反向，忽略移动修正。'}]},
+  {id:'predictivesensors', name:'Predictive Sensors', cn:'预测传感器', kind:'ext', eff:['predictivesensors'],
+   abilities:[{n:'预测传感器',t:'触发·防御',d:'防御时攻击者收骰前，可将任意数量相邻系统的新鲜忠诚舰移入战斗系统（可分批选取多个相邻系统）。'}]},
+  {id:'forcebeams', name:'Force Beams', cn:'力场光束', kind:'ext', eff:['guide'],
+   abilities:[{n:'Guide 引导',t:'新行动·移动',d:'将任意数量任意舰（即使非忠诚）从有新鲜忠诚星港的系统移到相邻或反向，忽略移动修正。'}]},
   {id:'raiderexosuits', name:'Raider Exosuits', cn:'劫掠者外骨骼', kind:'ext', eff:['exosuit'],
    abilities:[{n:'劫掠者外骨骼',t:'触发·进攻',d:'进攻时若本系统无守方建筑，可收至多 1 颗劫掠骰（仍遵守每舰 1 骰上限）。'}]},
   {id:'survivaloverrides', name:'Survival Overrides', cn:'生存覆写', kind:'ext', eff:['martyr'],
@@ -678,7 +678,7 @@ const LORE=[
   {id:'empathsvision', name:"Empath's Vision", cn:'共情者之眼', kind:'ext', eff:['empathvision','clearoutrage:psionic'],
    abilities:[{n:'共情者之眼',t:'条件触发+序幕',d:'共情被宣告期间，掷任何骰可重掷任意数量一次（本版自动重掷所有空白/无收益骰）。序幕：可弃此卡清除通灵民愤（已实装）。'}]},
   {id:'empathsbond', name:"Empath's Bond", cn:'共情者羁绊', kind:'ext', eff:['empathbond'],
-   abilities:[{n:'共情者羁绊',t:'条件被动',d:'共情被宣告期间，可像忠诚一样课税任意城市（已实装）；用任意星港造舰/弹射（TODO）。'}]},
+   abilities:[{n:'共情者羁绊',t:'条件被动',d:'共情被宣告期间，可像忠诚一样课税任意城市；用任意星港造舰/弹射（不抓俘虏；敌方控制系统造的舰受损）。'}]},
   {id:'keeperstrust', name:"Keeper's Trust", cn:'守护者信任', kind:'ext', eff:['keepertrust','clearoutrage:relic'],
    abilities:[{n:'守护者信任',t:'条件被动+序幕',d:'守护被宣告期间，对手不能偷你与他们已有相同类型的资源。序幕：可弃此卡清除遗物民愤（已实装）。'}]},
   {id:'keeperssolidarity', name:"Keeper's Solidarity", cn:'守护者团结', kind:'ext', eff:['keepersolidarity'],
@@ -1327,6 +1327,13 @@ function renderPlayers(){
       lc.title='点击查看传说卡能力'; lc.innerHTML=`📜传说×${p.loreCards.length}`;
       lc.onclick=()=>showLoreCards(p); d.appendChild(lc);
     }
+    // 远古领地资源槽显示（持有 ancientholdings 传说卡时显示）
+    if(G.useExpansion && loreHas(p,'ancientholdings')){
+      const ah=el('span','res'); ah.style.cssText='cursor:pointer;font-size:11px;margin-left:4px';
+      const ahR=p._ahRes; ah.innerHTML=`🏛${ahR?(RESOURCES[ahR]?.icon||'?'):'∅'}`;
+      ah.title=`远古领地资源槽${ahR?('：'+RESOURCES[ahR]?.name):'（空）'}　点击管理`;
+      ah.onclick=()=>openAncientHoldingsModal(p,i); d.appendChild(ah);
+    }
     const st=el('div','stats');
     st.innerHTML = RES_ORDER.map(r=>{ const o=p.outraged&&p.outraged[r];
         return `<span class="res${o?' outraged':''}" title="${RESOURCES[r].name}${o?'（民愤：不可用于序幕行动，仍可课税/计雄心）':''}" style="color:${RESOURCES[r].color}${o?';opacity:.45':''}">${resGlyph(r)}<b>${p.res[r]}</b>${o?'⚑':''}</span>`; }).join('')
@@ -1896,7 +1903,9 @@ function onSystemClick(id){
 }
 function actorColorKey(){ return G.players[G.actor].color.key; }
 function countShips(sys,col){ return G.map[sys].pieces.ships[col]||0; }
-function emptySlots(sys){ const s=G.map[sys]; return s.kind==='planet'?(s.slots-s.pieces.buildings.length):0; }
+function emptySlots(sys){ const s=G.map[sys]; return s.kind==='planet'?(s.slots-s.pieces.buildings.filter(b=>!b._cloudCity).length):0; }
+// 星门站：返回该星门所在星簇的所有资源类型（去重）
+function gateClusterResources(gateId){ const c=parseInt(gateId),l=PLANET_LAYOUT[c]||{}; return [...new Set(Object.values(l))]; }
 function hasRival(s,col){ for(const c in s.pieces.ships){ if(c!==col&&s.pieces.ships[c]>0) return true; } return s.pieces.buildings.some(b=>b.owner!==col); }
 function beginAction(type){
   if(G.actionsLeft<=0||G.pending) return;
@@ -1927,6 +1936,15 @@ function legalTargets(type){
       // 传说 Empath's Bond（扩展）：共情已宣告时，可课任意系统的任意城市（资源供给非空、未课税即可）
       let bondOK=false;
       if(empathBondActive(me) && s.resource && G.resSupply[s.resource]>0) bondOK=cities.some(b=>notTaxed(b.owner));
+      // 传说 Gate Stations（扩展）：在忠诚星门的星门站城市可课税（选星簇任意类型资源）
+      if(G.useExpansion && s.kind==='gate'){
+        const gsCity=s.pieces.buildings.find(b=>b.owner===col&&b._gateStation);
+        const notTaxedGs=!taxed||!taxed.has(id+':_gs');
+        if(gsCity && isLoyalSystem(id,me) && (retax||notTaxedGs)){
+          const avail=gateClusterResources(id).filter(r=>G.resSupply[r]>0);
+          if(avail.length) set.add(id);
+        }
+      }
       // 领袖 Anarchist/Inspiring（扩展）：在有忠诚舰船的系统，无视控制权课税对手城市，或课税空建筑槽
       let inspiringOK=false;
       if(G.useExpansion && leaderHas(me,'inspiring') && (s.pieces.ships[col]>0)){
@@ -1936,7 +1954,17 @@ function legalTargets(type){
       }
       if(ownLoyal||rivalOK||bondOK||inspiringOK) set.add(id);
     } else if(type==='build'){
-      const ship = canBuildShipAt(me,s,id,col); // 忠诚太空港可造船（受每港每回合 1 艘上限）；系统被敌方控制则造为「受损」（规则书 p.6）
+      // 传说 Gate Ports（扩展）：持有此卡时，忠诚星门可建造星港（每门最多 1 座，需有忠诚棋子）
+      if(G.useExpansion&&loreHas(me,'gateports')&&s.kind==='gate'&&hasLoyalPiece(s,col)
+         &&me.supply.starports>0&&!s.pieces.buildings.some(b=>b.type==='starport')) set.add(id);
+      // 传说 Cloud Cities（扩展）：持有此卡时，可在行星槽外建城市（每行星最多1，需1个该行星类型资源）
+      if(G.useExpansion&&loreHas(me,'cloudcities')&&s.kind==='planet'&&hasLoyalPiece(s,col)
+         &&me.supply.cities>0&&s.resource&&(me.res[s.resource]||0)>0
+         &&!s.pieces.buildings.some(b=>b._cloudCity)) set.add(id);
+      // 传说 Gate Stations（扩展）：持有此卡时，可在星门建城市（每门最多1，类型=星簇资源）
+      if(G.useExpansion&&loreHas(me,'gatestations')&&s.kind==='gate'&&hasLoyalPiece(s,col)
+         &&me.supply.cities>0&&!s.pieces.buildings.some(b=>b._gateStation)) set.add(id);
+      const ship = canBuildShipAt(me,s,id,col) || canBondBuildShipAt(me,s,id); // 忠诚太空港可造船；Empath's Bond 激活时任意星港亦可
       const bld = s.kind==='planet' && hasLoyalPiece(s,col) && emptySlots(id)>0 && (me.supply.cities>0||me.supply.starports>0); // 有忠诚棋子(舰船或建筑)的行星空槽可建城/港（规则书 p.12）
       if(ship||bld) set.add(id);
     } else if(type==='move'){
@@ -1960,6 +1988,8 @@ function actionHint(type){ return ({
 function consumeAction(desc){
   if(desc) logMsg(desc,'act');
   if(G._freePrelude){ G._freePrelude=false; G._preludePaid=null; G.pending=null; G.highlight=null; promptActions(); render(); return; } // 序幕资源行动：不消耗行动点、不结束序幕
+  // 领袖 Overseer/Ruthless：重复行动钩子——此次 consume 为免费重复，完成后调用真正的 consume 回调
+  if(G._ruthlessRepeat){ const fn=G._ruthlessRepeat; G._ruthlessRepeat=null; G.pending=null; G.highlight=null; render(); fn(); return; }
   G.preludeOpen=false; // 花费首个行动点 → 序幕结束（规则书 p.17）
   G.actionsLeft--; G.pending=null; G.highlight=null;
   if(G.actionsLeft<=0) endActorTurn(); else { promptActions(); render(); }
@@ -2194,6 +2224,29 @@ function doTax(id){
   const me=G.players[G.actor]; const s=G.map[id]; const col=me.color.key;
   if(!G.pending.legal.has(id)){ toast('请选择你控制的城市'); return; }
   const ab=(me._abil=me._abil||{}); const taxed=ab._taxed||(ab._taxed=new Set());
+  // 传说 Gate Stations（扩展）：星门站城市课税 → 选择星簇资源类型
+  if(G.useExpansion && s.kind==='gate'){
+    const gsCity=s.pieces.buildings.find(b=>b.owner===col&&b._gateStation);
+    if(gsCity && isLoyalSystem(id,me)){
+      const retax=canRetax(me);
+      if(!retax && taxed.has(id+':_gs')){ toast('该星门站本回合已课税'); return; }
+      const avail=gateClusterResources(id).filter(r=>G.resSupply[r]>0);
+      if(!avail.length){ toast('星簇资源供给已空'); return; }
+      const doGsTax=r=>{
+        if(!retax) taxed.add(id+':_gs');
+        let msg=`${pname(G.actor)} 课税星门站 ${id}`;
+        if(gainResource(me,r)) msg+=`，获得 ${RESOURCES[r].name}`; else msg+='（资源供给已空）';
+        SFX.tax(); maybeRuthless(me,id,gsCity,'tax',msg);
+      };
+      if(avail.length===1){ doGsTax(avail[0]); return; }
+      openModal(m=>{ m.appendChild(el('h2',null,`星门站 ${id} · 选择资源`));
+        m.appendChild(el('div','hintbox','星门站城市类型匹配星簇所有行星资源，选择本次课税获得的类型。'));
+        avail.forEach(r=>{ const btn=el('button','btn',`${RESOURCES[r].icon} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
+          btn.onclick=()=>{ closeModal(); doGsTax(r); }; m.appendChild(btn); });
+        const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc); });
+      return;
+    }
+  }
   const retax=canRetax(me); const notTaxed=(owner)=>retax||!taxed.has(id+':'+owner);
   const cities=s.pieces.buildings.filter(b=>b.type==='city');
   // 敌方城市优先（可额外俘虏）：仅当你控制该系统时其敌方城市才可课税
@@ -2238,13 +2291,34 @@ function doTax(id){
     if(bonus && gainResource(me,bonus)) msg+=`；领袖加成额外获得 ${RESOURCES[bonus].name}`;
   }
   SFX.tax();
-  consumeAction(msg);
+  maybeRuthless(me, id, target, 'tax', msg);
+  // 领袖 Shaper/Mythic（扩展）：课税忠诚城市后可放 1 个资源改变行星类型（每行星仅一次，不可逆）
+  if(G.useExpansion && leaderHas(me,'mythic') && s.kind==='planet' && !s._mythicLocked){
+    const avail=RES_ORDER.filter(r=>(me.res[r]||0)>0 && r!==s.resource);
+    if(avail.length){
+      openModal(m=>{
+        m.appendChild(el('h2',null,'领袖·神话'));
+        m.appendChild(el('div','hintbox',`课税城市后可放 1 个资源到 ${id} 的资源图标上，行星类型永久变为该资源（不可逆）。当前：${RESOURCES[s.resource]?.name||'—'}`));
+        avail.forEach(r=>{ const b=el('button','btn',`${RESOURCES[r].icon} 放置 ${RESOURCES[r].name}，${id} 类型变为 ${RESOURCES[r].name}`);
+          b.style.cssText='display:block;width:100%;margin:5px 0';
+          b.onclick=()=>{ closeModal(); const old=s.resource; me.res[r]--; G.resSupply[r]++;
+            s.resource=r; s._mythicLocked=true;
+            logMsg(`${pname(G.actor)} 领袖·神话：${id} 行星 ${RESOURCES[old]?.name||'?'}→${RESOURCES[r].name}（永久锁定）`,'act');
+            render(); };
+          m.appendChild(b); });
+        const skip=el('button','btn ghost','跳过'); skip.onclick=()=>closeModal(); m.appendChild(skip);
+      });
+    }
+  }
 }
 // 每个太空港每回合只能造 1 艘舰船（官方《Action Summaries》：A starport can only build one ship per turn）。
 // 以「本行动回合内该系统已造舰数 < 该系统忠诚太空港数」判定是否仍可造；_abil 在每个行动回合开始时重置。
 function loyalStarportsAt(s,col){ return s.pieces.buildings.filter(b=>b.owner===col&&b.type==='starport').length; }
 function shipBuildsThisTurn(me,id){ return (me._abil&&me._abil._shipBuilds&&me._abil._shipBuilds[id])||0; }
 function canBuildShipAt(me,s,id,col){ const n=loyalStarportsAt(s,col); return n>0 && me.supply.ships>0 && shipBuildsThisTurn(me,id)<n; }
+function allStarportsAt(s){ return s.pieces.buildings.filter(b=>b.type==='starport').length; }
+// Empath's Bond：共情已宣告时，任意星港均可造舰（每港每回合限 1 艘，敌方控制→受损，不抓俘虏）
+function canBondBuildShipAt(me,s,id){ return empathBondActive(me) && allStarportsAt(s)>0 && me.supply.ships>0 && shipBuildsThisTurn(me,id)<allStarportsAt(s); }
 // 「忠诚棋子」= 该系统内你颜色的任意棋子（舰船或建筑）。建造城/港只需系统内有 1 个忠诚棋子 + 空槽
 // （规则书 p.12：Place 1 starport or city in an empty building slot in a system with a Loyal piece）。
 function hasLoyalPiece(s,col){ return (s.pieces.ships[col]>0) || s.pieces.buildings.some(b=>b.owner===col); }
@@ -2252,7 +2326,19 @@ function doBuild(id){
   const s=G.map[id]; const me=G.players[G.actor]; const col=me.color.key;
   if(!G.pending.legal.has(id)){ toast('此处不能建造'); return; }
   const opts=[];
-  if(canBuildShipAt(me,s,id,col)) opts.push({k:'ship',label:'建造 1 艘舰船（太空港）'+(systemHasRivalControl(id,me)?'：敌方控制→受损':'')});
+  const bondShip=canBondBuildShipAt(me,s,id); const loyalShip=canBuildShipAt(me,s,id,col);
+  if(loyalShip||bondShip) opts.push({k:'ship',label:'建造 1 艘舰船（太空港'+(bondShip&&!loyalShip?'·共情羁绊':'')+'）'+(systemHasRivalControl(id,me)?'：敌方控制→受损':'')});
+  // 传说 Gate Ports（扩展）：在星门建造星港
+  if(G.useExpansion&&loreHas(me,'gateports')&&s.kind==='gate'&&hasLoyalPiece(s,col)
+     &&me.supply.starports>0&&!s.pieces.buildings.some(b=>b.type==='starport'))
+    opts.push({k:'gatestarport',label:'建造 太空港（星门港·每门最多1）'});
+  // 传说 Cloud Cities（扩展）：在行星槽外建城市，花费 1 个该行星类型资源
+  if(G.useExpansion&&loreHas(me,'cloudcities')&&s.kind==='planet'&&hasLoyalPiece(s,col)
+     &&me.supply.cities>0&&s.resource&&(me.res[s.resource]||0)>0&&!s.pieces.buildings.some(b=>b._cloudCity))
+    opts.push({k:'cloudcity',label:`建造 云端城市（槽外，花费 1 ${RESOURCES[s.resource]?.name||'?'}）`});
+  if(G.useExpansion&&loreHas(me,'gatestations')&&s.kind==='gate'&&hasLoyalPiece(s,col)
+     &&me.supply.cities>0&&!s.pieces.buildings.some(b=>b._gateStation))
+    opts.push({k:'gatestation',label:`建造 城市（星门站·类型=星簇 ${gateClusterResources(id).map(r=>RESOURCES[r]?.name||r).join('/')}）`});
   if(s.kind==='planet'&&hasLoyalPiece(s,col)&&emptySlots(id)>0){ // 有忠诚棋子(舰船或建筑)即可在空槽建城/港（规则书 p.12）
     if(me.supply.cities>0) opts.push({k:'city',label:'建造 城市（可课税）'});
     if(me.supply.starports>0) opts.push({k:'starport',label:'建造 太空港（可造船）'});
@@ -2273,7 +2359,21 @@ function doBuildExec(id,kind){
     const fresh=(G.useExpansion && loreHas(me,'buildfresh') && dmg); if(fresh) dmg=false;
     addShips(id,me,1,dmg);
     if(!me._abil) me._abil={}; if(!me._abil._shipBuilds) me._abil._shipBuilds={}; me._abil._shipBuilds[id]=(me._abil._shipBuilds[id]||0)+1; // 记录本回合该太空港已造舰
-    consumeAction(`${pname(G.actor)} 在 ${id} 建造 1 艘舰船${dmg?'（敌方控制→受损）':fresh?'（隐匿港湾→新鲜）':''}`+buildGainSuffix(me)); }
+    const shipMsg=`${pname(G.actor)} 在 ${id} 建造 1 艘舰船${dmg?'（敌方控制→受损）':fresh?'（隐匿港湾→新鲜）':''}`+buildGainSuffix(me);
+    const spUsed=s.pieces.buildings.find(b=>b.owner===me.color.key&&b.type==='starport');
+    maybeRuthless(me, id, spUsed, 'ship', shipMsg); }
+  else if(kind==='gatestarport'){ // 传说 Gate Ports：在星门建造星港（不占建造槽）
+    placeBuilding(id,'starport',me);
+    consumeAction(`${pname(G.actor)} 在星门 ${id} 建造太空港（星门港）`+buildGainSuffix(me)); }
+  else if(kind==='cloudcity'){ // 传说 Cloud Cities：在行星槽外建城市，花费 1 个该行星类型资源
+    const r=s.resource; me.res[r]--; G.resSupply[r]++;
+    placeBuilding(id,'city',me); s.pieces.buildings[s.pieces.buildings.length-1]._cloudCity=true;
+    consumeAction(`${pname(G.actor)} 在 ${id} 建造云端城市（槽外，花费 1 ${RESOURCES[r]?.name||'?'}）`+buildGainSuffix(me)); }
+  else if(kind==='gatestation'){ // 传说 Gate Stations：在星门建城市（类型=星簇所有资源）
+    placeBuilding(id,'city',me);
+    const b=s.pieces.buildings[s.pieces.buildings.length-1];
+    b._gateStation=true; b._gsTypes=gateClusterResources(id);
+    consumeAction(`${pname(G.actor)} 在星门 ${id} 建造星门站城市（类型：${b._gsTypes.map(r=>RESOURCES[r]?.name||r).join('/')}）`+buildGainSuffix(me)); }
   else { const dmg=systemHasRivalControl(id,me); placeBuilding(id,kind,me);
     if(dmg) s.pieces.buildings[s.pieces.buildings.length-1].damaged=true;
     consumeAction(`${pname(G.actor)} 在 ${id} 建造 ${kind==='city'?'城市':'太空港'}${dmg?'（敌方控制→受损）':''}`+buildGainSuffix(me)); }
@@ -2287,6 +2387,37 @@ function buildGainSuffix(me){
   }
   return suf;
 }
+// 领袖 Overseer/Ruthless（扩展）：课税城市或星港造舰后，可击毁该建筑以重复本次行动（每回合一次）。
+// actionType='tax'|'ship'；bldg 为刚使用的建筑（city或starport）；msg 为原行动日志文本。
+function maybeRuthless(me, id, bldg, actionType, msg){
+  const col=me.color.key; const s=G.map[id];
+  const canFire=G.useExpansion && leaderHas(me,'ruthless')
+    && bldg && s.pieces.buildings.includes(bldg) && !(me._abil&&me._abil._ruthlessUsed);
+  if(!canFire){ consumeAction(msg); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'领袖·无情'));
+    const bType=bldg.type==='city'?'城市':'太空港'; const isRival=bldg.owner!==col;
+    m.appendChild(el('div','hintbox',`可击毁 ${id} 的${bType}以再次执行本行动（每回合一次）${isRival?'；击毁对手城市 → 民愤+洗劫机会':'；击毁忠诚建筑 → 民愤（如为城市）'}。`));
+    const yes=el('button','btn',`击毁此${bType}，重复行动`); yes.style.cssText='display:block;width:100%;margin:5px 0';
+    yes.onclick=()=>{ closeModal();
+      if(!me._abil) me._abil={}; me._abil._ruthlessUsed=true;
+      const bi=s.pieces.buildings.indexOf(bldg); if(bi>=0) s.pieces.buildings.splice(bi,1);
+      const owner=G.players.find(p=>p.color.key===bldg.owner);
+      if(bldg.type==='city') owner.supply.cities++; else owner.supply.starports++;
+      me.trophies++; SFX.destroy();
+      let destMsg=`${pname(G.actor)} 无情：击毁 ${id} 的${bType}`;
+      const doRepeat=()=>{ G._ruthlessRepeat=()=>consumeAction(msg); G.pending=null; G.highlight=null;
+        if(actionType==='tax') beginAction('tax'); else beginAction('build'); };
+      if(bldg.type==='city' && s.resource){
+        const oMsg=provokeOutrage(me, s.resource); destMsg+=`；引发民愤（${oMsg}）`;
+        logMsg(destMsg,'act');
+        if(isRival) maybeRansack(1, bldg.owner, doRepeat); else doRepeat();
+      } else { logMsg(destMsg,'act'); doRepeat(); }
+    };
+    const no=el('button','btn ghost','跳过，完成行动'); no.onclick=()=>{ closeModal(); consumeAction(msg); };
+    m.appendChild(yes); m.appendChild(no);
+  });
+}
 function doMovePick(id){
   const me=G.players[G.actor]; const col=me.color.key;
   if(G.pending.step==='src'){
@@ -2294,6 +2425,8 @@ function doMovePick(id){
     G.pending.src=id; G.pending.step='dest';
     const s=G.map[id];
     let loyalStarport=s.pieces.buildings.some(b=>b.owner===col&&b.type==='starport'); // 忠诚太空港 → 弹射
+    // Empath's Bond（扩展）：共情已宣告时，任意星港均可弹射（不抓俘虏）
+    if(!loyalStarport && G.useExpansion && empathBondActive(me)) loyalStarport=s.pieces.buildings.some(b=>b.type==='starport');
     // 领袖 Shaper/Ancient（扩展）：不能从星港弹射移动（回退为普通相邻），但可从星门弹射照常。
     if(G.useExpansion && leaderHas(me,'ancient') && loyalStarport && s.kind!=='gate') loyalStarport=false;
     const dst=loyalStarport?catapultReach(id,col):new Set(s.neighbors.filter(nb=>!G.map[nb].outOfPlay));
@@ -2306,10 +2439,106 @@ function doMovePick(id){
     let max=countShips(G.pending.src,col); const src=G.pending.src; const cata=G.pending.catapult;
     // 领袖 Rebel/Disorganized（扩展）：一次移动不超过 2 艘舰船
     if(G.useExpansion && leaderHas(me,'disorganized')) max=Math.min(max,2);
-    openCountModal('移动舰船数',1,max,n=>{ const moved=moveShips(src,id,me,n); // 补给中性搬运，保留受损状态
+    openCountModal('移动舰船数',1,max,n=>{
+      const srcSys=G.map[src];
+      const willMoveFresh=G.useExpansion&&loreHas(me,'sprinterdrives')
+        ?Math.min((srcSys.pieces.ships[col]||0)-dmgShipsN(srcSys,col),n):0;
+      const moved=moveShips(src,id,me,n); // 补给中性搬运，保留受损状态
       SFX.move();
-      consumeAction(`${pname(G.actor)} ${cata?'弹射移动':'移动'} ${moved} 艘舰船 ${src}→${id}`); });
+      consumeAction(`${pname(G.actor)} ${cata?'弹射移动':'移动'} ${moved} 艘舰船 ${src}→${id}`);
+      // 传说 Gate Ports（扩展）：移入对手控制且有新鲜忠诚星港的星门时，被俘获 1 密探
+      if(G.useExpansion && G.map[id].kind==='gate'){
+        G.players.forEach(p=>{ if(p===me||!loreHas(p,'gateports')) return;
+          if(controllerOf(id)!==p.color.key) return;
+          const hasFreshSP=G.map[id].pieces.buildings.some(b=>b.owner===p.color.key&&b.type==='starport'&&!b.damaged);
+          if(!hasFreshSP) return;
+          if(me.supply.agents>0){ me.supply.agents--; p.captives++;
+            logMsg(`${pname(G.players.indexOf(p))} 星门港：${pname(G.actor)} 舰进入 ${id}，俘获 1 密探`,'act'); }
+        });
+      }
+      if(willMoveFresh>0) doSprinterDrives(me,id,willMoveFresh); });
   }
+}
+function doSprinterDrives(me, fromSys, maxLeft){
+  const col=me.color.key; const s=G.map[fromSys];
+  const freshHere=Math.min(maxLeft,(s.pieces.ships[col]||0)-dmgShipsN(s,col));
+  if(freshHere<=0) return;
+  openModal(m=>{
+    m.appendChild(el('h2',null,'传说·疾驰引擎'));
+    m.appendChild(el('div','hintbox',`${freshHere} 艘新鲜忠诚舰可从 ${fromSys} 再移动一次（不触发本效果）。选目标系统，或跳过。`));
+    const adjs=s.neighbors.filter(nb=>!G.map[nb].outOfPlay);
+    adjs.forEach(nb=>{
+      const btn=el('button','btn',`移动到 ${nb}`);
+      btn.style.cssText='display:block;width:100%;margin:5px 0';
+      btn.onclick=()=>{ closeModal();
+        openCountModal('疾驰引擎：移动舰数',1,freshHere,n=>{
+          const mv=moveShips(fromSys,nb,me,n); SFX.move();
+          logMsg(`${pname(G.actor)} 疾驰引擎：${mv} 艘新鲜舰 ${fromSys}→${nb}`,'act');
+          render();
+          if(freshHere-n>0) doSprinterDrives(me,fromSys,freshHere-n);
+        });
+      };
+      m.appendChild(btn);
+    });
+    const skip=el('button','btn ghost','跳过'); skip.onclick=()=>closeModal(); m.appendChild(skip);
+  });
+}
+// 领袖 Warrior/Tactical（扩展）：Copy/Pivot 战斗时额外免费移动一次；分批选择源→目标→数量，不消耗行动点
+function openFreeMoveModal(label, onDone){
+  const me=G.players[G.actor]; const col=me.color.key;
+  const srcs=[...legalTargets('move')];
+  if(!srcs.length){ onDone(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,label));
+    m.appendChild(el('div','hintbox','选择源系统（你有忠诚舰），或跳过。'));
+    srcs.forEach(src=>{
+      const btn=el('button','btn',`从 ${src}（${countShips(src,col)} 艘）`);
+      btn.style.cssText='display:block;width:100%;margin:5px 0';
+      btn.onclick=()=>{ closeModal();
+        const s=G.map[src]; const hasSP=s.pieces.buildings.some(b=>b.owner===col&&b.type==='starport');
+        const loyalSP=hasSP&&!(G.useExpansion&&leaderHas(me,'ancient')&&s.kind!=='gate');
+        const dsts=loyalSP?[...catapultReach(src,col)]:s.neighbors.filter(nb=>!G.map[nb].outOfPlay);
+        if(!dsts.length){ onDone(); return; }
+        openModal(m2=>{
+          m2.appendChild(el('h2',null,'选择目标'));
+          dsts.forEach(dst=>{
+            const b=el('button','btn',`→ ${dst}`); b.style.cssText='display:block;width:100%;margin:5px 0';
+            b.onclick=()=>{ closeModal();
+              let maxN=countShips(src,col);
+              if(G.useExpansion&&leaderHas(me,'disorganized')) maxN=Math.min(maxN,2);
+              openCountModal('移动舰船数',1,maxN,n=>{
+                const mv=moveShips(src,dst,me,n); SFX.move();
+                logMsg(`${pname(G.actor)} 战术额外移动：${mv} 艘 ${src}→${dst}`,'act');
+                render(); onDone();
+              });
+            };
+            m2.appendChild(b);
+          });
+          const sk2=el('button','btn ghost','跳过'); sk2.onclick=()=>{ closeModal(); onDone(); }; m2.appendChild(sk2);
+        });
+      };
+      m.appendChild(btn);
+    });
+    const skip=el('button','btn ghost','跳过移动'); skip.onclick=()=>{ closeModal(); onDone(); }; m.appendChild(skip);
+  });
+}
+// 领袖 Feastbringer/Charismatic（扩展）：Copy/Pivot 攫取时额外免费影响一次；不消耗行动点
+function openFreeInfluenceModal(label, onDone){
+  const me=G.players[G.actor];
+  if(me.supply.agents<=0||!G.court.length){ onDone(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,label));
+    m.appendChild(el('div','hintbox','选择放置密探的议会卡（额外影响，不消耗行动点），或跳过。'));
+    G.court.forEach(c=>{
+      const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:5px 0';
+      b.innerHTML=`在「${c.name}」放置密探`;
+      b.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; SFX.key(); closeModal();
+        logMsg(`${pname(G.actor)} 魅力额外影响：在「${c.name}」放置密探`,'act');
+        render(); onDone(); };
+      m.appendChild(b);
+    });
+    const skip=el('button','btn ghost','跳过影响'); skip.onclick=()=>{ closeModal(); onDone(); }; m.appendChild(skip);
+  });
 }
 function doRepair(id){
   const me=G.players[G.actor]; const col=me.color.key; const s=G.map[id];
@@ -2337,11 +2566,24 @@ function doBattlePick(id){
   const defs=new Set(); for(const c in s.pieces.ships){ if(c!==col&&s.pieces.ships[c]>0) defs.add(c); }
   s.pieces.buildings.forEach(b=>{ if(b.owner!==col) defs.add(b.owner); });
   const list=[...defs];
-  if(list.length===1) openBattleDice(id,list[0]);
+  const goFight=(defC)=>{
+    const me2=G.players[G.actor];
+    if(G.useExpansion&&leaderHas(me2,'tactical')&&(G.actionFollowMode==='copy'||G.actionFollowMode==='pivot')){
+      openModal(m2=>{ m2.appendChild(el('h2',null,'领袖·战术'));
+        m2.appendChild(el('div','hintbox','Copy/Pivot 战斗：可在战斗前或战斗后额外移动一次。'));
+        const b1=el('button','btn','战前移动，再战斗'); b1.style.cssText='display:block;width:100%;margin:5px 0';
+        b1.onclick=()=>{ closeModal(); openFreeMoveModal('领袖·战术（战前移动）',()=>openBattleDice(id,defC)); };
+        const b2=el('button','btn','先战斗，战后移动'); b2.style.cssText='display:block;width:100%;margin:5px 0';
+        b2.onclick=()=>{ closeModal(); G._tacticalAfterMove=true; openBattleDice(id,defC); };
+        const sk=el('button','btn ghost','不移动，直接战斗'); sk.onclick=()=>{ closeModal(); openBattleDice(id,defC); };
+        m2.appendChild(b1); m2.appendChild(b2); m2.appendChild(sk); });
+    } else openBattleDice(id,defC);
+  };
+  if(list.length===1) goFight(list[0]);
   else openModal(m=>{ m.appendChild(el('h2',null,'选择攻击对象'));
     list.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c); const b=el('button','btn',pl.name);
       b.style.background=pl.color.css; b.style.display='block'; b.style.margin='6px 0';
-      b.onclick=()=>{closeModal(); openBattleDice(id,c);}; m.appendChild(b); });
+      b.onclick=()=>{closeModal(); goFight(c);}; m.appendChild(b); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{closeModal(); cancelAction();}; m.appendChild(cc); });
 }
 // 劫掠骰条件（规则书 p.14）：①守方在本系统有建筑，OR ②守方在地图上任意系统都没有建筑
@@ -2441,19 +2683,59 @@ function battleMaxDice(me,s){
   const rebelBonus=(G.useExpansion&&leaderHas(me,'committed'))?2:0;
   return {max:(s.pieces.ships[col]||0)+gateBonus+rebelBonus, gateBonus, rebelBonus};
 }
-function openBattleDice(id,defC){
+// 传说 Predictive Sensors（扩展）：防御时攻击者收骰前，守方可从相邻系统移入新鲜忠诚舰（可分批）
+function doPredictiveSensors(sysId, defC, onDone){
+  const defP=G.players.find(p=>p.color.key===defC);
+  if(!defP) return onDone();
+  const adjSrc=G.map[sysId].neighbors.filter(nb=>{
+    const ns=G.map[nb]; if(!ns||ns.outOfPlay) return false;
+    return (ns.pieces.ships[defC]||0)-dmgShipsN(ns,defC)>0;
+  });
+  if(!adjSrc.length){ onDone(); return; }
+  openModal(m=>{
+    m.appendChild(el('h2',null,'传说·预测传感器'));
+    m.appendChild(el('div','hintbox',`防御前可将相邻系统的新鲜忠诚舰移入 ${sysId}（不触发其他效果）。选源系统或跳过。`));
+    adjSrc.forEach(src=>{
+      const ns=G.map[src]; const fresh=(ns.pieces.ships[defC]||0)-dmgShipsN(ns,defC);
+      const btn=el('button','btn',`从 ${src} 移入（${fresh} 艘新鲜舰）`);
+      btn.style.cssText='display:block;width:100%;margin:5px 0';
+      btn.onclick=()=>{ closeModal();
+        openCountModal('移入战场舰数',1,fresh,n=>{
+          const mv=moveShips(src,sysId,defP,n); SFX.move();
+          logMsg(`${defP.name} 预测传感器：从 ${src} 移入 ${mv} 艘新鲜舰至 ${sysId}`,'act');
+          render(); doPredictiveSensors(sysId,defC,onDone);
+        });
+      };
+      m.appendChild(btn);
+    });
+    const skip=el('button','btn ghost','跳过，开始战斗'); skip.onclick=()=>{ closeModal(); onDone(); };
+    m.appendChild(skip);
+  });
+}
+function openBattleDice(id,defC,_skipPS=false){
+  // 传说 Predictive Sensors（扩展）：战斗开始前守方可从相邻系统移入新鲜忠诚舰（仅触发一次）
+  if(!_skipPS && G.useExpansion){
+    const defP=G.players.find(p=>p.color.key===defC);
+    if(defP && loreHas(defP,'predictivesensors')){
+      const hasFresh=G.map[id].neighbors.some(nb=>{const ns=G.map[nb]; return ns&&!ns.outOfPlay&&(ns.pieces.ships[defC]||0)-dmgShipsN(ns,defC)>0;});
+      if(hasFresh){ doPredictiveSensors(id,defC,()=>openBattleDice(id,defC,true)); return; }
+    }
+  }
   const me=G.players[G.actor]; const col=me.color.key; const s=G.map[id];
   const md=battleMaxDice(me,s); const maxDice=md.max; const gateBonus=md.gateBonus; const rebelBonus=md.rebelBonus;
   const waryLimit=(G.useExpansion&&leaderHas(me,'wary')); // Corsair/Wary：进攻时强攻骰不能多于突袭骰
   const raidNormal=raidAllowed(defC,id);
   // 传说 Raider Exosuits（扩展）：本系统无守方建筑时也可收劫掠骰，但至多 1 颗
   const exosuitRaid=exosuitRaidEnabled(me,defC,id);
-  const raidOK=raidNormal||exosuitRaid;
-  const raidCap=exosuitRaid?1:6; // 外骨骼仅 1 颗
+  // 传说 Hidden Harbors（扩展）：守方持有此卡且本系统有新鲜忠诚星港时，攻方完全不能收劫掠骰
+  const hhDefBlock=G.useExpansion&&(()=>{ const defP=G.players.find(p=>p.color.key===defC);
+    return defP&&loreHas(defP,'buildfresh')&&s.pieces.buildings.some(b=>b.owner===defC&&b.type==='starport'&&!b.damaged); })();
+  const raidOK=!hhDefBlock&&(raidNormal||exosuitRaid);
+  const raidCap=exosuitRaid&&!hhDefBlock?1:6; // 外骨骼仅 1 颗
   const a={skirmish:0,assault:0,raid:0};
   openModal(m=>{
     m.appendChild(el('h2',null,'战斗 · '+id));
-    m.appendChild(el('div','hintbox',`最多投 <b>${maxDice}</b> 颗骰（=参战舰船${gateBonus?` +${gateBonus} 星门守备`:''}${rebelBonus?` +${rebelBonus} 叛军坚定`:''}）。劫掠骰：${raidOK?'可用':'不可用'}。${waryLimit?'<br><b>谨慎</b>：强攻骰不能多于突袭骰。':''}`));
+    m.appendChild(el('div','hintbox',`最多投 <b>${maxDice}</b> 颗骰（=参战舰船${gateBonus?` +${gateBonus} 星门守备`:''}${rebelBonus?` +${rebelBonus} 叛军坚定`:''}）。劫掠骰：${raidOK?'可用':hhDefBlock?'不可用（隐匿港湾·守方有新鲜星港）':'不可用'}。${waryLimit?'<br><b>谨慎</b>：强攻骰不能多于突袭骰。':''}`));
     [['skirmish','突袭(蓝) 命中较稳'],['assault','强攻(红) 高伤+自损'],['raid','劫掠(橙) 打建筑/抢资源']].forEach(([k,nm])=>{
       const r=el('div','row'); r.appendChild(el('span',null,nm));
       const val=el('span',null,'0'); val.style.cssText='min-width:22px;text-align:center;font-weight:800';
@@ -2475,6 +2757,32 @@ function openBattleDice(id,defC){
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{closeModal(); cancelAction();}; m.appendChild(cc);
   });
 }
+// 远古领地资源管理弹窗：存入/取出（任意玩家均可查看，但只有本人回合时才能操作）
+function openAncientHoldingsModal(p, pi){
+  const isActor=pi===G.actor && G.phase==='actions';
+  openModal(m=>{
+    m.appendChild(el('h2',null,'🏛 远古领地 · 资源槽'));
+    m.appendChild(el('div','hintbox','此卡有 1 个资源槽：存放的资源计入雄心得分，可随时取出花费；被劫掠需 4 🔑。'));
+    const cur=p._ahRes;
+    if(cur){
+      m.appendChild(el('div',null,`当前存放：${RESOURCES[cur]?.icon||'?'} ${RESOURCES[cur]?.name||cur}`));
+      if(isActor){
+        const take=el('button','btn','取出→资源池（供花费）'); take.style.cssText='display:block;margin:6px 0';
+        take.onclick=()=>{ closeModal(); p.res[cur]=(p.res[cur]||0)+1; p._ahRes=null; logMsg(`${pname(pi)} 远古领地：取出 ${RESOURCES[cur].name} 到资源池`,'act'); render(); };
+        m.appendChild(take);
+      }
+    } else {
+      m.appendChild(el('div',null,'（当前为空）'));
+      if(isActor){
+        const avail=RES_ORDER.filter(r=>(p.res[r]||0)>0);
+        if(!avail.length) m.appendChild(el('div',null,'（你没有可存入的资源）'));
+        avail.forEach(r=>{ const btn=el('button','btn',`存入 ${RESOURCES[r].icon} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
+          btn.onclick=()=>{ closeModal(); p.res[r]--; p._ahRes=r; logMsg(`${pname(pi)} 远古领地：存入 ${RESOURCES[r].name}`,'act'); render(); }; m.appendChild(btn); });
+      }
+    }
+    const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
 function openRaidModal(atkIdx, defC, keysLeft, done){
   if(keysLeft<=0){ done(); return; }
   const atk=G.players[atkIdx]; const def=G.players.find(p=>p.color.key===defC);
@@ -2486,6 +2794,9 @@ function openRaidModal(atkIdx, defC, keysLeft, done){
   } else {
     RES_ORDER.forEach(rt=>{ if((def.res[rt]||0)>0 && keysLeft>=1) items.push({kind:'res',rt,cost:1,label:`${RESOURCES[rt].icon}${RESOURCES[rt].name} (1 🔑)`}); });
     (def.guildCards||[]).forEach(card=>{ if(keysLeft>=card.keys) items.push({kind:'guild',card,cost:card.keys,label:`公会卡「${card.name}」(${card.keys} 🔑)`}); });
+    // 传说 Ancient Holdings：存放的资源劫掠成本 4 钥匙
+    if(G.useExpansion && def && loreHas(def,'ancientholdings') && def._ahRes && keysLeft>=4)
+      items.push({kind:'ah',rt:def._ahRes,cost:4,label:`🏛远古领地 ${RESOURCES[def._ahRes]?.icon||'?'}${RESOURCES[def._ahRes]?.name||def._ahRes} (4 🔑)`});
   }
   if(!items.length){ done(); return; }
   openModal(m=>{
@@ -2499,7 +2810,10 @@ function openRaidModal(atkIdx, defC, keysLeft, done){
       b.onclick=()=>{
         closeModal();
         SFX.key();
-        if(item.kind==='res'){
+        if(item.kind==='ah'){
+          const rt=def._ahRes; def._ahRes=null; atk.res[rt]=(atk.res[rt]||0)+1;
+          logMsg(`${pname(atkIdx)} 劫掠：偷取 ${pname(G.players.indexOf(def))} 远古领地 ${RESOURCES[rt]?.name||rt}（4 🔑）`,'bat');
+        } else if(item.kind==='res'){
           def.res[item.rt]--; atk.res[item.rt]++;
           logMsg(`${pname(atkIdx)} 劫掠：偷取 ${pname(G.players.indexOf(def))} 1 ${RESOURCES[item.rt].name}`,'bat');
         } else {
@@ -2548,7 +2862,7 @@ function runBattle(id,defC,alloc,preResult){
   if(r.res._rerolled>0) html+=`<br><i>「游击部队」重掷了 ${r.res._rerolled} 颗空白游击骰</i>`;
   if(r.res._torpReroll>0) html+=`<br><i>📜「寻的鱼雷」重掷了 ${r.res._torpReroll} 颗强攻骰</i>`;
   if(r.res._trickyReroll>0) html+=`<br><i>「狡诈」(私掠者)：重掷了 ${r.res._trickyReroll} 颗无收益劫掠骰</i>`;
-  if(r.res._irregularHits>0) html+=`<br><i>「游击」(鼓动者·防御触发)：突袭骰触发，每武器图标受 1 击，共 ${r.res._irregularHits} 击（守方需弃 1 武器资源）</i>`;
+  if(r.res._irregularHits>0) html+=`<br><i>「游击」(鼓动者·防御触发)：突袭骰触发，守方每武器图标对攻方造成 1 击，共 ${r.res._irregularHits} 击（守方需弃 1 武器资源）</i>`;
   if(r.res._visionReroll>0) html+=`<br><i>📜「共情者之眼」：重掷了 ${r.res._visionReroll} 颗骰</i>`;
   if(r.res._mirrorAdd>0) html+=`<br><i>📜「镜面装甲」(守)：攻方掷强攻骰 → 自损面 +1 ◯</i>`;
   if(r.res._railgunAdd>0) html+=`<br><i>📜「轨道炮阵列」(守)：守方有新鲜忠诚舰 → 攻方必受 1 击</i>`;
@@ -2577,7 +2891,8 @@ function runBattle(id,defC,alloc,preResult){
   const def=(defIdx>=0?G.players[defIdx]:null);
   const ransackBlocked=(G.useExpansion && def && leaderHas(def,'beloved'));
   const canRaid=r.res.key>0 && (s.pieces.ships[G.players[G.actor].color.key]||0)>0;
-  const afterRaid=()=>{ if(canRaid) openRaidModal(G.actor, defC, r.res.key, ()=>consumeAction(null)); else consumeAction(null); };
+  const finalizeBattle=()=>{ if(G._tacticalAfterMove){ G._tacticalAfterMove=false; openFreeMoveModal('领袖·战术（战后移动）',()=>consumeAction(null)); } else consumeAction(null); };
+  const afterRaid=()=>{ if(canRaid) openRaidModal(G.actor, defC, r.res.key, finalizeBattle); else finalizeBattle(); };
   if(ransackBlocked){ if((r.outrages||[]).length) logMsg(`${pname(defIdx)} 领袖·受爱戴：对手不能洗劫你的议会`,'bat'); afterRaid(); return; }
   maybeRansack((r.outrages||[]).length, defC, afterRaid); // 洗劫议会（规则书 p.16 步骤2）：每摧毁1座城市可收纳1张含守方密探的议会卡
 }
@@ -2678,12 +2993,12 @@ function resolveBattle(sysId,defColor,alloc){
   res._mirrorAdd=mirrorAdd; res._signalCut=signalCut; res._railgunAdd=railgunAdd;
   // —— 结算顺序（规则书 p.14）：①自伤 → ②拦截（每战一次，=守方「新鲜舰」数）→ ③命中守方舰（新鲜→受损→摧毁；舰尽溢出建筑）→ ④命中建筑 → ⑤劫掠 ——
   const def0fresh=freshShips(s,defColor);                                 // 拦截基数：守方战前「新鲜舰」数
-  // 领袖 Agitator/Irregular（扩展）：守方持有时，攻方掷突袭骰 → 无新鲜舰反伤；改为守方每武器图标受 1 击，弃 1 武器资源（见 runBattle）
+  // 领袖 Agitator/Irregular（扩展）：守方持有时，攻方掷突袭骰 → 无新鲜舰反伤；改为攻方每守方武器图标受 1 击，守方弃 1 武器资源（见 runBattle）
   const irregularOn=(G.useExpansion && def && leaderHas(def,'irregular') && (res.intercept||0)>0);
   const interLoss=(res.intercept>0 && def0fresh>0 && !irregularOn) ? def0fresh : 0;
   const irregularHits=irregularOn ? weaponIcons(def) : 0;
-  const atkR=applyShipHits(sysId, atk.color.key, res.self+interLoss, def); // 攻方舰：新鲜→受损→摧毁；被摧毁→守方战利品
-  const defR=applyShipHits(sysId, defColor, res.hit+irregularHits, atk);   // 守方舰：被摧毁→攻方战利品；舰尽则 overflow 转建筑
+  const atkR=applyShipHits(sysId, atk.color.key, res.self+interLoss+irregularHits, def); // 攻方舰：新鲜→受损→摧毁；被摧毁→守方战利品
+  const defR=applyShipHits(sysId, defColor, res.hit, atk);                                // 守方舰：被摧毁→攻方战利品；舰尽则 overflow 转建筑
   const bld=damageBuildings(sysId, defColor, res.bldg+defR.overflow, atk); // 摧毁建筑→攻方战利品；摧毁城市→民愤
   const stolen=0; // 劫掠改为模态框交互，此处不再自动偷取
   res._irregularHits=irregularHits;
@@ -2698,7 +3013,9 @@ function damageBuildings(sysId,color,n,destroyer){
     if(fresh){ fresh.damaged=true; continue; }
     const di=s.pieces.buildings.findIndex(b=>b.owner===color&&b.damaged);
     if(di>=0){ const b=s.pieces.buildings.splice(di,1)[0]; const o=G.players.find(p=>p.color.key===color);
-      if(b.type==='city'){ o.supply.cities++; if(destroyer&&s.resource){ outrages.push({rtype:s.resource, msg:provokeOutrage(destroyer, s.resource)}); } }
+      if(b.type==='city'){ o.supply.cities++;
+        if(destroyer){ const rtypes=b._gateStation?(b._gsTypes||[]):(s.resource?[s.resource]:[]);
+          for(const r of rtypes) outrages.push({rtype:r, msg:provokeOutrage(destroyer,r)}); } }
       else o.supply.starports++;
       destroyed++; if(destroyer) destroyer.trophies++; } else break;
   }
@@ -2763,6 +3080,21 @@ function openSecure(){
   const me=G.players[G.actor]; const col=me.color.key;
   const ok=G.court.filter(c=>majorityOn(c,col) && !paranoidBlocksSecure(me,c));
   if(!ok.length){ toast('没有你占多数密探的议会卡'); return; }
+  // 领袖 Feastbringer/Charismatic（扩展）：Copy/Pivot 攫取前可额外影响一次
+  if(G.useExpansion&&leaderHas(me,'charismatic')&&(G.actionFollowMode==='copy'||G.actionFollowMode==='pivot')){
+    openModal(mc=>{ mc.appendChild(el('h2',null,'领袖·魅力'));
+      mc.appendChild(el('div','hintbox','Copy/Pivot 攫取：可在攫取前或攫取后额外施加一次影响。'));
+      const b1=el('button','btn','攫取前影响'); b1.style.cssText='display:block;width:100%;margin:5px 0';
+      b1.onclick=()=>{ closeModal(); openFreeInfluenceModal('领袖·魅力（攫取前影响）',()=>_doOpenSecureModal(ok,col)); };
+      const b2=el('button','btn','先攫取，攫取后影响'); b2.style.cssText='display:block;width:100%;margin:5px 0';
+      b2.onclick=()=>{ closeModal(); G._charismAfterInfluence=true; _doOpenSecureModal(ok,col); };
+      const sk=el('button','btn ghost','不影响，直接攫取'); sk.onclick=()=>{ closeModal(); _doOpenSecureModal(ok,col); };
+      mc.appendChild(b1); mc.appendChild(b2); mc.appendChild(sk); });
+    return;
+  }
+  _doOpenSecureModal(ok,col);
+}
+function _doOpenSecureModal(ok,col){
   openModal(m=>{
     m.appendChild(el('h2',null,'收纳议会卡'));
     m.appendChild(el('div','hintbox','你占多数的议会卡可收入麾下：俘获其上的敌方密探（计入暴君）。帝国之声(Vox)收纳后立即触发并弃置。'));
@@ -2792,7 +3124,9 @@ function doSecure(c){
   else if(c.eff==='guardian'){ logMsg('「宣誓守护者」就位：对手无法偷取你的资源与公会卡','sys'); }
   else if(c.eff==='gatedice'){ logMsg('「星门守备部队」就位：你在星门发起战斗 +2 骰','sys'); }
   else if(c.eff==='secretorder'){ logMsg('「隐秘结社」就位：宣告守护/共情时此牌点数不归零','sys'); }
-  consumeAction(base);
+  if(G._charismAfterInfluence){ G._charismAfterInfluence=false;
+    openFreeInfluenceModal('领袖·魅力（攫取后影响）',()=>consumeAction(base)); }
+  else consumeAction(base);
 }
 // 帝国之声(Vox)卡"获得时"效果；done() 触发结束行动（默认 consumeAction；洗劫等场景可传入自定义续作）
 function runVoxEffect(c, done){
@@ -3055,6 +3389,8 @@ function expActionList(p){
   if(has('nurture')&&baseActs.includes('build')) out.push({key:'nurture',label:'📜活体建筑·培育：课税你的 1 座忠诚城市'});
   if(has('prune')&&baseActs.includes('repair')) out.push({key:'prune',label:'📜活体建筑·修剪：忠诚城市↔太空港 互换'});
   if(has('martyr')&&baseActs.includes('move')) out.push({key:'martyr',label:'📜生存覆写·殉道：毁己方1新鲜舰→毁同系统1敌舰(战利品)'});
+  if(has('firerifles')&&baseActs.includes('battle')) out.push({key:'firerifles',label:'📜银河步枪·步枪齐射：远程炮击相邻系统（突袭骰，先舰后建筑，不触发战斗事件）'});
+  if(has('guide')&&baseActs.includes('move')) out.push({key:'guide',label:'📜力场光束·导引：从有新鲜忠诚星港的系统移动任意舰（含非忠诚，忽略移动修正）'});
   if(has('annex')&&baseActs.includes('build')&&ambitionDeclared('tyrant')) out.push({key:'annex',label:'👑暴君权威·吞并：你控制的城/港换为忠诚（暴君宣告中）'});
   return out;
 }
@@ -3139,6 +3475,77 @@ const EXP_ACTION_RUN={
         enemies.forEach(ec=>{ const pl=G.players.find(p=>p.color.key===ec); const b=el('button','btn',pl?pl.name:ec); b.style.cssText='display:block;margin:5px 0';
           b.onclick=()=>{ closeModal(); fin(ec); }; m.appendChild(b); });
         const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc); }); });
+  },
+  guide(me){ const col=me.color.key;
+    const sources=Object.keys(G.map).filter(id=>{
+      const s=G.map[id]; if(s.outOfPlay) return false;
+      return s.pieces.buildings.some(b=>b.owner===col&&b.type==='starport'&&!b.damaged)
+        && Object.values(s.pieces.ships).some(n=>n>0);
+    });
+    expPickSystem('力场光束·导引 · 选择源系统','选择含你新鲜忠诚星港的系统（从该系统移动任意舰船，忽略移动修正）。', sources, src=>{
+      const s=G.map[src];
+      const adj=(s.neighbors||[]).filter(nb=>G.map[nb]&&!G.map[nb].outOfPlay);
+      if(!adj.length){ toast('该系统无相邻系统'); return; }
+      const shipColors=Object.keys(s.pieces.ships).filter(c=>s.pieces.ships[c]>0);
+      if(!shipColors.length){ toast('该系统无舰船'); return; }
+      const pickColorThenCount=c=>{
+        const total=s.pieces.ships[c]; const plName=(G.players.find(p=>p.color.key===c)||{name:c}).name;
+        openCountModal(`导引：移动 ${plName} 舰（共 ${total} 艘）`,1,total,n=>{
+          expPickSystem(`导引 · 目标系统（从 ${src}）`,`将 ${n} 艘 ${plName} 舰移入相邻系统。`, adj, dst=>{
+            const owner=G.players.find(p=>p.color.key===c)||{color:{key:c},supply:{ships:9999}};
+            moveShips(src,dst,owner,n); SFX.move();
+            consumeAction(`${pname(G.actor)} 力场光束·导引：${n} 艘 ${plName} 舰 ${src}→${dst}`);
+          });
+        });
+      };
+      if(shipColors.length===1){ pickColorThenCount(shipColors[0]); return; }
+      openModal(m2=>{ m2.appendChild(el('h2',null,'导引 · 选择舰色'));
+        m2.appendChild(el('div','hintbox','选择本次导引移动的舰船颜色。'));
+        shipColors.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c);
+          const b=el('button','btn',`${pl?pl.name:c}（${s.pieces.ships[c]} 艘）`); b.style.cssText='display:block;width:100%;margin:5px 0';
+          if(pl) b.style.background=pl.color.css;
+          b.onclick=()=>{ closeModal(); pickColorThenCount(c); }; m2.appendChild(b); });
+        const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m2.appendChild(cc); });
+    });
+  },
+  firerifles(me){ const col=me.color.key;
+    const sources=Object.keys(G.map).filter(id=>{
+      const s=G.map[id]; if(s.outOfPlay) return false; return freshShips(s,col)>0;
+    });
+    expPickSystem('步枪齐射 · 选择源系统','选择有你新鲜忠诚舰的系统（每艘提供 1 颗突袭骰）。', sources, src=>{
+      const s=G.map[src]; const numDice=freshShips(s,col);
+      const adj=(s.neighbors||[]).filter(nb=>G.map[nb]&&!G.map[nb].outOfPlay);
+      if(!adj.length){ toast('该系统无相邻系统'); return; }
+      expPickSystem('步枪齐射 · 选择目标系统',`将掷 ${numDice} 颗突袭骰，每 ✷ 造 1 击（先舰后建筑，不触发战斗事件）。`, adj, dst=>{
+        const ds=G.map[dst];
+        const defColors=[...new Set([
+          ...Object.keys(ds.pieces.ships).filter(c=>ds.pieces.ships[c]>0),
+          ...ds.pieces.buildings.map(b=>b.owner)
+        ])].filter(c=>c!==col);
+        if(!defColors.length){ toast('目标系统无可攻击对象'); return; }
+        const doFire=defC=>{
+          const defP=G.players.find(p=>p.color.key===defC);
+          let hits=0;
+          for(let i=0;i<numDice;i++){ const f=DICE.skirmish.faces[Math.floor(Math.random()*DICE.skirmish.faces.length)]; hits+=f.hit||0; }
+          const shipR=applyShipHits(dst,defC,hits,me);
+          const bldR=damageBuildings(dst,defC,shipR.overflow,me);
+          let msg=`${pname(G.actor)} 银河步枪·步枪齐射：${src}→${dst}，掷 ${numDice} 骰命中 ${hits} 次；${defP?defP.name:defC} 受损 ${shipR.damaged}/被毁 ${shipR.destroyed} 舰，摧毁建筑 ${bldR.destroyed}`;
+          (bldR.outrages||[]).forEach(o=>{ msg+=`<br><b style="color:#e0703a">⚑ 摧毁城市→民愤</b>：${o.msg}`; });
+          logMsg(msg,'bat');
+          if(shipR.destroyed>0||bldR.destroyed>0) SFX.destroy(); else if(shipR.damaged>0) SFX.hit();
+          consumeAction(null);
+        };
+        if(defColors.length===1){ doFire(defColors[0]); return; }
+        openModal(m2=>{ m2.appendChild(el('h2',null,'步枪齐射 · 选择防御者'));
+          m2.appendChild(el('div','hintbox','选择本次炮击针对的目标颜色。'));
+          defColors.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c);
+            const bldCount=ds.pieces.buildings.filter(bld=>bld.owner===c).length;
+            const btn=el('button','btn',`${pl?pl.name:c}（舰 ${ds.pieces.ships[c]||0} / 建筑 ${bldCount}）`); btn.style.cssText='display:block;width:100%;margin:5px 0';
+            if(pl) btn.style.background=pl.color.css;
+            btn.onclick=()=>{ closeModal(); doFire(c); }; m2.appendChild(btn); });
+          const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m2.appendChild(cc); });
+      });
+    });
   },
   annex(me){ const col=me.color.key;
     if(!ambitionDeclared('tyrant')){ toast('需暴君已宣告'); return; }
