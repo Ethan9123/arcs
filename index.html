@@ -1227,7 +1227,70 @@ function renderBoard(){
     }
   }
   for(const id in G.map){ drawSystem(svg, G.map[id]); }
+  drawBoardState(svg);
 }
+// 把游戏状态画到官方板面的印刷轨道上：权力计分轨 / 章节圈 / 雄心栏宣告标记
+function drawBoardState(svg){
+  if(_boardImgState==='fail') return;
+  // 权力计分轨（板底 0-50 格，cell n 中心 x=134+n*65.4）
+  const stacks={};
+  G.players.forEach((p,i)=>{ const v=Math.max(0,Math.min(50,p.power|0)); (stacks[v]=stacks[v]||[]).push(i); });
+  for(const v in stacks){ stacks[v].forEach((pi,k)=>{
+    const x=134+v*65.4, y=1806-k*30;
+    svg.appendChild(svgEl('circle',{cx:x,cy:y,r:20,fill:G.players[pi].color.hex,stroke:'#000','stroke-width':4,opacity:.95}));
+  }); }
+  // 章节圈（右下 CHAPTER ①-⑤）
+  const ch=Math.max(1,Math.min(5,G.chapter|0));
+  svg.appendChild(svgEl('circle',{cx:3050+(ch-1)*92,cy:1700,r:42,fill:'none',stroke:'#d9b25a','stroke-width':8}));
+  // 雄心栏：已宣告标记（显示 先攻分/后位分）
+  const ROW_Y={tycoon:438,tyrant:700,warlord:935,keeper:1170,empath:1400};
+  AMB_ORDER.forEach(k=>{ const mk=(G.ambitionBox&&G.ambitionBox[k])||[]; if(!mk.length) return;
+    const y=ROW_Y[k];
+    mk.forEach((m,j)=>{ const x=3398-j*92;
+      svg.appendChild(svgEl('rect',{x:x-42,y:y-26,width:84,height:52,rx:10,fill:'#d9b25a',stroke:'#000','stroke-width':3}));
+      const t=svgEl('text',{x:x,y:y+11,'text-anchor':'middle',fill:'#221a07','font-size':32,'font-weight':800});
+      t.textContent=`${m.f}/${m.s}`; svg.appendChild(t);
+    });
+  });
+}
+/* ---- 棋盘缩放/平移：滚轮缩放（指向光标）、按住拖拽平移、双击复位 ---- */
+const BVIEW={x:0,y:0,w:3481,h:1860};
+function boardViewApply(){ const svg=document.getElementById('board'); if(svg&&svg.setAttribute) svg.setAttribute('viewBox',`${BVIEW.x} ${BVIEW.y} ${BVIEW.w} ${BVIEW.h}`); }
+function boardViewReset(){ BVIEW.x=0;BVIEW.y=0;BVIEW.w=3481;BVIEW.h=1860; boardViewApply(); }
+(function initBoardZoom(){
+  if(typeof document==='undefined'||!document.getElementById) return;
+  const svg=document.getElementById('board');
+  if(!svg||!svg.addEventListener||!svg.getBoundingClientRect) return;
+  // 屏幕坐标 → 棋盘坐标（考虑 meet 模式的留白）
+  const scaleOf=()=>{ const r=svg.getBoundingClientRect();
+    const arV=BVIEW.w/BVIEW.h, arR=r.width/r.height;
+    if(arR>arV) return {sc:r.height/BVIEW.h, ox:(r.width-BVIEW.w*(r.height/BVIEW.h))/2, oy:0, r};
+    return {sc:r.width/BVIEW.w, ox:0, oy:(r.height-BVIEW.h*(r.width/BVIEW.w))/2, r}; };
+  const toBoard=(ev)=>{ const m=scaleOf();
+    return {x:BVIEW.x+(ev.clientX-m.r.left-m.ox)/m.sc, y:BVIEW.y+(ev.clientY-m.r.top-m.oy)/m.sc}; };
+  svg.addEventListener('wheel',ev=>{ ev.preventDefault();
+    const pt=toBoard(ev); const f=ev.deltaY>0?1.18:1/1.18;
+    const w=Math.min(3481,Math.max(550,BVIEW.w*f)); const h=w*1860/3481;
+    BVIEW.x=Math.min(Math.max(pt.x-(pt.x-BVIEW.x)*(w/BVIEW.w),0),3481-w);
+    BVIEW.y=Math.min(Math.max(pt.y-(pt.y-BVIEW.y)*(h/BVIEW.h),0),1860-h);
+    BVIEW.w=w; BVIEW.h=h; boardViewApply();
+  },{passive:false});
+  let drag=null;
+  svg.addEventListener('pointerdown',ev=>{ if(ev.button!==0&&ev.pointerType==='mouse') return;
+    drag={sx:ev.clientX,sy:ev.clientY,bx:BVIEW.x,by:BVIEW.y,moved:false}; });
+  svg.addEventListener('pointermove',ev=>{ if(!drag) return;
+    if(Math.abs(ev.clientX-drag.sx)+Math.abs(ev.clientY-drag.sy)>8) drag.moved=true;
+    if(!drag.moved) return;
+    const m=scaleOf();
+    BVIEW.x=Math.min(Math.max(drag.bx-(ev.clientX-drag.sx)/m.sc,0),3481-BVIEW.w);
+    BVIEW.y=Math.min(Math.max(drag.by-(ev.clientY-drag.sy)/m.sc,0),1860-BVIEW.h);
+    boardViewApply();
+  });
+  const endDrag=()=>{ if(drag&&drag.moved){ svg._suppressClick=true; setTimeout(()=>{svg._suppressClick=false;},0); } drag=null; };
+  svg.addEventListener('pointerup',endDrag);
+  svg.addEventListener('pointerleave',endDrag);
+  svg.addEventListener('dblclick',()=>boardViewReset());
+})();
 
 function drawSystem(svg, s){
   const g=svgEl('g',{class:'sys-node', 'data-sys':s.id});
@@ -1262,7 +1325,13 @@ function drawSystem(svg, s){
     g.insertBefore(svgEl('circle',{cx:s.x,cy:s.y,r:r+18,fill:'#d9b25a14',stroke:'#d9b25a','stroke-width':8,opacity:0.95,'stroke-dasharray':'14 10'}), g.firstChild);
   }
   const hit=svgEl('circle',{cx:s.x,cy:s.y,r:r+26,fill:'transparent',class:'sys-hit','data-sys':s.id});
-  hit.addEventListener('click',()=>onSystemClick(s.id));
+  // 悬停信息：系统类型/资源/槽位 + 当前棋子摘要
+  const tt=svgEl('title',{});
+  const head=s.kind==='gate'?`${s.id} 星门`:`${s.id} ${RESOURCES[s.resource].name}行星 · ${s.slots} 槽`;
+  const brief=(typeof expSysBrief==='function')?expSysBrief(s.id):'';
+  tt.textContent=head+(brief?`\n${brief}`:'');
+  hit.appendChild(tt);
+  hit.addEventListener('click',()=>{ const b=document.getElementById('board'); if(b&&b._suppressClick) return; onSystemClick(s.id); });
   g.appendChild(hit);
   svg.appendChild(g);
 }
