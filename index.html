@@ -1097,6 +1097,62 @@ function campResolveActForPlayer(playerIdx, success){ const p=G.players[playerId
 // 全体结算本幕后推进到下一幕（封顶第3幕）；推进后运行新幕 setup；返回新幕号
 function campAdvanceAct(){ if(G.campaign.act<3){ G.campaign.act++; G.players.forEach((p,i)=>campRunActSetup(i)); }
   autosaveCampaign(); return G.campaign.act; }
+
+/* ===== 阶段3：命运目标判定引擎（事件总线 + 进度规则 + 阈值/章末判定 + 终局胜利） ===== */
+// 雄心 → 计分资源（用于「资源未民愤则推进」类规则）
+const AMB_SCORE_RES = { tycoon:['material','fuel'], warlord:['weapon'], keeper:['relic'], empath:['psionic'], tyrant:[] };
+function guildCardCount(p){ return (p.guildCards||[]).length; }
+function hasMostGuildCards(p,i){ return G.players.every((q,j)=> j===i || guildCardCount(p)>guildCardCount(q)); }
+// 各命运各幕进度推进规则: fn(ev,data,player,idx) => delta（仅计时型幕需要）
+const FATE_PROGRESS = {
+  6:{ // Partisan 游击者
+    1:(ev,d,p,i)=>{ let n=0;
+        if(ev==='initiativeSeized' && d.playerIdx===i) n+=1;
+        if(ev==='ambitionWon' && d.playerIdx===i){ const rs=AMB_SCORE_RES[d.ambition]||[]; if(rs.every(r=>!p.outraged[r])) n+=2; }
+        return n; },
+    2:(ev,d,p,i)=>{ return (ev==='actionWithInitiative' && d.playerIdx===i) ? 1 : 0; },
+  },
+};
+// 计时阈值: [fate][act][numPlayers]
+const FATE_THRESHOLD = {
+  6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },
+};
+function fateThreshold(num,act,np){ const t=FATE_THRESHOLD[num]&&FATE_THRESHOLD[num][act]; return t?(t[np]||null):null; }
+// 非计时型目标判定（双目标/终局幕）: fn(player,idx) => bool
+const FATE_OBJECTIVE_CHECK = {
+  6:{ 3:(p,i)=> hasMostGuildCards(p,i) && G.initiative===i }, // 公会卡比每位对手多 且 持有先攻
+};
+function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
+// 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
+function campFire(ev, data){
+  if(!G || !G.campaign || !G.campaign.enabled) return; data=data||{};
+  G.players.forEach((p,i)=>{ if(!p.fate) return;
+    const rules=FATE_PROGRESS[p.fate]; const fn=rules&&rules[G.campaign.act]; if(!fn) return;
+    const delta=fn(ev,data,p,i)||0;
+    if(delta>0){ p.fateProgress=(p.fateProgress||0)+delta; campLog(`${pname(i)} 命运进度 +${delta} → ${p.fateProgress}（${campEvLabel(ev)}）`); }
+  });
+}
+// 当前玩家本幕阈值（计时型）/ null（非计时型）
+function fateThresholdCur(playerIdx){ const p=G.players[playerIdx]; return (p&&p.fate)?fateThreshold(p.fate,G.campaign.act,G.numPlayers):null; }
+// 当前玩家本幕目标是否达成（计时型比阈值；否则用自定义判定）
+function campObjectiveMet(playerIdx){
+  const p=G.players[playerIdx]; if(!p||!p.fate) return false;
+  const act=G.campaign.act; const th=fateThreshold(p.fate,act,G.numPlayers);
+  if(th!=null) return (p.fateProgress||0)>=th;
+  const chk=FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][act];
+  return chk?!!chk(p,playerIdx):false;
+}
+// 章末：派发 chapterEnd 事件 + 终局幕(3)胜利检查（达标且≥1权力）。返回胜利者 idx 数组。
+function campChapterEndJudge(){
+  if(!G.campaign||!G.campaign.enabled) return [];
+  campFire('chapterEnd',{}); const winners=[];
+  G.players.forEach((p,i)=>{ if(!p.fate) return;
+    const met=campObjectiveMet(i);
+    if(G.campaign.act===3 && met && p.power>=1){ p._campVictory=true; winners.push(i);
+      campLog(`🏆 ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）达成第三幕命运目标且≥1权力 → 战役胜利！`); }
+  });
+  autosaveCampaign(); return winners;
+}
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -2165,6 +2221,8 @@ function startActions(pIdx,context,suit,count){
   G.players[pIdx]._abil={}; // 重置”每回合一次”能力标记（如 g24 文物贩子）
   G.preludeOpen=(count>0); G.weaponBattle=false; G._freePrelude=false; // 序幕（规则书 p.17/20）：出牌后→花费首个行动点前可花资源换行动；武器解锁/免点数标记每回合重置
   (G.players[pIdx].guildCards||[]).forEach(c=>{ c._freshlySecured=false; }); // 新序幕窗口开始：清除”本序幕刚收纳”标记（规则书 p.20）
+  // 战役：持先攻者打出行动卡（游击者第二幕进度）
+  if(context==='lead' && pIdx===G.initiative) campFire('actionWithInitiative',{playerIdx:pIdx});
   if(count<=0){ endActorTurn(); return; }
   promptActions(); render();
 }
@@ -2270,7 +2328,9 @@ function checkInitiative(){
     ni=(best!==null)?best:G.initiative; }
   logMsg(ni!==G.initiative?`先攻转移给 ${pname(ni)}`:'先攻保持不变','sys');
   if(ni!==G.initiative) toast(`🏁 先攻 → ${G.players[ni].name}`, 1800);
+  const tookInit=(G.seizedBy!==null) || (ni!==G.initiative); // 以任意方式取得先攻标记
   G.initiative=ni; endRoundDiscard();
+  if(tookInit) campFire('initiativeSeized',{playerIdx:ni}); // 战役：游击者等命运进度
 }
 function endRoundDiscard(){
   for(const pl of G.played){
@@ -2289,6 +2349,8 @@ function endChapter(){
   toast(`📊 第 ${G.chapter} 章结算中…`, 2200);
   SFX.chapter();
   scoreAmbitions();
+  // 战役：章末派发命运进度事件 + 终局幕胜利判定
+  if(G.campaign && G.campaign.enabled) campChapterEndJudge();
   // 领袖 Fuel-Drinker/Lavish（扩展）：若本章结算了「大亨」，持此领袖者弃光全部燃料（归还供应）
   if(G.useExpansion && G.ambitionBox.tycoon.length>0){
     G.players.forEach((p,i)=>{ if(leaderHas(p,'lavish') && p.res.fuel>0){ const n=p.res.fuel; G.resSupply.fuel+=n; p.res.fuel=0; logMsg(`${pname(i)} 领袖·挥霍：大亨已结算，弃光 ${n} 燃料`,'sys'); } });
@@ -2375,6 +2437,7 @@ function scoreAmbitions(){
         } else { const bonus=cityBonus(G.players[f.i]);
           award(f.i, hi+bonus, `${AMBITIONS[k].name} 首位 +${hi}${bonus?`(+${bonus}城市奖励)`:''}`);
         }
+        campFire('ambitionWon',{playerIdx:f.i, ambition:k}); // 战役：赢得雄心（首位）
       } else logMsg(`雄心 ${AMBITIONS[k].name}：首位由虚拟第三方占据（不得分）`,'score');
       // 次位：余者中的最高且必须唯一；并列次位则无人得分（官方 p18）
       const rest=cs.filter(o=>o!==f);
@@ -2392,8 +2455,9 @@ function scoreAmbitions(){
       // 并列首位：各方改得「次位」分（虚拟第三方仍不得分），且不再另设次位
       firsts.forEach(o=>{ if(!o.real){ logMsg(`雄心 ${AMBITIONS[k].name}：虚拟第三方并列首位（不得分）`,'score'); return; }
         // Noble/Proud（扩展）：计分只有唯一第一名才得分 → 并列首位时该玩家不得分
-        if(G.useExpansion && leaderHas(G.players[o.i],'proud')){ logMsg(`雄心 ${AMBITIONS[k].name}：${pname(o.i)} 骄傲——并列首位不得分`,'score'); return; }
+        if(G.useExpansion && leaderHas(G.players[o.i],'proud')){ logMsg(`雄心 ${AMBITIONS[k].name}：${pname(o.i)} 骄傲——并列首位不得分`,'score'); campFire('ambitionWon',{playerIdx:o.i, ambition:k}); return; }
         award(o.i, lo, `${AMBITIONS[k].name} 并列首位 +${lo}`);
+        campFire('ambitionWon',{playerIdx:o.i, ambition:k}); // 战役：赢得雄心（并列首位）
       });
     }
   });
@@ -4353,7 +4417,18 @@ function openCampaignPanel(){
         const col=p.fateObjMet[ai]?'#6fcf8e':(ai+1===cp.act?'#d9b25a':'#7f8ea8');
         return `<div style="color:${col};font-size:11.5px;line-height:1.5">${done} 第${roman[ai]}幕：${o}</div>`;
       }).join('');
-      card.innerHTML=`<b style="color:${p.color.css}">${p.name}</b> · <span style="color:#c98bd6">${f.cn}</span> <span style="opacity:.7;font-size:11px">${idTag}</span>${ACT_SCRIPTS[p.fate]?'':' <span style="opacity:.5;font-size:10px">(脚本待编码)</span>'}<br>${objs}`;
+      // 当前幕进度：计时型显示 进度/阈值 进度条；非计时型显示达成判定
+      let prog='';
+      const th=fateThreshold(p.fate, cp.act, G.numPlayers);
+      if(th!=null){ const cur=Math.min(p.fateProgress||0,th); const pct=Math.round(cur/th*100);
+        prog=`<div style="margin-top:3px"><span style="font-size:11px;color:#d9b25a">进度 ${p.fateProgress||0}/${th}</span>`+
+          `<span style="display:inline-block;width:120px;height:7px;background:#222c44;border-radius:4px;vertical-align:middle;margin-left:6px;overflow:hidden">`+
+          `<span style="display:block;height:100%;width:${pct}%;background:${(p.fateProgress||0)>=th?'#6fcf8e':'#d9b25a'}"></span></span></div>`;
+      } else if(FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][cp.act]){
+        const met=campObjectiveMet(i); prog=`<div style="margin-top:3px;font-size:11px;color:${met?'#6fcf8e':'#7f8ea8'}">本幕目标：${met?'✓ 已达成':'○ 未达成'}</div>`;
+      }
+      const vic=p._campVictory?' <span style="color:#ffd700">🏆战役胜利</span>':'';
+      card.innerHTML=`<b style="color:${p.color.css}">${p.name}</b> · <span style="color:#c98bd6">${f.cn}</span> <span style="opacity:.7;font-size:11px">${idTag}</span>${vic}${ACT_SCRIPTS[p.fate]?'':' <span style="opacity:.5;font-size:10px">(脚本待编码)</span>'}<br>${objs}${prog}`;
       m.appendChild(card);
     });
     // 操作：结算本幕
@@ -4385,6 +4460,12 @@ function openActResolveWizard(){
     openModal(m=>{
       m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}`));
       m.appendChild(el('div','hintbox',`<b style="color:#c98bd6">${f?f.cn:''}</b> 第 ${act} 幕目标：<br><span style="font-size:12px;line-height:1.6">${(f&&f.acts[act-1])||'（无）'}</span>`));
+      // 引擎自动判定提示（半自动：玩家确认）
+      const autoMet=campObjectiveMet(pi); const th=fateThresholdCur(pi);
+      const judgeTxt = (th!=null) ? `引擎判定：进度 ${p.fateProgress||0}/${th} → ${autoMet?'达成 ✓':'未达成 ✗'}`
+        : (FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][act]) ? `引擎判定：${autoMet?'达成 ✓':'未达成 ✗'}`
+        : '此命运本幕无自动判定（请按桌面规则人工裁定）';
+      const jb=el('div','hintbox'); jb.style.cssText=`text-align:left;border-left:3px solid ${autoMet?'#6fcf8e':'#d9b25a'}`; jb.innerHTML=`<b>${judgeTxt}</b>`; m.appendChild(jb);
       if(!sc) m.appendChild(el('div','hintbox','此命运幕脚本尚未编码（后续阶段补齐）。可记录达成与否，暂不自动增删卡库。'));
       const yes=el('button','btn gold','✓ 达成目标（成功）'); yes.style.cssText='display:block;width:100%;margin:6px 0';
       yes.onclick=()=>{ campResolveActForPlayer(pi,true); closeModal(); step(k+1); };
