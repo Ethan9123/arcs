@@ -1015,11 +1015,17 @@ const CAMPAIGN_CARDS=[
 function campCardById(id){ return CAMPAIGN_CARDS.find(c=>c.id===id); }
 /* ===== 阶段2：战役议会牌库动态增删引擎 + 幕状态机 + 幕脚本解释器 ===== */
 function campLog(msg){ if(typeof logMsg==='function' && G && G.log) logMsg(msg,'sys'); }
+// 共享战役公会卡的资源图标（用于公会花色计数：代言人等命运）。沿用基础 5×2 花色布局。
+const CAMPAIGN_GUILD_ICON = {
+  mining_interest:'material', construction_union:'material', gatekeepers:'fuel', shipping_interest:'fuel',
+  skirmishers:'weapon', arms_union:'weapon', lattice_spies:'psionic', silver_tongues:'psionic',
+  sworn_guardians:'relic', elder_broker:'relic',
+};
 // 把登记项实例化为议会区运行时卡（可被影响/攫取；逐卡 gameplay 效果按命运后续接线）
 function makeCampaignCourtCard(id){
   const c=campCardById(id); if(!c) return null;
   return { id:'cc_'+id, srcId:id, campaign:true, t:(c.k==='vox'?'vox':'guild'),
-    name:c.cn, en:c.en, keys:(c.keys>0?c.keys:2), eff:null, txt:c.eff||'', icon:null, agents:{} };
+    name:c.cn, en:c.en, keys:(c.keys>0?c.keys:2), eff:null, txt:c.eff||'', icon:CAMPAIGN_GUILD_ICON[id]||null, agents:{} };
 }
 // 从所有议会区(议会区/牌堆/弃堆/玩家麾下)移除某战役卡，返回被移除的运行时卡或 null
 function campZoneRemove(srcId){
@@ -1145,6 +1151,13 @@ const FATE_PROGRESS = {
     3:(ev,d,p,i)=>{ if(ev==='ambitionWon' && d.playerIdx===i) return Math.min(p.captives, campTotalMarks('bunker'));
         if(ev==='blightCrisisOnBunker' && campMarksAt(d.sysId,'bunker').some(m=>m.owner===p.color.key)) return 1; return 0; },
   },
+  3:{ // Magnate 大亨：第一幕峰会成交(对手赠予+2/出口弃3资源+2)；第二幕垄断(获得+1/章末每持有+1)
+    1:(ev,d,p,i)=>{ if(ev==='summitGift' && d.toIdx===i) return 2; if(ev==='magnateExport' && d.playerIdx===i) return 2; return 0; },
+    2:(ev,d,p,i)=>{ if(ev==='monopolyGained' && d.playerIdx===i) return 1; if(ev==='chapterEnd') return campMonopolies(i); return 0; },
+  },
+  4:{ // Advocate 代言人：第二幕章末 +公会花色数 +超过的对手数
+    2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campGuildSuits(i)+campRivalsExceededInGuilds(i)) : 0; },
+  },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
   },
@@ -1160,6 +1173,8 @@ const FATE_PROGRESS = {
 const FATE_THRESHOLD = {
   1:{ 1:{2:20,3:17,4:14}, 2:{2:22,3:22,4:22} },     // Steward 摄政官 第一/二幕
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
+  3:{ 1:{2:10,3:10,4:10}, 2:{2:12,3:12,4:12} },     // Magnate 大亨 第一/二幕
+  4:{ 2:{2:12,3:12,4:12} },                         // Advocate 代言人 第二幕
   10:{ 2:{2:14,3:14,4:14} },                        // Hegemon 霸主(旗帜) 第二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
   16:{ 2:{2:22,3:22,4:22} },                        // Warden 守护者(领主) 第二幕
@@ -1178,6 +1193,8 @@ const FATE_OBJECTIVE_CHECK = {
   7:{ 3:(p,i)=> p.identity==='regent' && (campPlanetsControlled(i)+(G.campaign.firstRegentIdx===i?campEmpireSystems().filter(id=>G.map[id].kind==='planet').length:0))>=9 && campMoreLoyalShipsThanRivals(i) }, // 海军上将终局：摄政、控制≥9行星(首席摄政含帝国控制行星)、忠诚舰多于每位对手
   10:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'tyrant')) && campMarksOf(i,'banner')>G.chapter }, // 霸主(旗帜)终局：无对手赢暴君 且 旗帜数>当前章节
   16:{ 3:(p,i)=> G.players.every((q,j)=> j===i || campFiefsCount(i)>campFiefsCount(j)) && campSeatsControlled(i)>G.chapter }, // 守护者(领主)终局：采邑多于每对手 且 控制王座数>当前章节
+  3:{ 3:(p,i)=> campMonopolies(i)>=1 }, // 大亨终局：持有≥1张垄断卡（≥2为进阶奖杯）
+  4:{ 3:(p,i)=> campGuildSuits(i)>G.chapter && campGuildCardsInCourt()*2>G.court.length }, // 代言人终局：公会花色>章节 且 议会公会卡过半
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
@@ -1373,7 +1390,9 @@ function campTransferAsset(fromIdx, toIdx, kind, res){
   else if(kind==='resource'){ if((a.res[res]||0)<=0) return false; a.res[res]--; b.res[res]=(b.res[res]||0)+1; }
   else if(kind==='favor'){ const f=campFavorsOf(a); const c=res||Object.keys(f).find(k=>f[k]>0); if(!c||(f[c]||0)<=0) return false; f[c]--; if(f[c]<=0) delete f[c]; const fb=campFavorsOf(b); fb[c]=(fb[c]||0)+1; }
   else return false;
-  campLog(`${pname(fromIdx)} → ${pname(toIdx)} 转移资产（${kind==='resource'?RESOURCES[res].name:kind==='captive'?'俘虏':kind==='trophy'?'战利品':'好感'}）`); return true;
+  campLog(`${pname(fromIdx)} → ${pname(toIdx)} 转移资产（${kind==='resource'?RESOURCES[res].name:kind==='captive'?'俘虏':kind==='trophy'?'战利品':'好感'}）`);
+  if(kind==='resource'||kind==='favor') campFire('summitGift',{toIdx, fromIdx, kind}); // 大亨：对手赠予好感/资源
+  return true;
 }
 // 招纳入帝国：首席摄政把法外者翻回摄政
 function campInviteToEmpire(frIdx, outlawIdx){ if(G.campaign.firstRegentIdx!==frIdx) return false;
@@ -1578,6 +1597,18 @@ function campLordClusters(playerIdx){ const col=G.players[playerIdx].color.key; 
 function campFiefsCount(playerIdx){ return campLordClusters(playerIdx).size; }
 function campCitiesInFiefs(playerIdx){ const cls=campLordClusters(playerIdx); let n=0;
   for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay||!cls.has(s.cluster)) continue; n+=s.pieces.buildings.filter(b=>b.type==='city').length; } return n; }
+// 公会卡花色（代言人命运）：玩家麾下公会卡的去重资源图标数 / 公会卡总数 / 超过的对手数
+function campGuildSuits(playerIdx){ const p=G.players[playerIdx]; const s=new Set();
+  (p.guildCards||[]).forEach(c=>{ if(c.icon) s.add(c.icon); }); return s.size; }
+function campGuildCount(playerIdx){ return (G.players[playerIdx].guildCards||[]).length; }
+function campRivalsExceededInGuilds(playerIdx){ const mine=campGuildCount(playerIdx);
+  return G.players.filter((q,j)=>j!==playerIdx && mine>campGuildCount(j)).length; }
+function campGuildCardsInCourt(){ return G.court.filter(c=>c&&(c.t==='guild'||c.eff)).length; } // 议会区公会卡数（近似：非vox/非议会特殊卡）
+// 垄断卡（大亨命运）：以计数器 p._monopolies 表示
+function campMonopolies(playerIdx){ return G.players[playerIdx]._monopolies||0; }
+function campGainMonopoly(playerIdx){ const p=G.players[playerIdx]; p._monopolies=(p._monopolies||0)+1;
+  campLog(`${pname(playerIdx)} 获得 1 张垄断卡（共 ${p._monopolies}）`); campFire('monopolyGained',{playerIdx}); }
+function campLoseMonopoly(playerIdx){ const p=G.players[playerIdx]; if((p._monopolies||0)>0){ p._monopolies--; return true; } return false; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -4929,6 +4960,16 @@ function openCampaignPanel(){
       const mkb=el('button','btn ghost sm','放置/移除标记'); mkb.onclick=()=>{ closeModal(); openMarkPlace(); }; mr.appendChild(mkb);
       m.appendChild(mr);
     }
+    // 大亨(3) 专属操作：垄断卡 + 出口
+    G.players.forEach((p,i)=>{ if(p.fate!==3) return;
+      const mg=el('div','row'); mg.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      mg.appendChild(el('span',null,`💰${pname(i)} 垄断×${campMonopolies(i)}：`));
+      const gain=el('button','btn ghost sm','获得垄断卡'); gain.onclick=()=>{ campGainMonopoly(i); render(); closeModal(); openCampaignPanel(); }; mg.appendChild(gain);
+      const exp=el('button','btn ghost sm','出口(弃3资源)'); exp.title='峰会：弃3资源推进+2';
+      exp.onclick=()=>{ let need=3; for(const r of RES_ORDER){ while(need>0&&(p.res[r]||0)>0){ p.res[r]--; G.resSupply[r]++; need--; } }
+        if(need===0){ campFire('magnateExport',{playerIdx:i}); } else toast('资源不足3个'); render(); closeModal(); openCampaignPanel(); }; mg.appendChild(exp);
+      m.appendChild(mg);
+    });
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
