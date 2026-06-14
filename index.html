@@ -1261,6 +1261,79 @@ function campRoundEndEvent(){
   if(r==='edict') campResolveEdict(); else campResolveCrisis();
   autosaveCampaign();
 }
+
+/* ===== 阶段6：峰会(Summit) 交易子系统 + 好感(Favor) ===== */
+// 好感 = 置于某玩家命运卡上的对手密探（p.favors[对手色]）。持有他人好感 = 对其的杠杆。
+function campFavorsOf(p){ return p.favors||(p.favors={}); }
+function campFavorsTotal(p){ const f=campFavorsOf(p); return Object.keys(f).reduce((a,k)=>a+(f[k]||0),0); }
+// 许诺好感：giver 从供应给 1 密探，置于 recipient 命运卡上（recipient 由此握有对 giver 的好感）
+function campPromiseFavor(giverIdx, recipientIdx){
+  const g=G.players[giverIdx], r=G.players[recipientIdx]; if(!g||!r||giverIdx===recipientIdx) return false;
+  if(g.supply.agents<=0) return false;
+  g.supply.agents--; const f=campFavorsOf(r); f[g.color.key]=(f[g.color.key]||0)+1;
+  campLog(`${pname(giverIdx)} 向 ${pname(recipientIdx)} 许诺 1 好感`); return true;
+}
+// 归还好感：holder 把所持 target 的好感退回 target（迫使 target 执行 n 个谈判动作；默认每动作 1 好感）
+function campReturnFavor(holderIdx, targetIdx, n){
+  const h=G.players[holderIdx], t=G.players[targetIdx]; if(!h||!t) return 0;
+  const f=campFavorsOf(h); const have=f[t.color.key]||0; n=Math.min(have, n||1);
+  if(n<=0) return 0; f[t.color.key]-=n; if(f[t.color.key]<=0) delete f[t.color.key]; t.supply.agents+=n;
+  campLog(`${pname(holderIdx)} 归还 ${pname(targetIdx)} ${n} 好感（迫使其执行 ${n} 个谈判动作）`); return n;
+}
+// 转移资产：把 1 个 俘虏/战利品/好感/资源 给对手
+function campTransferAsset(fromIdx, toIdx, kind, res){
+  const a=G.players[fromIdx], b=G.players[toIdx]; if(!a||!b||fromIdx===toIdx) return false;
+  if(kind==='captive'){ if(a.captives<=0) return false; a.captives--; b.captives++; }
+  else if(kind==='trophy'){ if(a.trophies<=0) return false; a.trophies--; b.trophies++; }
+  else if(kind==='resource'){ if((a.res[res]||0)<=0) return false; a.res[res]--; b.res[res]=(b.res[res]||0)+1; }
+  else if(kind==='favor'){ const f=campFavorsOf(a); const c=res||Object.keys(f).find(k=>f[k]>0); if(!c||(f[c]||0)<=0) return false; f[c]--; if(f[c]<=0) delete f[c]; const fb=campFavorsOf(b); fb[c]=(fb[c]||0)+1; }
+  else return false;
+  campLog(`${pname(fromIdx)} → ${pname(toIdx)} 转移资产（${kind==='resource'?RESOURCES[res].name:kind==='captive'?'俘虏':kind==='trophy'?'战利品':'好感'}）`); return true;
+}
+// 招纳入帝国：首席摄政把法外者翻回摄政
+function campInviteToEmpire(frIdx, outlawIdx){ if(G.campaign.firstRegentIdx!==frIdx) return false;
+  if(!G.players[outlawIdx]||G.players[outlawIdx].identity!=='outlaw') return false; campBecomeRegent(outlawIdx); return true; }
+// 脱离帝国：摄政翻为法外者；若为首席摄政则把板块给权力最高的摄政（无则空缺）
+function campLeaveEmpire(idx){ const p=G.players[idx]; if(!p||p.identity!=='regent') return false;
+  const wasFirst=(G.campaign.firstRegentIdx===idx); campBecomeOutlaw(idx);
+  if(wasFirst){ const regents=G.players.map((q,i)=>i).filter(i=>G.players[i].identity==='regent');
+    if(regents.length){ regents.sort((x,y)=>G.players[y].power-G.players[x].power); campSetFirstRegent(regents[0]); }
+    else { G.campaign.firstRegentIdx=null; campLog('帝国已无摄政，首席摄政空缺（详见规则书 p.16）'); } }
+  return true;
+}
+// 复兴帝国：若无任何摄政，本玩家成为摄政并取首席摄政
+function campReviveEmpire(idx){ if(G.players.some(p=>p.identity==='regent')) return false;
+  campBecomeRegent(idx); campSetFirstRegent(idx); campLog(`${pname(idx)} 复兴帝国，成为首席摄政`); return true; }
+// 向议会请愿：把已裁决的帝国议会翻回会期中
+function campPetitionCouncil(){ if(G.campaign.council==='decided'){ G.campaign.council='session'; G.campaign.councilHolder=null; campLog('向议会请愿：帝国议会翻回「会期中」'); return true; } return false; }
+// 让渡控制：把 fromIdx 的 1 个忠诚棋子(舰/建筑)替换为 toIdx 同类棋子（含规则限制）
+function campCedeControl(fromIdx, toIdx, sysId, pieceType){
+  const a=G.players[fromIdx], b=G.players[toIdx]; const s=G.map[sysId]; if(!a||!b||!s) return false;
+  const ac=a.color.key, bc=b.color.key;
+  if(pieceType==='ship'){
+    if((s.pieces.ships[ac]||0)<=0) return false;
+    // 不能替换你地图上最后 1 艘舰
+    let totalShips=0; for(const id in G.map) totalShips+=(G.map[id].pieces.ships[ac]||0); if(totalShips<=1) return false;
+    const dmg=dmgShipsN(s,ac); const wasDmg=dmg>0 && (s.pieces.ships[ac]-dmg)<=0;
+    s.pieces.ships[ac]--; if(s.pieces.ships[ac]<=0) delete s.pieces.ships[ac];
+    if(wasDmg && s.pieces.dmg){ s.pieces.dmg[ac]--; if(s.pieces.dmg[ac]<=0) delete s.pieces.dmg[ac]; }
+    a.supply.ships++; b.supply.ships--; s.pieces.ships[bc]=(s.pieces.ships[bc]||0)+1;
+  } else { // 建筑：仅当该系统无你的忠诚舰；不能替换最后 1 座城/港
+    if((s.pieces.ships[ac]||0)>0) return false;
+    const b1=s.pieces.buildings.find(x=>x.owner===ac && x.type===pieceType); if(!b1) return false;
+    let cnt=0; for(const id in G.map) cnt+=G.map[id].pieces.buildings.filter(x=>x.owner===ac&&x.type===pieceType).length; if(cnt<=1) return false;
+    b1.owner=bc;
+  }
+  campLog(`${pname(fromIdx)} 让渡 ${sysId} 的${pieceType==='ship'?'舰船':pieceType==='city'?'城市':'星港'}给 ${pname(toIdx)}`); return true;
+}
+// 委派权柄：把 fromIdx 在某议会卡上的 1 个密探替换为 toIdx 的密探
+function campDelegateAuthority(fromIdx, toIdx, card){
+  const a=G.players[fromIdx], b=G.players[toIdx]; if(!a||!b||!card||!card.agents) return false;
+  const ac=a.color.key, bc=b.color.key; if((card.agents[ac]||0)<=0 || b.supply.agents<=0) return false;
+  card.agents[ac]--; if(card.agents[ac]<=0) delete card.agents[ac]; a.supply.agents++;
+  card.agents[bc]=(card.agents[bc]||0)+1; b.supply.agents--;
+  campLog(`${pname(fromIdx)} 在「${card.name}」上的密探委派给 ${pname(toIdx)}`); return true;
+}
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -1414,6 +1487,7 @@ function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
       identity:'regent',         // 'regent'(摄政) | 'outlaw'(法外者)
       fateProgress:0,            // 命运目标进度计数
       fateObjMet:[false,false,false], // 三幕目标达成标记
+      favors:{},                 // 好感：{对手色:数量}——置于本玩家命运卡上的对手密探（峰会杠杆）
     });
   }
   G = {
@@ -4535,6 +4609,9 @@ function openCampaignPanel(){
     m.appendChild(pr);
     const eb=el('button','btn ghost sm','⚖ 立即结算敕令（当前政策）'); eb.style.cssText='width:100%;margin:4px 0';
     eb.onclick=()=>{ campResolveEdict(); render(); closeModal(); openCampaignPanel(); }; m.appendChild(eb);
+    // 峰会（由先攻者/议会持有者召开；热座下可直接发起）
+    const sb=el('button','btn ghost sm','🕊 召开峰会（交易/好感/转正）'); sb.style.cssText='width:100%;margin:0 0 4px';
+    sb.onclick=()=>{ closeModal(); openSummitModal(G.initiative); }; m.appendChild(sb);
     // 律法书
     if(cp.lawbook && cp.lawbook.length){
       const lb=el('div','hintbox'); lb.style.cssText='text-align:left';
@@ -4610,6 +4687,77 @@ function openActResolveWizard(){
     });
   };
   step(0);
+}
+/* 峰会模态框：主持人(host)可行召集令动作；任意玩家经同意行谈判动作。热座下由玩家协商，引擎执行结果。 */
+function openSummitModal(hostIdx){
+  if(!G.campaign||!G.campaign.enabled) return;
+  const others=i=>G.players.map((p,j)=>j).filter(j=>j!==i);
+  const refresh=()=>{ closeModal(); openSummitModal(hostIdx); };
+  openModal(m=>{
+    m.appendChild(el('h2',null,`🕊 峰会 · 主持：${pname(hostIdx)}`));
+    // 好感概览
+    const fv=el('div','hintbox'); fv.style.cssText='text-align:left;font-size:11.5px';
+    fv.innerHTML='<b>好感持有</b>（你命运卡上的对手密探）：<br>'+G.players.map((p,i)=>{
+      const f=campFavorsOf(p); const t=campFavorsTotal(p);
+      const det=Object.keys(f).filter(k=>f[k]>0).map(k=>`${(PCOLORS.find(c=>c.key===k)||{name:k}).name}×${f[k]}`).join('、');
+      return `${pname(i)}：${t?det:'—'}`; }).join('<br>');
+    m.appendChild(fv);
+    const mkBtn=(label,cb)=>{ const b=el('button','btn ghost sm',label); b.style.cssText='display:block;width:100%;margin:3px 0;text-align:left'; b.onclick=cb; return b; };
+    // —— 召集令动作（仅主持人）——
+    const coTitle=el('div'); coTitle.style.cssText='color:#d9b25a;font-weight:700;margin:6px 0 2px'; coTitle.textContent='召集令动作（主持人）'; m.appendChild(coTitle);
+    if(G.campaign.council==='decided') m.appendChild(mkBtn('向议会请愿：翻回会期中',()=>{ campPetitionCouncil(); render(); refresh(); }));
+    if(G.players[hostIdx].identity==='regent') m.appendChild(mkBtn('脱离帝国：你翻为法外者',()=>{ campLeaveEmpire(hostIdx); render(); refresh(); }));
+    if(!G.players.some(p=>p.identity==='regent')) m.appendChild(mkBtn('复兴帝国：成为摄政并取首席摄政',()=>{ campReviveEmpire(hostIdx); render(); refresh(); }));
+    // 归还好感（迫使）：选一名你持有其好感的对手，退1迫其行动
+    others(hostIdx).filter(j=>(campFavorsOf(G.players[hostIdx])[G.players[j].color.key]||0)>0).forEach(j=>{
+      m.appendChild(mkBtn(`归还 ${pname(j)} 1 好感（迫使其执行 1 谈判动作）`,()=>{ campReturnFavor(hostIdx,j,1); render(); refresh(); })); });
+    // —— 谈判动作（任意玩家，经同意）——
+    const ngTitle=el('div'); ngTitle.style.cssText='color:#7fd4c4;font-weight:700;margin:8px 0 2px'; ngTitle.textContent='谈判动作（经被影响方同意）'; m.appendChild(ngTitle);
+    m.appendChild(mkBtn('许诺好感：A 给 B 1 密探（置于 B 命运卡）',()=>openSummitPick('promise',hostIdx,refresh)));
+    m.appendChild(mkBtn('转移资产：俘虏/战利品/好感/资源',()=>openSummitPick('transfer',hostIdx,refresh)));
+    m.appendChild(mkBtn('让渡控制：地图忠诚棋子换为对手同类',()=>openSummitPick('cede',hostIdx,refresh)));
+    m.appendChild(mkBtn('委派权柄：议会卡上密探换为对手',()=>openSummitPick('delegate',hostIdx,refresh)));
+    if(G.campaign.firstRegentIdx===hostIdx) m.appendChild(mkBtn('招纳入帝国：法外者翻为摄政（首席摄政）',()=>openSummitPick('invite',hostIdx,refresh)));
+    const cc=el('button','btn gold','结束峰会'); cc.style.cssText='width:100%;margin-top:8px'; cc.onclick=()=>{ closeModal(); render(); }; m.appendChild(cc);
+  });
+}
+// 峰会谈判动作的目标选择器
+function openSummitPick(kind, hostIdx, back){
+  const ps=G.players.map((p,i)=>i);
+  const pickTwo=(title,cb)=>{ // 选 from → to
+    openModal(m=>{ m.appendChild(el('h2',null,title));
+      m.appendChild(el('div','hintbox','选择「给予方」：'));
+      ps.forEach(i=>{ const b=el('button','btn',pname(i)); b.style.cssText='display:block;width:100%;margin:3px 0;background:'+G.players[i].color.css;
+        b.onclick=()=>{ closeModal(); openModal(m2=>{ m2.appendChild(el('h2',null,'选择「接收方」'));
+          ps.filter(j=>j!==i).forEach(j=>{ const b2=el('button','btn',pname(j)); b2.style.cssText='display:block;width:100%;margin:3px 0;background:'+G.players[j].color.css;
+            b2.onclick=()=>{ closeModal(); cb(i,j); }; m2.appendChild(b2); });
+          const x=el('button','btn ghost','返回'); x.onclick=()=>{ closeModal(); back&&back(); }; m2.appendChild(x); }); };
+        m.appendChild(b); });
+      const x=el('button','btn ghost','返回'); x.onclick=()=>{ closeModal(); back&&back(); }; m.appendChild(x);
+    });
+  };
+  if(kind==='promise'){ pickTwo('许诺好感',(a,b)=>{ if(!campPromiseFavor(a,b)) toast('给予方无可用密探'); render(); back&&back(); }); }
+  else if(kind==='invite'){ const outlaws=G.players.map((p,i)=>i).filter(i=>G.players[i].identity==='outlaw');
+    if(!outlaws.length){ toast('没有法外者可招纳'); back&&back(); return; }
+    pickFromList('招纳哪名法外者入帝国',outlaws.map(i=>({label:pname(i),val:i})),i=>{ campInviteToEmpire(hostIdx,i); render(); back&&back(); }); }
+  else if(kind==='transfer'){ pickTwo('转移资产',(a,b)=>{
+    const opts=[]; if(G.players[a].captives>0) opts.push({label:'俘虏',val:['captive']});
+    if(G.players[a].trophies>0) opts.push({label:'战利品',val:['trophy']});
+    if(campFavorsTotal(G.players[a])>0) opts.push({label:'好感',val:['favor']});
+    RES_ORDER.forEach(r=>{ if((G.players[a].res[r]||0)>0) opts.push({label:RESOURCES[r].name,val:['resource',r]}); });
+    if(!opts.length){ toast('给予方无可转移资产'); back&&back(); return; }
+    pickFromList(`转移给 ${pname(b)} 什么`,opts,v=>{ campTransferAsset(a,b,v[0],v[1]); render(); back&&back(); }); }); }
+  else if(kind==='cede'){ pickTwo('让渡控制',(a,b)=>{
+    const ac=G.players[a].color.key; const opts=[];
+    for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+      if((s.pieces.ships[ac]||0)>0) opts.push({label:`${id} 舰船`,val:[id,'ship']});
+      s.pieces.buildings.filter(x=>x.owner===ac).forEach(x=>opts.push({label:`${id} ${x.type==='city'?'城市':'星港'}`,val:[id,x.type]})); }
+    if(!opts.length){ toast('给予方无可让渡棋子'); back&&back(); return; }
+    pickFromList(`${pname(a)} 让渡哪个棋子给 ${pname(b)}`,opts,v=>{ if(!campCedeControl(a,b,v[0],v[1])) toast('受规则限制，无法让渡（最后棋子/系统有忠诚舰等）'); render(); back&&back(); }); }); }
+  else if(kind==='delegate'){ pickTwo('委派权柄',(a,b)=>{
+    const ac=G.players[a].color.key; const cards=G.court.filter(c=>c&&c.agents&&(c.agents[ac]||0)>0);
+    if(!cards.length){ toast('给予方在议会卡上无密探'); back&&back(); return; }
+    pickFromList(`${pname(a)} 在哪张议会卡上的密探委派给 ${pname(b)}`,cards.map(c=>({label:c.name,val:c})),c=>{ if(!campDelegateAuthority(a,b,c)) toast('接收方无可用密探'); render(); back&&back(); }); }); }
 }
 /* 战役读档菜单：列出 localStorage 中的存档槽，支持读取/删除/导出JSON、以及导入JSON */
 function openCampaignLoadMenu(){
