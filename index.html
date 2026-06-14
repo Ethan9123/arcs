@@ -1119,8 +1119,20 @@ const FATE_PROGRESS = {
         return n; },
     2:(ev,d,p,i)=>{ return (ev==='actionWithInitiative' && d.playerIdx===i) ? 1 : 0; },
   },
-  21:{ // Naturalist 博物学家：第一幕「在花园中安居」——每章末按你控制的带新鲜凋敝的星系数推进
-    1:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campFreshBlightSystemsControlled(i) : 0; },
+  21:{ // Naturalist 博物学家（仅第三幕）：章末若赢得/未宣告凋族(Blightkin)雄心，按你控制的带新鲜凋敝星系数推进
+    3:(ev,d,p,i)=>{ return (ev==='chapterEnd' && campWonOrUndeclared(i,'blightkin')) ? campFreshBlightSystemsControlled(i) : 0; },
+  },
+  17:{ // Overlord 霸主(恐惧)（仅第三幕）：章末 每相符资源类型+1，每相符行星类型+2
+    3:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campOutrageMatchedRes(i)*1 + campOutrageMatchedPlanetTypes(i)*2) : 0; },
+  },
+  20:{ // Guardian 守护者(伊甸卫)（仅第三幕）：章末 暴君赢得/未宣告→每俘虏区物资燃料+1；伊甸卫赢得/未宣告→每控制的物资/燃料行星+1
+    3:(ev,d,p,i)=>{ if(ev!=='chapterEnd') return 0; let n=0;
+        if(campWonOrUndeclared(i,'tyrant')) n+=(p._greenVault&&((p._greenVault.material||0)+(p._greenVault.fuel||0)))||0;
+        if(campWonOrUndeclared(i,'edenguard')) n+=campPlanetsControlledByRes(i,'material')+campPlanetsControlledByRes(i,'fuel');
+        return n; },
+  },
+  24:{ // Judge 审判官（仅第三幕，固定6）：章末 每个存在玩家并列第一的雄心 +1
+    3:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campAmbitionsTiedFirst() : 0; },
   },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
@@ -1138,8 +1150,11 @@ const FATE_THRESHOLD = {
   1:{ 1:{2:20,3:17,4:14}, 2:{2:22,3:22,4:22} },     // Steward 摄政官 第一/二幕
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
+  17:{ 3:{2:20,3:20,4:20} },                        // Overlord 霸主(恐惧) 第三幕
   19:{ 3:{2:16,3:14,4:12} },                        // Redeemer 救赎者 第三幕
-  21:{ 1:{2:18,3:16,4:14} },                        // Naturalist 博物学家 第一幕
+  20:{ 3:{2:15,3:15,4:15} },                        // Guardian 守护者(伊甸卫) 第三幕
+  21:{ 3:{2:18,3:16,4:14} },                        // Naturalist 博物学家 第三幕
+  24:{ 3:{2:6,3:6,4:6} },                           // Judge 审判官 第三幕（固定6）
 };
 function fateThreshold(num,act,np){ const t=FATE_THRESHOLD[num]&&FATE_THRESHOLD[num][act]; return t?(t[np]||null):null; }
 // 非计时型目标判定（双目标/终局幕）: fn(player,idx) => bool
@@ -1199,6 +1214,18 @@ function campMoreLoyalShipsThanRivals(playerIdx){ const mine=campLoyalShipsTotal
 function campBlightInControlledShipped(playerIdx){ const col=G.players[playerIdx].color.key; let n=0;
   for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
     if((s.pieces.ships[col]||0)>0 && controllerOf(id)===col) n+=blightTotal(s); } return n; }
+// 审判官：章末存在「≥2 名真实玩家并列第一」的雄心盒数量
+function campAmbitionsTiedFirst(){ let n=0;
+  AMB_ORDER.forEach(k=>{ const vals=G.players.map(p=>AMBITIONS[k].count(p)); const mx=Math.max(0,...vals);
+    if(mx>0 && vals.filter(v=>v===mx).length>=2) n++; }); return n; }
+// 霸主(恐惧)：与你民愤相符且你持有的资源类型数；与你民愤相符且你控制的行星类型数（首席摄政含帝国控制行星）
+function campOutrageMatchedRes(playerIdx){ const p=G.players[playerIdx]; let n=0;
+  RES_ORDER.forEach(r=>{ if(p.outraged[r] && (p.res[r]||0)>0) n++; }); return n; }
+function campOutrageMatchedPlanetTypes(playerIdx){ const p=G.players[playerIdx]; let n=0;
+  RES_ORDER.forEach(r=>{ if(!p.outraged[r]) return;
+    let ctrl=campPlanetsControlledByRes(playerIdx,r);
+    if(G.campaign.firstRegentIdx===playerIdx) ctrl+=campEmpireSystems().filter(id=>G.map[id].kind==='planet'&&G.map[id].resource===r).length;
+    if(ctrl>0) n++; }); return n; }
 
 /* ===== 阶段4：帝国身份轴 + 帝国议会 + 帝国信托 ===== */
 // 帝国议会：固定宫廷卡（双面 会期中/已裁决），不入牌堆、不计钥匙
