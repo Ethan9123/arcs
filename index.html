@@ -699,6 +699,75 @@ const LORE=[
   {id:'tycoonscharm', name:"Tycoon's Charm", cn:'大亨魅力', kind:'ext', eff:['charmgain','clearoutrage:material','clearoutrage:fuel'],
    abilities:[{n:'大亨魅力',t:'条件序幕',d:'大亨被宣告期间，序幕可弃任意数量物资+燃料，每弃 1 个获得 1 资源（已实装）。序幕：可弃此卡清除物资+燃料民愤（已实装）。'}]},
 ];
+/* ===================== 战役扩展《凋敝远疆 The Blighted Reach》===================== */
+/* 24 张命运卡（Fate）核心数据：名称/主题/复杂度(1-3星)/三幕目标概述。
+   战役模式为叠在基础游戏之上的元层（G.campaign.enabled 门控）；阶段性实装，地基阶段仅
+   提供命运选择、状态承载与持久化，幕流程/帝国政治/旗舰等子系统在后续阶段启用。
+   完整卡牌明细见 _court_tmp/campaign_catalog.json。 */
+const CAMPAIGN_FATES=[
+  {num:1,en:'Steward',cn:'摄政官 / 管家',cx:2,theme:'扮演努力维系一个正在分裂的帝国的首席摄政，在派系林立的帝国议会政治中纵横捭阖：先以首席摄政身份赢得雄心确立权威，再扩张帝国控制并填满帝国信托。',acts:['巩固你的帝国权力：以首席摄政身份赢得雄心来确立权威。','扩张帝国与确保帝国贡赋：每章末按帝国控制星团数与帝国信托资源数推进。','将帝国扎根于远疆：作为首席摄政巩固帝国对法外者城市的控制并填满信托。']},
+  {num:2,en:'Founder',cn:'奠基者',cx:2,theme:'建立以相互尊重和开放市场为基础的新秩序——作为法外者达成雄心，随后领导自由城市联邦在星图上扩张并保护其免受帝国与圈外玩家控制。',acts:['作为法外者达成你的雄心并控制星系。','领导自由城市联邦，并让自由城市在星图上扩散。','保护自由城市，使其免遭帝国以及联邦之外玩家的控制。']},
+  {num:3,en:'Magnate',cn:'大亨巨贾',cx:1,theme:'垄断市场、以商业手腕统治远疆：在峰会上与对手交易物资与好感，夺取并把持物资供应的「垄断」，最终带着财富逃离远疆。',acts:['在峰会上与对手以物易物，交易物资与好感。','夺取并把持各物资供应之上的「垄断」。','把持「垄断」并带着你的财富逃离远疆。']},
+  {num:4,en:'Advocate',cn:'代言人',cx:1,theme:'与远疆的古老行会建立联系，让自己变得不可或缺——通过囤积、运用并保留议会中的行会卡来获取权力。',acts:['尽可能多地使用并回收行会卡，同时向行会监督者证明自己。','在多种花色上拥有比对手更多的行会卡。','用行会卡填满议会，并保留多种行会花色。']},
+  {num:5,en:'Caretaker',cn:'守护者(傀儡)',cx:3,theme:'唤醒并掌控傀儡以守护先驱者的智慧：先控制并唤醒沉睡傀儡加以使用，再从议会与峰会的对手处收集遗珍，最终用傀儡废弃自己的遗珍与傀儡本身。',acts:['控制并唤醒沉睡傀儡，然后使用它们。','从议会以及峰会中的对手处收集遗珍。','用你的傀儡来废弃你的遗珍以及傀儡本身。']},
+  {num:6,en:'Partisan',cn:'游击者',cx:1,theme:'煽动民愤、不惜代价摧毁远疆的压迫者：靠激起民愤夺取先攻、聚拢公会支持来洗白形象，最终成为先攻在手、公会卡最多的主导势力。',acts:['在远疆播下分裂：每次以任意方式取得先攻便推进进度。','展现领导力并洗白形象。','组建主导权力集团：公会卡比每位对手都多并持有先攻。']},
+  {num:7,en:'Admiral',cn:'海军上将',cx:1,theme:'恢复帝国舰队的力量、夺回属于你的王座：通过壮大帝国舰队并用它作战夺取战利品，对行星与对手施加帝国控制，最终掌控远疆行星并打造最强海军。',acts:['证明自己：壮大帝国舰队并用它作战夺取战利品。','施加帝国控制：控制行星并压制对手——摄政与法外者皆然。','保持武力垄断：控制远疆行星并打造最强海军。']},
+  {num:8,en:'Believer',cn:'信徒',cx:3,theme:'扮演传播信仰的教派领袖："睁开他们的双眼，看见真理"：先把信徒行动卡铺入对局，再用信徒卡宣告并达成雄心来确立信仰的「理念」。',acts:['传扬福音：每次赢得雄心时按信徒行动卡牌堆顶推进。','发展信仰的理念：在放有理念标记的雄心上推进。','引导信众：把雄心标记放在带有理念的雄心上。']},
+  {num:9,en:'Pathfinder',cn:'探路者',cx:2,theme:'放弃所有建筑换取旗舰，搜寻线索找到隐秘传送门，并引导朝圣者通过传送门逃离凋敝远疆。',acts:['搜寻线索并定位隐秘的传送门；放弃所有建筑换取旗舰。','引导朝圣者前往传送门。','（终局）']},
+  {num:10,en:'Hegemon',cn:'霸主(旗帜)',cx:3,theme:'以单一旗帜统御万民、用一个意志统一思想的秩序霸权之路——征服宿敌、四处插旗，靠旗帜数量与战利品换取力量。',acts:['降服你的宿敌并插上新秩序的旗帜。','在地图上维持众多旗帜。','（终局）']},
+  {num:11,en:'Planet Breaker',cn:'碎星者',cx:3,theme:'收集"碎星之锤"碎片修复行星之锤，用它砸碎行星、摧毁建筑并向全场散播凋敝与民愤；为换取旗舰甚至废弃自己的建筑。',acts:['修复行星之锤：从地图取走碎星之锤碎片。','砸碎远疆诸界。','（终局）']},
+  {num:12,en:'Pirate',cn:'海盗',cx:1,theme:'放弃建筑换取旗舰，靠掠夺充实海盗宝库，并将海盗藏匿处隐藏起来，以谣言迷惑对手。',acts:['用偷来的资源填满你的海盗宝库；放弃建筑换取旗舰。','让你的海盗藏匿处保持隐秘与安全。','（终局）']},
+  {num:13,en:'Blight Speaker',cn:'凋敝代言者',cx:1,theme:'操控并研究凋敝，让其按你的意志蔓延滋长；先以散布孢子的方式喂养凋敝、同时夺取雄心壮大势力，最终主宰军阀雄心并把凋敝养得肥硕。',acts:['联系远古智慧与散布新生孢子：赢得雄心时推进。','以尸身喂饱凋敝：无对手赢得军阀且凋敝饥饿。','（终局）']},
+  {num:14,en:'Pacifist',cn:'和平主义者',cx:2,theme:'在凋敝远疆扩散通灵共情、拒绝暴力（不夺取战利品/俘虏），用同理心治愈濒死的远疆，并让对手也受益于你的努力。',acts:['承诺和平：扩散通灵能量并承诺不夺取战利品/俘虏。','展示非暴力：你没有战利品/俘虏，且对手也受益。','（终局）']},
+  {num:15,en:'Peacekeeper',cn:'维和者',cx:2,theme:'为了和平必须销毁制造苦难的工具——通过控制武器星球、没收武器并强制执行停火来维持远疆的和平。',acts:['控制武器星球并没收武器；清除自己的民愤。','通过强制执行停火，使远疆保持和平。','（终局）']},
+  {num:16,en:'Warden',cn:'守护者(领主)',cx:3,theme:'疆域过于辽阔，单一帝国无法维系，唯有回归旧制——成为采邑的领主，掌控其王座城市，并随着封建制度蔓延全境而守住自己的采邑。',acts:['成为领主：在城市上放置王座标记建立采邑。','回归旧制：你担任领主的采邑数量多于每位对手。','（终局）']},
+  {num:17,en:'Overlord',cn:'霸主(恐惧)',cx:1,theme:'通过控制与你民愤类型相符的星球、并持有与民愤相符的物资来获取胜利；可废弃旗舰补充舰队，但敕令结算时民愤会让你失去权力。',acts:['（前两幕沿用战役基础设置）','（前两幕沿用战役基础设置）','仅凭恐惧统治：控制与民愤相符的星球并持有相符物资。']},
+  {num:18,en:'Survivalist',cn:'幸存者',cx:2,theme:'"风暴已至，让我为你提供庇护"——在凋敝的废墟中建造地堡、抓取俘虏以抵御凋敝危机。为求生存可废弃旗舰补充舰队，但赢得雄心所获权力减半。',acts:['守护人民安全：按俘虏数或地堡数推进。','（终局）','（终局）']},
+  {num:19,en:'Redeemer',cn:'救赎者',cx:1,theme:'收集遗物然后将其全部摧毁；可舍弃旗舰补充舰队、挑起遗物义愤，不可宣告守护雄心——若守护被宣告而你未赢得它则在敕令上损失威望。',acts:['（前两幕沿用战役基础设置）','（前两幕沿用战役基础设置）','制服守护者：收集遗物然后摧毁它们。']},
+  {num:20,en:'Guardian',cn:'守护者(伊甸卫)',cx:1,theme:'以全新的「伊甸卫」雄心保护远疆——控制最多的物资与燃料行星、并通过俘获物资与燃料来守护这片土地，不再耗竭它。',acts:['另辟权途：章末完成目标卡且至少 1 点权力即获胜。','（终局）','（终局）']},
+  {num:21,en:'Naturalist',cn:'博物学家',cx:2,theme:'凋敝并非威胁而是花园：引入全新「凋敝同族」雄心，通过控制最多带新鲜凋敝的星系来获胜；你可以移动、修理凋敝并在己方忠诚舰船所在星系阻止凋敝危机。',acts:['在花园中安居：控制最多带新鲜凋敝的星系。','（终局）','（终局）']},
+  {num:22,en:'Gate Wraith',cn:'星门幽灵',cx:3,theme:'"找到出路…重聚…复归完整。"通过弹射移动崩塌星门、生成通道汇入地图中心的"扭曲通道"，进而控制它而登顶。',acts:['崩塌远疆诸星门。','（终局）','（终局）']},
+  {num:23,en:'Conspirator',cn:'阴谋家',cx:2,theme:'孵化"阴谋"暗中预测谁将赢得或并列雄心榜首，预言越准越接近胜利；可放弃旗舰来补充舰队，但自己不再能宣布雄心。',acts:['掌控全局：达到先攻刻度即完成目标。','（终局）','（终局）']},
+  {num:24,en:'Judge',cn:'裁判',cx:3,theme:'绝对权力使人绝对腐化——裁判通过维持各玩家在雄心上的并列第一来"平衡远疆"，可弃旗舰补充舰队，任由对手偷取自己的战利品与俘虏。',acts:['（仅第三幕进入战役）','（仅第三幕进入战役）','平衡远疆：每章末按存在玩家并列第一的雄心数推进。']},
+];
+function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
+function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
+
+/* --------- 战役持久化：快照 / 还原 / localStorage 多存档槽 / JSON 导出导入 --------- */
+// G 为纯数据对象（无函数/DOM/循环引用），可直接 JSON 序列化。快照含版本号便于日后迁移。
+const CAMPAIGN_SAVE_VERSION = 1;
+const CAMPAIGN_SLOT_PREFIX = 'arcs_campaign_';
+function campaignSnapshot(){ return JSON.stringify({ v:CAMPAIGN_SAVE_VERSION, ts:null, G }); }
+function restoreCampaignSnapshot(str){
+  const obj = (typeof str==='string') ? JSON.parse(str) : str;
+  if(!obj || !obj.G) throw new Error('存档格式无效');
+  G = obj.G;
+  return G;
+}
+function hasLocalStorage(){ try { return typeof localStorage!=='undefined' && localStorage; } catch(e){ return false; } }
+function campaignSlotKey(slot){ return CAMPAIGN_SLOT_PREFIX + (slot||'auto'); }
+function saveCampaignSlot(slot, label){
+  if(!hasLocalStorage()) return false;
+  try { const snap=JSON.parse(campaignSnapshot()); snap.label=label||(G&&G.campaign&&G.campaign.label)||'战役存档';
+    localStorage.setItem(campaignSlotKey(slot), JSON.stringify(snap)); return true; } catch(e){ return false; }
+}
+function loadCampaignSlot(slot){
+  if(!hasLocalStorage()) return false;
+  const s=localStorage.getItem(campaignSlotKey(slot)); if(!s) return false;
+  try { restoreCampaignSnapshot(s); return true; } catch(e){ return false; }
+}
+function deleteCampaignSlot(slot){ if(hasLocalStorage()) try { localStorage.removeItem(campaignSlotKey(slot)); } catch(e){} }
+function listCampaignSlots(){
+  if(!hasLocalStorage()) return [];
+  const out=[];
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+    if(k && k.indexOf(CAMPAIGN_SLOT_PREFIX)===0){ const slot=k.slice(CAMPAIGN_SLOT_PREFIX.length);
+      let meta={}; try { const o=JSON.parse(localStorage.getItem(k)); meta={label:o.label, act:o.G&&o.G.campaign&&o.G.campaign.act, np:o.G&&o.G.numPlayers, chapter:o.G&&o.G.chapter}; } catch(e){}
+      out.push(Object.assign({slot}, meta)); } }
+  return out;
+}
+// 战役自动存档：仅当战役模式开启时生效（单场模式零影响）
+function autosaveCampaign(){ if(G && G.campaign && G.campaign.enabled) saveCampaignSlot('auto'); }
 function loreById(id){ return LORE.find(L=>L.id===id); }
 // 该玩家持有的传说卡里是否有指定机制 eff（扩展关闭或无卡时恒 false）
 function loreHas(p,key){
@@ -796,7 +865,7 @@ function pname(i){ const p=G.players[i]; return `<span style="color:${p.color.cs
 /* ------------------------------ 游戏状态 -------------------------------- */
 let G = null; // 全局游戏对象
 
-function newGame(numPlayers, names, useExpansion, setupVariant){
+function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
   const map = buildMap();
   const players = [];
   for(let i=0;i<numPlayers;i++){
@@ -809,6 +878,11 @@ function newGame(numPlayers, names, useExpansion, setupVariant){
       outraged:{material:false,fuel:false,weapon:false,relic:false,psionic:false}, // 民愤：被覆盖的资源不能用于序幕行动（仍可课税/计雄心）
       supply:{ships:15, cities:5, starports:5, agents:10}, // 未上场的棋子
       hasPassed:false, outForRound:false,
+      // 战役字段（仅战役模式生效；单场模式恒为默认值）
+      fate:null,                 // 命运卡 num (1-24)
+      identity:'regent',         // 'regent'(摄政) | 'outlaw'(法外者)
+      fateProgress:0,            // 命运目标进度计数
+      fateObjMet:[false,false,false], // 三幕目标达成标记
     });
   }
   G = {
@@ -845,7 +919,25 @@ function newGame(numPlayers, names, useExpansion, setupVariant){
     actionsLeft:0, actionSuit:null,
     pending:null,            // 交互式行动状态 {type, step, ...}
     log:[],
+    // 战役元层状态（enabled=false 时基础游戏行为零变化；阶段性启用各子系统）
+    campaign: campaignOpts ? {
+      enabled:true,
+      label: campaignOpts.label || '战役',
+      act:1,                 // 当前幕 1-3
+      session:1,             // 当前场次
+      intermissionPending:false,
+      firstRegentIdx:null,   // 首席摄政玩家 idx
+      trust:{material:0,fuel:0,weapon:0,relic:0,psionic:0}, // 帝国信托
+      council:'session',     // 'session'(会期中) | 'decided'(已裁决)
+      lawbook:[],            // 有序律法/敕令/头衔卡（阶段5启用）
+      edictPolicy:null,      // 当前政策面
+      fatesInPlay: (campaignOpts.fates||[]).slice(), // 本局命运 num 列表（按玩家序）
+    } : { enabled:false },
   };
+  // 战役模式：把分配的命运写入各玩家
+  if(campaignOpts && campaignOpts.fates){
+    campaignOpts.fates.forEach((fnum,i)=>{ if(players[i]) players[i].fate=fnum; });
+  }
   setupGame();
   return G;
 }
@@ -1383,6 +1475,13 @@ function renderTop(){
     `行动牌库 <b>${G.actionDeck.length}</b>`,
     `阶段 <b>${phaseName(G.phase)}</b>`,
   ];
+  // 战役模式状态：幕 / 场次 / 首席摄政
+  if(G.campaign && G.campaign.enabled){
+    let cc=`📜 第 <b>${G.campaign.act}</b> 幕`;
+    if(G.campaign.firstRegentIdx!=null && G.players[G.campaign.firstRegentIdx])
+      cc+=` · 首席摄政 <b style="color:${G.players[G.campaign.firstRegentIdx].color.css}">${G.players[G.campaign.firstRegentIdx].name}</b>`;
+    chips.unshift(cc);
+  }
   chips.forEach(h=>{const c=el('span','chip');c.innerHTML=h;t.appendChild(c);});
   const rb=el('button','btn ghost sm','📖 规则'); rb.style.marginLeft='8px'; rb.onclick=showRules; t.appendChild(rb);
   const muteBtn=el('button','btn ghost sm',SFX._muted?'🔇':'🔊'); muteBtn.title=SFX._muted?'已静音':'点击静音';
@@ -1391,6 +1490,10 @@ function renderTop(){
   const tutBtn=el('button','btn ghost sm','📚'); tutBtn.title='新手教学';
   tutBtn.style.marginLeft='4px';
   tutBtn.onclick=()=>TUT.start(); t.appendChild(tutBtn);
+  if(G.campaign && G.campaign.enabled){
+    const saveBtn=el('button','btn ghost sm','💾'); saveBtn.title='战役存档'; saveBtn.style.marginLeft='4px';
+    saveBtn.onclick=()=>{ saveCampaignSlot('auto', G.campaign.label); openCampaignLoadMenu(); }; t.appendChild(saveBtn);
+  }
 }
 function phaseName(p){return {setup:'布置',leaderdraft:'领袖抽选',loredraft:'传说发牌',lead:'主导出牌',follow:'跟随',actions:'执行行动',battle:'战斗',score:'结算',end:'终局'}[p]||p;}
 
@@ -1400,6 +1503,13 @@ function renderPlayers(){
     const d=el('div','pl'+(i===G.turnPlayer?' cur':''));
     const dot=el('span','dot'); dot.style.background=p.color.css; d.appendChild(dot);
     d.appendChild(el('span','nm',p.name));
+    // 命运标签（战役模式）：显示命运卡 + 摄政/法外身份，点击查看命运详情
+    if(G.campaign && G.campaign.enabled && p.fate){ const f=fateByNum(p.fate);
+      const fb=el('span','res'); fb.style.cssText='cursor:pointer;color:#c98bd6;font-size:11px;margin-left:4px';
+      const idTag = p.identity==='outlaw' ? '⚑法外' : '👑摄政';
+      fb.title='点击查看命运详情'; fb.innerHTML=`🎴${f?f.cn:('命运'+p.fate)} <span style="opacity:.7">${idTag}</span>`;
+      fb.onclick=()=>showFateCard(p.fate); d.appendChild(fb);
+    }
     // 领袖标签（仅开扩展且已分配）：小字，点击弹出该领袖全部能力
     if(G.useExpansion && p.leader){ const L=leaderById(p.leader);
       const lb=el('span','res'); lb.style.cssText='cursor:pointer;color:#d9b25a;font-size:11px;margin-left:4px';
@@ -1695,6 +1805,7 @@ function promptActions(){
 }
 function endActorTurn(){
   G.pending=null; G.highlight=null;
+  autosaveCampaign(); // 战役模式：回合末自动存档（单场模式空操作）
   if(G.actionContext==='lead'){ startFollow(); }
   else { G.followQueue.shift(); advanceFollow(); }
 }
@@ -3675,6 +3786,23 @@ function cardImgEl(src, h){
   im.onerror=()=>{ im.remove(); };
   return im;
 }
+// 命运卡详情：卡面图(若有) + 主题 + 三幕目标。num 为命运编号 1-24。
+function showFateCard(num){
+  const f=fateByNum(num); if(!f) return;
+  openModal(m=>{
+    m.appendChild(el('h2',null,`🎴 ${f.cn} ${f.en}　${fateStars(f.cx)}`));
+    m.appendChild(cardImgEl(`assets/fate/${num}.jpg`,420));
+    const th=el('div','hintbox'); th.style.cssText='text-align:left;margin:6px 0';
+    th.innerHTML=`<span style="font-size:12.5px;line-height:1.6">${f.theme}</span>`; m.appendChild(th);
+    const roman=['Ⅰ','Ⅱ','Ⅲ'];
+    f.acts.forEach((obj,ai)=>{ if(!obj) return;
+      const d=el('div','hintbox'); d.style.cssText='text-align:left;margin:5px 0';
+      d.innerHTML=`<b style="color:#c98bd6">第 ${roman[ai]} 幕</b><br><span style="font-size:12.5px;line-height:1.6">${obj}</span>`;
+      m.appendChild(d);
+    });
+    const cc=el('button','btn gold','关闭'); cc.style.marginTop='8px'; cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
 function showLeaderCard(leaderId){
   const L=leaderById(leaderId); if(!L) return;
   openModal(m=>{
@@ -3710,12 +3838,29 @@ function showStartScreen(){
   const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
   let np=4; let names=['','','','']; let useExp=false;
   let setupV='4_frontiers'; // 当前选中的布局方案
+  let mode='single';        // 'single'(单场) | 'campaign'(凋敝远疆战役)
   function draw(){
     // 若人数变化后当前方案不属于该人数，重置为对应默认值
     if(!setupV.startsWith(np+'_')) setupV=np+'_homelands';
     m.innerHTML='';
     m.appendChild(el('h2',null,'ARCS 暗星悬弧 · 电子版'));
-    m.appendChild(el('div','hintbox','基础游戏 · 热座（同设备轮流）· 中文界面。选择人数、布局与名称后开始。'));
+    // 模式切换：单场 / 战役
+    const modeRow=el('div','row'); modeRow.appendChild(el('span',null,'模式：'));
+    const mseg=el('div','seg');
+    [['single','🎯 单场'],['campaign','📜 凋敝远疆战役']].forEach(([k,lab])=>{
+      const b=el('button',mode===k?'on':'',lab); b.onclick=()=>{ mode=k; draw(); }; mseg.appendChild(b);
+    });
+    modeRow.appendChild(mseg); m.appendChild(modeRow);
+    // 读档入口（存在自动存档时）
+    const saves=listCampaignSlots();
+    if(saves.length){
+      const lr=el('div','row'); const lb=el('button','btn ghost sm',`📂 继续战役（${saves.length} 个存档）`);
+      lb.style.cssText='width:100%;text-align:left';
+      lb.onclick=()=>openCampaignLoadMenu(); lr.appendChild(lb); m.appendChild(lr);
+    }
+    m.appendChild(el('div','hintbox', mode==='campaign'
+      ? '凋敝远疆战役 · 热座。每位玩家选 1 张命运卡（Fate），跨场次进度自动存档。地基阶段：命运与持久化已就绪，幕流程/帝国政治/旗舰等将逐阶段启用。'
+      : '基础游戏 · 热座（同设备轮流）· 中文界面。选择人数、布局与名称后开始。'));
     const seg=el('div','row');
     seg.appendChild(el('span',null,'玩家人数：'));
     const sg=el('div','seg');
@@ -3745,16 +3890,21 @@ function showStartScreen(){
       inp.oninput=e=>names[i]=e.target.value; r.appendChild(inp);
       m.appendChild(r);
     }
-    // 扩展开关：勾选后 newGame 时 G.useExpansion=true，开局进行领袖抽选
-    const expRow=el('div','row'); expRow.style.marginTop='8px';
-    const expBtn=el('button','btn ghost sm',(useExp?'☑':'☐')+' ⚔ 领袖与传说扩展');
-    expBtn.style.cssText='width:100%;text-align:left';
-    expBtn.onclick=()=>{ useExp=!useExp; draw(); };
-    expRow.appendChild(expBtn); m.appendChild(expRow);
-    if(useExp) m.appendChild(el('div','hintbox','已启用领袖与传说扩展：开局每位玩家从 2 名领袖中选 1 名，随后各发 2 张传说卡作为个人能力。'));
+    // 扩展开关：勾选后 newGame 时 G.useExpansion=true，开局进行领袖抽选（战役模式下隐藏：战役有自身 setup）
+    if(mode==='single'){
+      const expRow=el('div','row'); expRow.style.marginTop='8px';
+      const expBtn=el('button','btn ghost sm',(useExp?'☑':'☐')+' ⚔ 领袖与传说扩展');
+      expBtn.style.cssText='width:100%;text-align:left';
+      expBtn.onclick=()=>{ useExp=!useExp; draw(); };
+      expRow.appendChild(expBtn); m.appendChild(expRow);
+      if(useExp) m.appendChild(el('div','hintbox','已启用领袖与传说扩展：开局每位玩家从 2 名领袖中选 1 名，随后各发 2 张传说卡作为个人能力。'));
+    }
     const ctl=el('div','row');ctl.style.marginTop='14px';
-    const start=el('button','btn gold','开始游戏');
-    start.onclick=()=>{ w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); render(); };
+    const start=el('button','btn gold', mode==='campaign'?'选择命运并开始战役':'开始游戏');
+    start.onclick=()=>{
+      if(mode==='campaign'){ startCampaignSetup(np, names.slice(0,np), setupV); }
+      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); render(); }
+    };
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
     rules.onclick=showRules; ctl.appendChild(rules);
@@ -3765,6 +3915,86 @@ function showStartScreen(){
     m.appendChild(ctl);
   }
   draw();
+}
+/* 战役开局：逐玩家选命运 → 创建战役 G + 自动存档。地基阶段不启用幕流程，命运与持久化先就绪。 */
+function startCampaignSetup(np, names, setupV){
+  const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
+  const pool = CAMPAIGN_FATES.map(f=>f.num);
+  const chosen = [];
+  const launch=()=>{
+    w.style.display='none';
+    const label='战役·'+names.slice(0,np).map((n,i)=>n||PCOLORS[i].name).join('/');
+    newGame(np, names.slice(0,np), false, setupV, {fates:chosen.slice(0,np), label});
+    saveCampaignSlot('auto', label);
+    render();
+    toast('战役已创建并自动存档（地基阶段：幕目标判定将在后续阶段启用）');
+  };
+  const step=(pi)=>{
+    if(pi>=np){ launch(); return; }
+    openModal(mm=>{
+      mm.appendChild(el('h2',null,`命运选择 · ${names[pi]||PCOLORS[pi].name+'方'}（${pi+1}/${np}）`));
+      mm.appendChild(el('div','hintbox','选择你的命运（Fate）。复杂度 ●○○~●●● 表示机制深度。点卡名旁「图」可看卡面。'));
+      const grid=el('div'); grid.style.cssText='max-height:56vh;overflow:auto;display:grid;grid-template-columns:1fr 1fr;gap:6px';
+      pool.forEach(num=>{ const f=fateByNum(num);
+        const b=el('button','btn'); b.style.cssText='display:block;text-align:left;padding:8px;margin:0;line-height:1.4';
+        b.innerHTML=`<b>${f.cn}</b> <span style="opacity:.55;font-size:11px">${f.en}</span> <span style="color:#d9b25a">${fateStars(f.cx)}</span>`+
+          `<br><span style="font-size:11px;opacity:.8">${f.theme.length>54?f.theme.slice(0,54)+'…':f.theme}</span>`;
+        b.onclick=()=>{ chosen.push(num); pool.splice(pool.indexOf(num),1); closeModal(); step(pi+1); };
+        grid.appendChild(b);
+      });
+      mm.appendChild(grid);
+      const rnd=el('button','btn ghost','🎲 余下玩家随机分配并开始');
+      rnd.style.cssText='width:100%;margin-top:8px';
+      rnd.onclick=()=>{ while(chosen.length<np && pool.length){ const k=Math.floor(Math.random()*pool.length); chosen.push(pool.splice(k,1)[0]); } closeModal(); launch(); };
+      mm.appendChild(rnd);
+      const back=el('button','btn ghost','返回'); back.onclick=()=>{ closeModal(); showStartScreen(); };
+      mm.appendChild(back);
+    });
+  };
+  step(0);
+}
+/* 战役读档菜单：列出 localStorage 中的存档槽，支持读取/删除/导出JSON、以及导入JSON */
+function openCampaignLoadMenu(){
+  openModal(m=>{
+    m.appendChild(el('h2',null,'📂 战役存档'));
+    const saves=listCampaignSlots();
+    if(!saves.length) m.appendChild(el('div','hintbox','暂无存档。'));
+    saves.forEach(sv=>{
+      const row=el('div','row'); row.style.cssText='gap:6px;align-items:center';
+      const info=el('button','btn'); info.style.cssText='flex:1;text-align:left';
+      info.innerHTML=`<b>${sv.label||sv.slot}</b><br><span style="font-size:11px;opacity:.7">${sv.np||'?'}人 · 第${sv.chapter||1}章 · 第${sv.act||1}幕</span>`;
+      info.onclick=()=>{ if(loadCampaignSlot(sv.slot)){ $('#modalWrap').style.display='none'; render(); toast('战役已读取'); } else toast('读取失败'); };
+      row.appendChild(info);
+      const exp=el('button','btn ghost sm','导出'); exp.title='导出为 JSON 文件';
+      exp.onclick=()=>exportCampaignFile(sv.slot); row.appendChild(exp);
+      const del=el('button','btn ghost sm','🗑'); del.onclick=()=>{ deleteCampaignSlot(sv.slot); closeModal(); openCampaignLoadMenu(); }; row.appendChild(del);
+      m.appendChild(row);
+    });
+    const imp=el('button','btn ghost','📥 导入 JSON 存档'); imp.style.cssText='width:100%;margin-top:8px';
+    imp.onclick=()=>importCampaignFile(); m.appendChild(imp);
+    const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
+function exportCampaignFile(slot){
+  if(!hasLocalStorage()) return;
+  const data=localStorage.getItem(campaignSlotKey(slot)); if(!data){ toast('存档不存在'); return; }
+  try{
+    const blob=new Blob([data],{type:'application/json'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download=`arcs_campaign_${slot}.json`; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    toast('已导出 JSON 存档');
+  }catch(e){ toast('导出失败'); }
+}
+function importCampaignFile(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='application/json,.json';
+  inp.onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ try{ restoreCampaignSnapshot(String(r.result)); saveCampaignSlot('imported', (G.campaign&&G.campaign.label)||'导入的战役');
+      $('#modalWrap').style.display='none'; render(); toast('已导入并读取战役存档'); }catch(err){ toast('导入失败：存档格式无效'); } };
+    r.readAsText(f);
+  };
+  inp.click();
 }
 function showRules(){
   const sec=(title,body)=>`<div style="margin:10px 0 4px;color:#d9b25a;font-weight:800;font-size:14px">${title}</div><div style="color:#c4cde0;font-size:12.5px;line-height:1.7">${body}</div>`;
