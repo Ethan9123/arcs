@@ -1432,6 +1432,51 @@ function campEscalationPlaceShips(){
   if(target){ campPlaceImperialShips(target,2); return target; }
   campLog('升级·帝国行动：无可放置帝国星舰的系统'); return null;
 }
+
+/* ===== 阶段8b：旗舰(Flagship) 子系统（旗舰升级参考卡 + 帝国规则辅助卡） ===== */
+// 6 项升级（受损仍提供效益）：旗舰板列出，命中作为护甲逐一受损
+const FLAGSHIP_UPGRADES = [
+  {k:'slipstream', cn:'滑流引擎', d:'序幕每回合一次：弹射移动旗舰，或将其他星舰从旗舰处移出'},
+  {k:'tractor',    cn:'牵引波束', d:'旗舰防御时，攻击方不能掷劫掠骰'},
+  {k:'control',    cn:'控制阵列', d:'旗舰在星门时，可将该星簇任意城市当忠诚课税（不抓俘虏）'},
+  {k:'defense',    cn:'防御阵列', d:'旗舰防御时可拦截，按旗舰板每个完好星港造成 1 击'},
+  {k:'crane',      cn:'星舰起重机', d:'旗舰每回合可建造至多 2 艘星舰'},
+  {k:'hull',       cn:'船体', d:'无特殊效益，可像其他升级一样被命中'},
+];
+function campHasFlagship(playerIdx){ const p=G.players[playerIdx]; return !!(p&&p.flagship&&p.flagship.sys); }
+function campFlagshipAt(sysId){ for(let i=0;i<G.players.length;i++){ if(campHasFlagship(i)&&G.players[i].flagship.sys===sysId) return i; } return -1; }
+// 旗舰升级是否生效（受损仍生效；只要旗舰在场且拥有该槽即 true）
+function campFlagshipUpgrade(playerIdx, k){ return campHasFlagship(playerIdx) && !!G.players[playerIdx].flagship.up && (k in G.players[playerIdx].flagship.up); }
+function campFlagshipFreshStarports(playerIdx){ if(!campHasFlagship(playerIdx)) return 0; const p=G.players[playerIdx];
+  // 旗舰板上的星港（防御阵列拦截用）：简化为「有任一新鲜升级 → 1」，命运实装时细化为板上实际星港数
+  return Object.values(p.flagship.up).some(v=>v==='fresh')?1:0; }
+// 旗舰布置：在含本玩家忠诚棋子(舰/建筑)的系统放置旗舰；6 升级全新鲜
+function campFlagshipSetup(playerIdx, sysId){ const p=G.players[playerIdx]; const s=G.map[sysId]; if(!p||!s||s.outOfPlay) return false;
+  const col=p.color.key; const hasLoyal=(s.pieces.ships[col]>0)||s.pieces.buildings.some(b=>b.owner===col);
+  if(!hasLoyal) return false;
+  const up={}; FLAGSHIP_UPGRADES.forEach(u=>up[u.k]='fresh'); p.flagship={sys:sysId, up};
+  campLog(`${pname(playerIdx)} 旗舰布置于 ${sysId}（6 升级全新鲜）`); return true; }
+// 旗舰移动：迁到相邻系统（滑流引擎可弹射，本版按相邻处理）
+function campFlagshipMove(playerIdx, dstSys){ if(!campHasFlagship(playerIdx)) return false; const p=G.players[playerIdx];
+  const cur=G.map[p.flagship.sys]; if(!cur || !(cur.neighbors||[]).includes(dstSys)) return false;
+  p.flagship.sys=dstSys; campLog(`${pname(playerIdx)} 旗舰移动 → ${dstSys}`); return true; }
+// 旗舰重新安置(Resettle)：移除并在含忠诚棋子的新系统重放
+function campFlagshipResettle(playerIdx, sysId){ const p=G.players[playerIdx]; const s=G.map[sysId]; if(!campHasFlagship(playerIdx)||!s||s.outOfPlay) return false;
+  const col=p.color.key; const hasLoyal=(s.pieces.ships[col]>0)||s.pieces.buildings.some(b=>b.owner===col); if(!hasLoyal) return false;
+  p.flagship.sys=sysId; campLog(`${pname(playerIdx)} 旗舰重新安置于 ${sysId}`); return true; }
+// 旗舰受击：逐一损坏新鲜升级（护甲）；全部受损后再受击则摧毁旗舰
+function campFlagshipHit(playerIdx, n){ if(!campHasFlagship(playerIdx)) return {damaged:0,destroyed:false}; const p=G.players[playerIdx];
+  let dmg=0; n=n||1;
+  for(let h=0;h<n;h++){ const fresh=FLAGSHIP_UPGRADES.map(u=>u.k).filter(k=>p.flagship.up[k]==='fresh');
+    if(fresh.length){ p.flagship.up[fresh[0]]='damaged'; dmg++; }
+    else { campLog(`${pname(playerIdx)} 旗舰所有升级已受损，再受击 → 旗舰被摧毁`); p.flagship=null; return {damaged:dmg,destroyed:true}; } }
+  campLog(`${pname(playerIdx)} 旗舰受损 ${dmg} 个升级`); return {damaged:dmg,destroyed:false}; }
+// 旗舰修复：修复 1 个（或全部）受损升级
+function campFlagshipRepair(playerIdx, all){ if(!campHasFlagship(playerIdx)) return 0; const p=G.players[playerIdx]; let n=0;
+  for(const u of FLAGSHIP_UPGRADES){ if(p.flagship.up[u.k]==='damaged'){ p.flagship.up[u.k]='fresh'; n++; if(!all) break; } }
+  if(n) campLog(`${pname(playerIdx)} 旗舰修复 ${n} 个升级`); return n; }
+// 星舰起重机：玩家本回合在旗舰系统可建造的舰数上限（2，否则普通规则）
+function campFlagshipCraneLimit(playerIdx, sysId){ return (campHasFlagship(playerIdx)&&G.players[playerIdx].flagship.sys===sysId&&campFlagshipUpgrade(playerIdx,'crane'))?2:0; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -1586,6 +1631,7 @@ function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
       fateProgress:0,            // 命运目标进度计数
       fateObjMet:[false,false,false], // 三幕目标达成标记
       favors:{},                 // 好感：{对手色:数量}——置于本玩家命运卡上的对手密探（峰会杠杆）
+      flagship:null,             // 旗舰：null 或 {sys, up:{6升级:'fresh'|'damaged'}}（命运9-18 用）
     });
   }
   G = {
@@ -2169,6 +2215,15 @@ function drawPieces(g, s, r){
     g.appendChild(svgEl('circle',{cx:bx,cy:by,r:18,fill:fr>0?'#6b3fa0':'#3a2456',stroke:'#1a0e2e','stroke-width':3,opacity:fr>0?0.95:0.6}));
     const bi=svgEl('text',{x:bx,y:by-2,'text-anchor':'middle',fill:'#e6d6ff','font-size':16,'font-weight':800}); bi.textContent='☣'; g.appendChild(bi);
     const bn=svgEl('text',{x:bx,y:by+14,'text-anchor':'middle',fill:'#e6d6ff','font-size':13,'font-weight':800}); bn.textContent=fr+'/'+bt; g.appendChild(bn);
+  }
+  // 旗舰(Flagship)：系统右侧玩家色大星标，标受损升级数
+  if(typeof campFlagshipAt==='function' && G.campaign && G.campaign.enabled){ const fi=campFlagshipAt(s.id);
+    if(fi>=0){ const fp=G.players[fi]; const col=fp.color.hex||fp.color.css; const fx=s.x+r+30, fy=s.y;
+      g.appendChild(svgEl('circle',{cx:fx,cy:fy,r:20,fill:col,stroke:'#000','stroke-width':3}));
+      const star=svgEl('text',{x:fx,y:fy+7,'text-anchor':'middle',fill:'#000','font-size':22,'font-weight':800}); star.textContent='✦'; g.appendChild(star);
+      const dmg=Object.values(fp.flagship.up).filter(v=>v==='damaged').length;
+      if(dmg>0){ const dn=svgEl('text',{x:fx+16,y:fy-12,'text-anchor':'middle',fill:'#e23b3b','font-size':15,'font-weight':800}); dn.textContent='-'+dmg; g.appendChild(dn); }
+    }
   }
 }
 function triPts(x,y,s){return `${x},${y-s} ${x-s},${y+s} ${x+s},${y+s}`;}
@@ -4739,6 +4794,19 @@ function openCampaignPanel(){
     const rb2=el('button','btn ghost sm','修复受损凋敝'); rb2.onclick=()=>{ campRepairAllBlight(); render(); closeModal(); openCampaignPanel(); }; br.appendChild(rb2);
     const cb2=el('button','btn ghost sm','★结算凋敝危机'); cb2.onclick=()=>{ campResolveBlightCrisis(); render(); closeModal(); openCampaignPanel(); }; br.appendChild(cb2);
     m.appendChild(br);
+    // 旗舰(Flagship)概览 + 控制
+    const fsPlayers=G.players.map((p,i)=>i).filter(i=>campHasFlagship(i));
+    const fb=el('div','hintbox'); fb.style.cssText='text-align:left';
+    fb.innerHTML='<b style="color:#d9b25a">✦ 旗舰 Flagship</b><br>'+(fsPlayers.length
+      ? fsPlayers.map(i=>{ const f=G.players[i].flagship; const dmg=Object.values(f.up).filter(v=>v==='damaged').length;
+          return `${pname(i)} @ ${f.sys}${dmg?`（${dmg} 升级受损）`:'（全新鲜）'}`; }).join('<br>')
+      : '暂无玩家持有旗舰（命运9-18 通过旗舰布置获得）');
+    m.appendChild(fb);
+    const fr2=el('div','row'); fr2.style.cssText='gap:5px;flex-wrap:wrap';
+    const setb=el('button','btn ghost sm','布置/重置旗舰'); setb.title='为某玩家在其有忠诚棋子的系统布置或重新安置旗舰';
+    setb.onclick=()=>{ closeModal(); openFlagshipSetup(); }; fr2.appendChild(setb);
+    if(fsPlayers.length){ const repb=el('button','btn ghost sm','修复旗舰升级'); repb.onclick=()=>{ fsPlayers.forEach(i=>campFlagshipRepair(i,true)); render(); closeModal(); openCampaignPanel(); }; fr2.appendChild(repb); }
+    m.appendChild(fr2);
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
@@ -4879,6 +4947,21 @@ function openSummitPick(kind, hostIdx, back){
     const ac=G.players[a].color.key; const cards=G.court.filter(c=>c&&c.agents&&(c.agents[ac]||0)>0);
     if(!cards.length){ toast('给予方在议会卡上无密探'); back&&back(); return; }
     pickFromList(`${pname(a)} 在哪张议会卡上的密探委派给 ${pname(b)}`,cards.map(c=>({label:c.name,val:c})),c=>{ if(!campDelegateAuthority(a,b,c)) toast('接收方无可用密探'); render(); back&&back(); }); }); }
+}
+/* 旗舰布置/重新安置：选玩家 → 选其有忠诚棋子的系统 */
+function openFlagshipSetup(){
+  openModal(m=>{ m.appendChild(el('h2',null,'✦ 旗舰布置 / 重新安置'));
+    m.appendChild(el('div','hintbox','选择玩家，再选其有忠诚棋子(舰/建筑)的系统放置旗舰；已有旗舰则为重新安置。'));
+    G.players.forEach((p,i)=>{ const b=el('button','btn',pname(i)+(campHasFlagship(i)?`（现于 ${p.flagship.sys}）`:'')); b.style.cssText='display:block;width:100%;margin:4px 0;background:'+p.color.css;
+      b.onclick=()=>{ closeModal(); const col=p.color.key;
+        const sys=Object.keys(G.map).filter(id=>{ const s=G.map[id]; return !s.outOfPlay && ((s.pieces.ships[col]>0)||s.pieces.buildings.some(x=>x.owner===col)); });
+        if(!sys.length){ toast('该玩家无忠诚棋子所在系统'); return; }
+        pickFromList(`${pname(i)} 旗舰放置于哪个系统`, sys.map(id=>({label:`${id}　${expSysBrief(id)}`,val:id})), id=>{
+          if(campHasFlagship(i)) campFlagshipResettle(i,id); else campFlagshipSetup(i,id);
+          render(); openCampaignPanel(); }); };
+      m.appendChild(b); });
+    const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(cc);
+  });
 }
 /* 战役读档菜单：列出 localStorage 中的存档槽，支持读取/删除/导出JSON、以及导入JSON */
 function openCampaignLoadMenu(){
