@@ -1186,6 +1186,8 @@ function campResolveCouncil(){
       if(got) campLog(`${pname(pi)}（法外者）从帝国信托偷取 1 ${RESOURCES[got].name}`); }
     else campLog(`${pname(pi)}（法外者）欲从首席摄政偷取，但信托为空或无首席摄政`);
   }
+  // ④ 必须结算危机或敕令（持有者二选一；半自动默认结算敕令，危机为占位）
+  if(typeof campResolveEdict==='function') campResolveEdict();
   G.campaign.council='session'; G.campaign.councilHolder=null; autosaveCampaign();
 }
 // 帝国信托
@@ -1201,6 +1203,64 @@ function campSetIdentity(idx, id){ const p=G.players[idx]; if(!p) return; const 
 }
 function campBecomeOutlaw(idx){ campSetIdentity(idx,'outlaw'); }
 function campBecomeRegent(idx){ campSetIdentity(idx,'regent'); }
+
+/* ===== 阶段5：律法书 + 敕令政策机 + 事件骰结算环 ===== */
+// 三张「治理帝国疆域」政策（战争/和平/升级），各为两步：①征收需求 ②帝国行动
+const EDICT_POLICIES = {
+  war:{ name:'战争政策', en:'Policy of War',
+    demand:'从每名敌对摄政取1战利品或俘虏归首席摄政（不入信托）；无则取1密探作恩惠；再无可使其变法外者',
+    action:'从供应给每名摄政发1武器（供应空则从信托支取）' },
+  peace:{ name:'和平政策', en:'Policy of Peace',
+    demand:'从每名摄政(含自己)取1遗物或通灵入帝国信托；敌对摄政无则取密探；再无可变法外者',
+    action:'每名摄政按未占用城市槽获得城市加成势力' },
+  escalation:{ name:'升级政策', en:'Policy of Escalation',
+    demand:'从每名摄政(含自己)取1武器/燃料/物资入帝国信托；敌对摄政无则取密探；再无可变法外者',
+    action:'在帝国控制系统放2艘新帝国星舰（暂记入帝国星舰池，待帝国棋子阶段落图）' },
+};
+function campCurrentPolicy(){ return G.campaign.edictPolicy || 'war'; }
+function campChangePolicy(pol){ if(EDICT_POLICIES[pol]){ G.campaign.edictPolicy=pol; campLog(`首席摄政切换政策 → ${EDICT_POLICIES[pol].name}`); autosaveCampaign(); } }
+// 结算敕令：①征收需求 ②帝国行动（由首席摄政执行）
+function campResolveEdict(){
+  const fr=G.campaign.firstRegentIdx;
+  if(fr==null){ campLog('结算敕令：当前无首席摄政，敕令暂不结算'); return; }
+  const pol=campCurrentPolicy(); const P=EDICT_POLICIES[pol];
+  campLog(`—— 结算敕令 · ${P.name} ——`);
+  const regents=G.players.map((p,i)=>i).filter(i=>G.players[i].identity==='regent');
+  // ① 征收需求
+  if(pol==='war'){
+    regents.filter(i=>i!==fr).forEach(i=>{ const p=G.players[i];
+      if(p.trophies>0){ p.trophies--; G.players[fr].trophies++; campLog(`战争·征收：${pname(i)} 交出 1 战利品`); }
+      else if(p.captives>0){ p.captives--; G.players[fr].captives++; campLog(`战争·征收：${pname(i)} 交出 1 俘虏`); }
+      else if(p.supply.agents>0){ p.supply.agents--; campLog(`战争·征收：${pname(i)} 无战利品/俘虏 → 交 1 密探作恩惠`); }
+      else campLog(`战争·征收：${pname(i)} 无可征（可手动将其变为法外者）`);
+    });
+  } else {
+    const want = pol==='peace'?['relic','psionic']:['weapon','fuel','material'];
+    regents.forEach(i=>{ const p=G.players[i]; const r=want.find(x=>(p.res[x]||0)>0);
+      if(r){ p.res[r]--; campTrustAdd(r,1); campLog(`${P.name}·征收：${pname(i)} 交出 1 ${RESOURCES[r].name} 入帝国信托`); }
+      else if(i!==fr && p.supply.agents>0){ p.supply.agents--; campLog(`${P.name}·征收：${pname(i)} 无对应资源 → 交 1 密探作恩惠`); }
+      else if(i!==fr) campLog(`${P.name}·征收：${pname(i)} 无可征（可手动变法外者）`);
+    });
+  }
+  // ② 帝国行动
+  if(pol==='war'){ let got=0; regents.forEach(i=>{ if(G.resSupply.weapon>0){ G.resSupply.weapon--; G.players[i].res.weapon++; got++; } else if(campTrustTake('weapon',1)){ G.players[i].res.weapon++; got++; } }); campLog(`战争·帝国行动：${got} 名摄政各获 1 武器`); }
+  else if(pol==='peace'){ regents.forEach(i=>{ const b=cityBonus(G.players[i]); if(b){ G.players[i].power+=b; campLog(`和平·帝国行动：${pname(i)} 城市加成 +${b} 权力`); } }); }
+  else if(pol==='escalation'){ G.campaign.imperialShips=(G.campaign.imperialShips||0)+2; campLog('升级·帝国行动：帝国星舰池 +2（地图放置待帝国棋子阶段）'); }
+  autosaveCampaign();
+}
+// 危机结算（占位：危机卡逐张效果在凋敝/逐命运阶段接线）
+function campResolveCrisis(){ campLog('—— 结算危机（占位：危机卡个体效果将在后续阶段逐卡接线）——'); }
+// 事件骰：📜敕令 / ★危机（面分布近似 3:3，可按实体骰调整）
+function campRollEventDie(){ return (Math.floor(Math.random()*6)<3)?'edict':'crisis'; }
+// 回合末事件结算：议会已裁决→结算议会；否则掷事件骰→敕令/危机
+function campRoundEndEvent(){
+  if(!G.campaign || !G.campaign.enabled) return;
+  if(G.campaign.council==='decided'){ campResolveCouncil(); return; }
+  const r=campRollEventDie();
+  campLog(`回合末事件骰：${r==='edict'?'📜 结算敕令':'★ 结算危机'}`);
+  if(r==='edict') campResolveEdict(); else campResolveCrisis();
+  autosaveCampaign();
+}
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -2387,7 +2447,7 @@ function endRoundDiscard(){
     else G.discard.push(pl.card);
   }
   G.played=[]; G.lead=null; G.seizedBy=null;
-  if(G.campaign && G.campaign.enabled) campResolveCouncil(); // 战役：回合末结算「已裁决」的帝国议会
+  if(G.campaign && G.campaign.enabled) campRoundEndEvent(); // 战役：回合末事件（议会已裁决→结算议会；否则掷事件骰→敕令/危机）
   if(G.players.some(p=>p.hand.length>0)) beginRound(); else endChapter();
 }
 
@@ -4463,7 +4523,18 @@ function openCampaignPanel(){
     stHtml+=`<br>帝国议会：${councilTxt}`;
     const trust=RES_ORDER.filter(r=>cp.trust[r]>0).map(r=>`${RESOURCES[r].icon}${cp.trust[r]}`).join(' ');
     stHtml+=`<br>帝国信托：${trust||'（空）'}`;
+    const pol=EDICT_POLICIES[campCurrentPolicy()];
+    stHtml+=`<br>当前敕令政策：<b style="color:#d9b25a">${pol?pol.name:'—'}</b>`;
+    if((cp.imperialShips||0)>0) stHtml+=` · 帝国星舰池 ${cp.imperialShips}`;
     st.innerHTML=stHtml; m.appendChild(st);
+    // 首席摄政：切换政策 + 手动结算敕令（半自动便于桌面对照）
+    const pr=el('div','row'); pr.style.cssText='gap:5px;flex-wrap:wrap';
+    pr.appendChild(el('span',null,'政策切换：'));
+    Object.entries(EDICT_POLICIES).forEach(([k,v])=>{ const b=el('button',campCurrentPolicy()===k?'btn sm on':'btn ghost sm',v.name.replace('政策',''));
+      b.onclick=()=>{ campChangePolicy(k); closeModal(); openCampaignPanel(); }; pr.appendChild(b); });
+    m.appendChild(pr);
+    const eb=el('button','btn ghost sm','⚖ 立即结算敕令（当前政策）'); eb.style.cssText='width:100%;margin:4px 0';
+    eb.onclick=()=>{ campResolveEdict(); render(); closeModal(); openCampaignPanel(); }; m.appendChild(eb);
     // 律法书
     if(cp.lawbook && cp.lawbook.length){
       const lb=el('div','hintbox'); lb.style.cssText='text-align:left';
