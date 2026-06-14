@@ -1134,6 +1134,17 @@ const FATE_PROGRESS = {
   24:{ // Judge 审判官（仅第三幕，固定6）：章末 每个存在玩家并列第一的雄心 +1
     3:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campAmbitionsTiedFirst() : 0; },
   },
+  10:{ // Hegemon 霸主(旗帜)（第二幕）：章末 每旗帜+1；若本章赢≥1雄心 再每旗帜+1（翻倍）
+    2:(ev,d,p,i)=>{ if(ev!=='chapterEnd') return 0; const b=campMarksOf(i,'banner');
+        const wonAny=p._ambWon && Object.keys(p._ambWon).length>0; return b*(wonAny?2:1); },
+  },
+  16:{ // Warden 守护者(领主)（第二幕，固定22）：章末 每控制1王座+2 + 你领主采邑内每城市+1
+    2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campSeatsControlled(i)*2 + campCitiesInFiefs(i)) : 0; },
+  },
+  18:{ // Survivalist 幸存者（仅第三幕）：赢雄心 +min(俘虏,地堡)；凋敝危机发生在地堡行星 +1
+    3:(ev,d,p,i)=>{ if(ev==='ambitionWon' && d.playerIdx===i) return Math.min(p.captives, campTotalMarks('bunker'));
+        if(ev==='blightCrisisOnBunker' && campMarksAt(d.sysId,'bunker').some(m=>m.owner===p.color.key)) return 1; return 0; },
+  },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
   },
@@ -1149,8 +1160,11 @@ const FATE_PROGRESS = {
 const FATE_THRESHOLD = {
   1:{ 1:{2:20,3:17,4:14}, 2:{2:22,3:22,4:22} },     // Steward 摄政官 第一/二幕
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
+  10:{ 2:{2:14,3:14,4:14} },                        // Hegemon 霸主(旗帜) 第二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
+  16:{ 2:{2:22,3:22,4:22} },                        // Warden 守护者(领主) 第二幕
   17:{ 3:{2:20,3:20,4:20} },                        // Overlord 霸主(恐惧) 第三幕
+  18:{ 3:{2:22,3:18,4:14} },                        // Survivalist 幸存者 第三幕
   19:{ 3:{2:16,3:14,4:12} },                        // Redeemer 救赎者 第三幕
   20:{ 3:{2:15,3:15,4:15} },                        // Guardian 守护者(伊甸卫) 第三幕
   21:{ 3:{2:18,3:16,4:14} },                        // Naturalist 博物学家 第三幕
@@ -1162,6 +1176,8 @@ const FATE_OBJECTIVE_CHECK = {
   1:{ 3:(p,i)=> G.campaign.firstRegentIdx===i && campAllOutlawCitiesControlled() && campTrustTotal()>G.chapter }, // 摄政官终局：你是首席摄政、帝国控制全部法外者城市、信托资源>当前章节
   6:{ 3:(p,i)=> hasMostGuildCards(p,i) && G.initiative===i }, // 游击者：公会卡比每位对手多 且 持有先攻
   7:{ 3:(p,i)=> p.identity==='regent' && (campPlanetsControlled(i)+(G.campaign.firstRegentIdx===i?campEmpireSystems().filter(id=>G.map[id].kind==='planet').length:0))>=9 && campMoreLoyalShipsThanRivals(i) }, // 海军上将终局：摄政、控制≥9行星(首席摄政含帝国控制行星)、忠诚舰多于每位对手
+  10:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'tyrant')) && campMarksOf(i,'banner')>G.chapter }, // 霸主(旗帜)终局：无对手赢暴君 且 旗帜数>当前章节
+  16:{ 3:(p,i)=> G.players.every((q,j)=> j===i || campFiefsCount(i)>campFiefsCount(j)) && campSeatsControlled(i)>G.chapter }, // 守护者(领主)终局：采邑多于每对手 且 控制王座数>当前章节
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
@@ -1429,6 +1445,7 @@ function campResolveBlightCrisis(){ let total=0;
     const imp=(s.pieces.ships&&s.pieces.ships.imperial)||0;
     if(imp>0) applyShipHits(id,'imperial',hits,null);
     else G.players.forEach(p=>{ if((s.pieces.ships[p.color.key]||0)>0) applyShipHits(id,p.color.key,hits,null); });
+    if(typeof campMarksAt==='function' && campMarksAt(id,'bunker').length) campFire('blightCrisisOnBunker',{sysId:id}); // 幸存者：地堡行星凋敝危机
   }
   if(!total) campLog('凋敝危机：地图上无凋敝');
   return total;
@@ -1537,6 +1554,30 @@ function campFlagshipRepair(playerIdx, all){ if(!campHasFlagship(playerIdx)) ret
   if(n) campLog(`${pname(playerIdx)} 旗舰修复 ${n} 个升级`); return n; }
 // 星舰起重机：玩家本回合在旗舰系统可建造的舰数上限（2，否则普通规则）
 function campFlagshipCraneLimit(playerIdx, sysId){ return (campHasFlagship(playerIdx)&&G.players[playerIdx].flagship.sys===sysId&&campFlagshipUpgrade(playerIdx,'crane'))?2:0; }
+
+/* ===== 阶段9：命运专属地图标记框架（旗帜/王座/地堡 共用基类） ===== */
+// 关键字：building(可伤/修)、tough(双段血)、noRaid(不可劫掠)、loyal(忠诚棋件)；统一存于 G.campaign.marks
+const MARK_KINDS = {
+  banner:{cn:'旗帜', glyph:'⚑', kw:['building','noRaid','loyal']},        // Hegemon 霸主
+  seat:  {cn:'王座', glyph:'♛', kw:['loyal','token']},                    // Warden 守护者(领主)
+  bunker:{cn:'地堡', glyph:'⌂', kw:['building','tough','noRaid','loyal']}, // Survivalist 幸存者
+};
+function campMarks(){ return (G.campaign.marks||(G.campaign.marks=[])); }
+function campPlaceMark(type, playerIdx, sysId){ const p=G.players[playerIdx]; const s=G.map[sysId]; if(!p||!s||s.outOfPlay||!MARK_KINDS[type]) return false;
+  campMarks().push({type, owner:p.color.key, sys:sysId}); campLog(`${pname(playerIdx)} 放置${MARK_KINDS[type].cn}于 ${sysId}`); return true; }
+function campRemoveMark(type, playerIdx, sysId){ const col=G.players[playerIdx].color.key; const arr=campMarks();
+  const idx=arr.findIndex(m=>m.type===type&&m.owner===col&&(!sysId||m.sys===sysId)); if(idx<0) return false; arr.splice(idx,1); return true; }
+function campMarksOf(playerIdx, type){ const col=G.players[playerIdx].color.key; return campMarks().filter(m=>m.type===type&&m.owner===col).length; }
+function campMarksAt(sysId, type){ return campMarks().filter(m=>m.sys===sysId&&(!type||m.type===type)); }
+function campTotalMarks(type){ return campMarks().filter(m=>m.type===type).length; }
+// 王座/采邑(Warden)：你拥有王座且控制其系统 → 计为「控制的王座」；你放王座的星团 → 你是该采邑领主
+function campSeatsControlled(playerIdx){ const col=G.players[playerIdx].color.key;
+  return campMarks().filter(m=>m.type==='seat'&&m.owner===col&&controllerOf(m.sys)===col).length; }
+function campLordClusters(playerIdx){ const col=G.players[playerIdx].color.key; const cl=new Set();
+  campMarks().forEach(m=>{ if(m.type==='seat'&&m.owner===col){ const c=G.map[m.sys]&&G.map[m.sys].cluster; if(c) cl.add(c); } }); return cl; }
+function campFiefsCount(playerIdx){ return campLordClusters(playerIdx).size; }
+function campCitiesInFiefs(playerIdx){ const cls=campLordClusters(playerIdx); let n=0;
+  for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay||!cls.has(s.cluster)) continue; n+=s.pieces.buildings.filter(b=>b.type==='city').length; } return n; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -1740,6 +1781,7 @@ function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
       council:'session',     // 'session'(会期中) | 'decided'(已裁决)
       lawbook:[],            // 有序律法/敕令/头衔卡（阶段5启用）
       edictPolicy:null,      // 当前政策面
+      marks:[],             // 命运专属地图标记：[{type:'banner'|'seat'|'bunker',owner:色,sys}]（阶段9框架）
       fatesInPlay: (campaignOpts.fates||[]).slice(), // 本局命运 num 列表（按玩家序）
     } : { enabled:false },
   };
@@ -2284,6 +2326,14 @@ function drawPieces(g, s, r){
       const dmg=Object.values(fp.flagship.up).filter(v=>v==='damaged').length;
       if(dmg>0){ const dn=svgEl('text',{x:fx+16,y:fy-12,'text-anchor':'middle',fill:'#e23b3b','font-size':15,'font-weight':800}); dn.textContent='-'+dmg; g.appendChild(dn); }
     }
+  }
+  // 命运标记（旗帜/王座/地堡）：系统上方一排小徽标
+  if(typeof campMarksAt==='function' && G.campaign && G.campaign.enabled){ const mks=campMarksAt(s.id);
+    mks.forEach((mk,i)=>{ const K=MARK_KINDS[mk.type]; if(!K) return; const pc=PCOLORS.find(c=>c.key===mk.owner);
+      const mx=s.x-(mks.length-1)*16+i*32, my=s.y-r-26;
+      g.appendChild(svgEl('circle',{cx:mx,cy:my,r:13,fill:pc?pc.hex:'#888',stroke:'#000','stroke-width':2}));
+      const t=svgEl('text',{x:mx,y:my+6,'text-anchor':'middle',fill:'#000','font-size':16,'font-weight':800}); t.textContent=K.glyph; g.appendChild(t);
+    });
   }
 }
 function triPts(x,y,s){return `${x},${y-s} ${x-s},${y+s} ${x+s},${y+s}`;}
@@ -4867,6 +4917,18 @@ function openCampaignPanel(){
     setb.onclick=()=>{ closeModal(); openFlagshipSetup(); }; fr2.appendChild(setb);
     if(fsPlayers.length){ const repb=el('button','btn ghost sm','修复旗舰升级'); repb.onclick=()=>{ fsPlayers.forEach(i=>campFlagshipRepair(i,true)); render(); closeModal(); openCampaignPanel(); }; fr2.appendChild(repb); }
     m.appendChild(fr2);
+    // 命运标记(旗帜/王座/地堡)概览 + 放置（命运10/16/18）
+    const totalMk=campMarks().length;
+    if(totalMk>0 || G.players.some(p=>[10,16,18].includes(p.fate))){
+      const mb=el('div','hintbox'); mb.style.cssText='text-align:left';
+      mb.innerHTML='<b style="color:#d9b25a">命运标记</b><br>'+(totalMk?
+        ['banner','seat','bunker'].filter(t=>campTotalMarks(t)>0).map(t=>`${MARK_KINDS[t].glyph}${MARK_KINDS[t].cn}×${campTotalMarks(t)}`).join('　')
+        :'暂无');
+      m.appendChild(mb);
+      const mr=el('div','row'); mr.style.cssText='gap:5px;flex-wrap:wrap';
+      const mkb=el('button','btn ghost sm','放置/移除标记'); mkb.onclick=()=>{ closeModal(); openMarkPlace(); }; mr.appendChild(mkb);
+      m.appendChild(mr);
+    }
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
@@ -5021,6 +5083,28 @@ function openFlagshipSetup(){
           render(); openCampaignPanel(); }); };
       m.appendChild(b); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(cc);
+  });
+}
+/* 命运标记放置/移除：选类型(按在场命运)→选玩家→选系统 */
+function openMarkPlace(){
+  const types=[]; const fates=G.players.map(p=>p.fate);
+  if(fates.includes(10)) types.push('banner'); if(fates.includes(16)) types.push('seat'); if(fates.includes(18)) types.push('bunker');
+  if(!types.length){ types.push('banner','seat','bunker'); }
+  openModal(m=>{ m.appendChild(el('h2',null,'命运标记 · 放置 / 移除'));
+    m.appendChild(el('div','hintbox','选择标记类型→玩家→系统放置；点已有标记可移除。旗帜=可伤/不可劫掠；王座=置于忠诚城市；地堡=Building+Tough。'));
+    types.forEach(t=>{ const K=MARK_KINDS[t];
+      const hd=el('div'); hd.style.cssText='color:#d9b25a;font-weight:700;margin:6px 0 2px'; hd.textContent=`${K.glyph} ${K.cn}`; m.appendChild(hd);
+      const row=el('div','row'); row.style.cssText='gap:4px;flex-wrap:wrap';
+      const add=el('button','btn ghost sm','＋放置'); add.onclick=()=>{ closeModal();
+        pickFromList(`放置${K.cn} · 选择玩家`, G.players.map((p,i)=>({label:pname(i),val:i})), pi=>{
+          const sys=Object.keys(G.map).filter(id=>!G.map[id].outOfPlay);
+          pickFromList(`放置${K.cn} 于哪个系统`, sys.map(id=>({label:`${id}　${expSysBrief(id)}`,val:id})), id=>{ campPlaceMark(t,pi,id); render(); openMarkPlace(); }); }); };
+      row.appendChild(add);
+      G.players.forEach((p,i)=>{ const c=campMarksOf(i,t); if(c>0){ const rm=el('button','btn ghost sm',`－${pname(i)}(${c})`);
+        rm.onclick=()=>{ campRemoveMark(t,i); render(); closeModal(); openMarkPlace(); }; row.appendChild(rm); } });
+      m.appendChild(row);
+    });
+    const cc=el('button','btn ghost','返回'); cc.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(cc);
   });
 }
 /* 战役读档菜单：列出 localStorage 中的存档槽，支持读取/删除/导出JSON、以及导入JSON */
