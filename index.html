@@ -1168,6 +1168,12 @@ const FATE_PROGRESS = {
   14:{ // Pacifist 和平主义者：第二幕章末 无战利品+2/无俘虏+1
     2:(ev,d,p,i)=>{ if(ev!=='chapterEnd') return 0; let n=0; if(p.trophies===0) n+=2; if(p.captives===0) n+=1; return n; },
   },
+  12:{ // Pirate 海盗：第二幕章末 +藏宝资源数 +稀缺类型×2
+    2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campHoardTotal(i)+campHoardScarceTypes(i)*2) : 0; },
+  },
+  9:{ // Pathfinder 探路者：第二幕 对勾线索+1 / 发现传送门+8
+    2:(ev,d,p,i)=>{ if(ev==='pathfinderCheck' && d.playerIdx===i) return 1; if(ev==='pathfinderPortal' && d.playerIdx===i) return 8; return 0; },
+  },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
   },
@@ -1186,6 +1192,8 @@ const FATE_THRESHOLD = {
   2:{ 1:{2:18,3:16,4:14}, 2:{2:12,3:14,4:16} },     // Founder 奠基者 第一/二幕
   3:{ 1:{2:10,3:10,4:10}, 2:{2:12,3:12,4:12} },     // Magnate 大亨 第一/二幕
   4:{ 2:{2:12,3:12,4:12} },                         // Advocate 代言人 第二幕
+  9:{ 2:{2:8,3:8,4:8} },                            // Pathfinder 探路者 第二幕
+  12:{ 2:{2:24,3:21,4:18} },                        // Pirate 海盗 第二幕
   14:{ 2:{2:16,3:14,4:12} },                        // Pacifist 和平主义者 第二幕
   10:{ 2:{2:14,3:14,4:14} },                        // Hegemon 霸主(旗帜) 第二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
@@ -1209,6 +1217,8 @@ const FATE_OBJECTIVE_CHECK = {
   4:{ 3:(p,i)=> campGuildSuits(i)>G.chapter && campGuildCardsInCourt()*2>G.court.length }, // 代言人终局：公会花色>章节 且 议会公会卡过半
   2:{ 3:(p,i)=> campFounderFreeCities()>=3 }, // 奠基者终局：≥3座(基础)未被帝国/非成员控制的自由城市(≥7为完整)
   14:{ 3:(p,i)=> p.trophies===0 && p.captives===0 && campRivalsPsionicSum(i)>(p.res.psionic||0) }, // 和平主义者终局：无战利品俘虏 且 对手通灵总和>你
+  12:{ 3:(p,i)=> campHoardTotal(i)>=2 }, // 海盗终局前置门槛：藏宝≥2资源（据点猜测±10威能在幕末单独结算）
+  9:{ 3:(p,i)=> !!p._portalFound && (p._pilgrimsHome||0)>G.chapter }, // 探路者终局：控制传送门 且 送达朝圣者>章节
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
@@ -1638,6 +1648,17 @@ function campPlaceFreeCity(sysId){ const s=G.map[sysId]; if(!s||s.outOfPlay) ret
   s.pieces.buildings.push({type:'city',owner:'free',damaged:false}); campLog(`${sysId} 放置自由城市`); return true; }
 // 通灵比较（和平主义者）：对手通灵总和 vs 你的通灵
 function campRivalsPsionicSum(playerIdx){ return G.players.reduce((n,q,j)=>n+(j!==playerIdx?(q.res.psionic||0):0),0); }
+// 海盗藏宝（海盗命运）：p._hoard={res:数}，民愤不弃、可花费可计雄心
+function campHoard(playerIdx){ const p=G.players[playerIdx]; return p._hoard||(p._hoard={material:0,fuel:0,weapon:0,relic:0,psionic:0}); }
+function campHoardTotal(playerIdx){ const h=campHoard(playerIdx); return RES_ORDER.reduce((n,r)=>n+(h[r]||0),0); }
+function campHoardAdd(playerIdx,res,n){ const h=campHoard(playerIdx); h[res]=(h[res]||0)+(n||1); campLog(`${pname(playerIdx)} 海盗藏宝 +${n||1} ${RESOURCES[res].name}`); }
+function campHoardScarceTypes(playerIdx){ const h=campHoard(playerIdx); let n=0;
+  RES_ORDER.forEach(r=>{ if((h[r]||0)>0 && G.players.every((q,j)=> j===playerIdx || (h[r]||0)>(q.res[r]||0))) n++; }); return n; }
+// 探路者：秘密传送门行星 p._portal、已放对勾线索数 p._checks、已找到 p._portalFound、送达朝圣者 p._pilgrimsHome
+function campPathCheck(playerIdx, flagSys){ const p=G.players[playerIdx]; if(!p._portal) return 'none'; const s1=G.map[p._portal], s2=G.map[flagSys]; if(!s1||!s2) return 'none';
+  if(flagSys===p._portal){ p._portalFound=true; campLog(`${pname(playerIdx)} 旗舰停在正确行星 → 发现传送门！`); campFire('pathfinderPortal',{playerIdx}); return 'portal'; }
+  if(s1.cluster===s2.cluster || s1.idsym===s2.idsym){ p._checks=(p._checks||0)+1; campLog(`${pname(playerIdx)} 线索：✓对勾（线索数 ${p._checks}）`); campFire('pathfinderCheck',{playerIdx}); return 'check'; }
+  campLog(`${pname(playerIdx)} 线索：✗叉`); return 'x'; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -5008,6 +5029,38 @@ function openCampaignPanel(){
         pickFromList('放置自由城市于哪个系统', sys.map(id=>({label:`${id}　${expSysBrief(id)}`,val:id})), id=>{ campPlaceFreeCity(id); render(); openCampaignPanel(); }); }; fcRow.appendChild(addfc);
       m.appendChild(fcRow);
     }
+    // 海盗(12)：藏宝 + 据点
+    G.players.forEach((p,i)=>{ if(p.fate!==12) return;
+      const pr=el('div','row'); pr.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      pr.appendChild(el('span',null,`🏴${pname(i)} 藏宝×${campHoardTotal(i)}${p._haven?`·据点${p._haven}`:''}：`));
+      const addh=el('button','btn ghost sm','+藏宝资源'); addh.onclick=()=>{ closeModal();
+        pickResource('藏入藏宝的资源',RES_ORDER,r=>{ campHoardAdd(i,r,1); render(); openCampaignPanel(); }); }; pr.appendChild(addh);
+      const seth=el('button','btn ghost sm','设定据点'); seth.onclick=()=>{ closeModal();
+        const sys=Object.keys(G.map).filter(id=>!G.map[id].outOfPlay&&G.map[id].kind==='planet');
+        pickFromList('秘密据点所在行星', sys.map(id=>({label:id,val:id})), id=>{ p._haven=id; campLog(`${pname(i)} 设定海盗据点（秘密）`); openCampaignPanel(); }); }; pr.appendChild(seth);
+      const resh=el('button','btn ghost sm','据点结算±10'); resh.title='幕末：有人猜中→该玩家+10/海盗-10；无人猜中→海盗+10';
+      resh.onclick=()=>{ closeModal(); openModal(mm=>{ mm.appendChild(el('h2',null,'海盗据点结算'));
+        mm.appendChild(el('div','hintbox',`据点：${p._haven||'未设定'}。对手猜测后选择结果：`));
+        const yes=el('button','btn','有人猜中（猜中者+10，海盗-10）'); yes.style.cssText='display:block;width:100%;margin:5px 0';
+        yes.onclick=()=>{ closeModal(); pickFromList('谁猜中了',G.players.map((q,j)=>j).filter(j=>j!==i).map(j=>({label:pname(j),val:j})),j=>{ G.players[j].power+=10; p.power-=10; campLog(`${pname(j)} 猜中据点 +10；海盗 -10`); render(); openCampaignPanel(); }); };
+        const no=el('button','btn gold','无人猜中（海盗+10）'); no.style.cssText='display:block;width:100%;margin:5px 0';
+        no.onclick=()=>{ closeModal(); p.power+=10; campLog(`无人猜中据点，海盗 +10`); render(); openCampaignPanel(); };
+        mm.appendChild(yes); mm.appendChild(no); const cc=el('button','btn ghost','取消'); cc.onclick=()=>{closeModal();openCampaignPanel();}; mm.appendChild(cc); }); };
+      pr.appendChild(resh); m.appendChild(pr);
+    });
+    // 探路者(9)：传送门 + 线索 + 朝圣者
+    G.players.forEach((p,i)=>{ if(p.fate!==9) return;
+      const pr=el('div','row'); pr.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      pr.appendChild(el('span',null,`🧭${pname(i)} 线索×${p._checks||0}${p._portalFound?'·已找到传送门':''}·朝圣者${p._pilgrimsHome||0}：`));
+      const setp=el('button','btn ghost sm','设定传送门'); setp.onclick=()=>{ closeModal();
+        const sys=Object.keys(G.map).filter(id=>!G.map[id].outOfPlay&&G.map[id].kind==='planet');
+        pickFromList('秘密传送门所在行星', sys.map(id=>({label:id,val:id})), id=>{ p._portal=id; campLog(`${pname(i)} 设定传送门（秘密）`); openCampaignPanel(); }); }; pr.appendChild(setp);
+      const probe=el('button','btn ghost sm','旗舰探查'); probe.title='以旗舰所在行星对照传送门→对勾/叉/传送门';
+      probe.onclick=()=>{ closeModal(); if(!campHasFlagship(i)){ toast('需先布置旗舰'); openCampaignPanel(); return; }
+        const r=campPathCheck(i, G.players[i].flagship.sys); toast(r==='portal'?'发现传送门！':r==='check'?'线索：✓':r==='x'?'线索：✗':'未设定传送门'); render(); openCampaignPanel(); }; pr.appendChild(probe);
+      const pil=el('button','btn ghost sm','送达朝圣者+1'); pil.onclick=()=>{ p._pilgrimsHome=(p._pilgrimsHome||0)+1; render(); closeModal(); openCampaignPanel(); }; pr.appendChild(pil);
+      m.appendChild(pr);
+    });
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
