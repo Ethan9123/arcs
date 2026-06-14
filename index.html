@@ -1158,6 +1158,16 @@ const FATE_PROGRESS = {
   4:{ // Advocate 代言人：第二幕章末 +公会花色数 +超过的对手数
     2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campGuildSuits(i)+campRivalsExceededInGuilds(i)) : 0; },
   },
+  2:{ // Founder 奠基者：第一幕(法外者)赢雄心+3/章末+控制星系；第二幕章末+非帝国控制的自由城市
+    1:(ev,d,p,i)=>{ if(p.identity!=='outlaw') return 0;
+        if(ev==='ambitionWon' && d.playerIdx===i) return 3;
+        if(ev==='chapterEnd') return campSystemsControlled(i);
+        return 0; },
+    2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campFounderFreeCities() : 0; },
+  },
+  14:{ // Pacifist 和平主义者：第二幕章末 无战利品+2/无俘虏+1
+    2:(ev,d,p,i)=>{ if(ev!=='chapterEnd') return 0; let n=0; if(p.trophies===0) n+=2; if(p.captives===0) n+=1; return n; },
+  },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
   },
@@ -1173,8 +1183,10 @@ const FATE_PROGRESS = {
 const FATE_THRESHOLD = {
   1:{ 1:{2:20,3:17,4:14}, 2:{2:22,3:22,4:22} },     // Steward 摄政官 第一/二幕
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
+  2:{ 1:{2:18,3:16,4:14}, 2:{2:12,3:14,4:16} },     // Founder 奠基者 第一/二幕
   3:{ 1:{2:10,3:10,4:10}, 2:{2:12,3:12,4:12} },     // Magnate 大亨 第一/二幕
   4:{ 2:{2:12,3:12,4:12} },                         // Advocate 代言人 第二幕
+  14:{ 2:{2:16,3:14,4:12} },                        // Pacifist 和平主义者 第二幕
   10:{ 2:{2:14,3:14,4:14} },                        // Hegemon 霸主(旗帜) 第二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
   16:{ 2:{2:22,3:22,4:22} },                        // Warden 守护者(领主) 第二幕
@@ -1195,6 +1207,8 @@ const FATE_OBJECTIVE_CHECK = {
   16:{ 3:(p,i)=> G.players.every((q,j)=> j===i || campFiefsCount(i)>campFiefsCount(j)) && campSeatsControlled(i)>G.chapter }, // 守护者(领主)终局：采邑多于每对手 且 控制王座数>当前章节
   3:{ 3:(p,i)=> campMonopolies(i)>=1 }, // 大亨终局：持有≥1张垄断卡（≥2为进阶奖杯）
   4:{ 3:(p,i)=> campGuildSuits(i)>G.chapter && campGuildCardsInCourt()*2>G.court.length }, // 代言人终局：公会花色>章节 且 议会公会卡过半
+  2:{ 3:(p,i)=> campFounderFreeCities()>=3 }, // 奠基者终局：≥3座(基础)未被帝国/非成员控制的自由城市(≥7为完整)
+  14:{ 3:(p,i)=> p.trophies===0 && p.captives===0 && campRivalsPsionicSum(i)>(p.res.psionic||0) }, // 和平主义者终局：无战利品俘虏 且 对手通灵总和>你
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
@@ -1237,6 +1251,8 @@ function campChapterEndJudge(){
 // 命运判定常用 helper
 function campPlanetsControlled(playerIdx){ const col=G.players[playerIdx].color.key; let n=0;
   for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay||s.kind!=='planet') continue; if(controllerOf(id)===col) n++; } return n; }
+function campSystemsControlled(playerIdx){ const col=G.players[playerIdx].color.key; let n=0;
+  for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue; if(controllerOf(id)===col) n++; } return n; }
 function campPlanetsControlledByRes(playerIdx, res){ const col=G.players[playerIdx].color.key; let n=0;
   for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay||s.kind!=='planet'||s.resource!==res) continue; if(controllerOf(id)===col) n++; } return n; }
 function campLoyalShipsTotal(playerIdx){ const col=G.players[playerIdx].color.key; let n=0;
@@ -1609,6 +1625,19 @@ function campMonopolies(playerIdx){ return G.players[playerIdx]._monopolies||0; 
 function campGainMonopoly(playerIdx){ const p=G.players[playerIdx]; p._monopolies=(p._monopolies||0)+1;
   campLog(`${pname(playerIdx)} 获得 1 张垄断卡（共 ${p._monopolies}）`); campFire('monopolyGained',{playerIdx}); }
 function campLoseMonopoly(playerIdx){ const p=G.players[playerIdx]; if((p._monopolies||0)>0){ p._monopolies--; return true; } return false; }
+// 自由城市/自由建筑（奠基者命运）：owner==='free' 的建筑
+function campFreeCities(){ const out=[]; for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+  s.pieces.buildings.forEach(b=>{ if(b.owner==='free'&&b.type==='city') out.push({id,b}); }); } return out; }
+// 联邦成员色集合（默认：战役内全体玩家皆为成员；失格者可移除）
+function campMembers(){ return G.campaign.commMembers || (G.campaign.commMembers=G.players.map(p=>p.color.key)); }
+// 奠基者计数：未被帝国控制、且未被「非成员对手」控制的自由城市数
+function campFounderFreeCities(){ const mem=campMembers();
+  return campFreeCities().filter(({id})=>{ if(campEmpireControls(id)) return false;
+    const ctrl=controllerOf(id); return !ctrl || mem.includes(ctrl); }).length; }
+function campPlaceFreeCity(sysId){ const s=G.map[sysId]; if(!s||s.outOfPlay) return false;
+  s.pieces.buildings.push({type:'city',owner:'free',damaged:false}); campLog(`${sysId} 放置自由城市`); return true; }
+// 通灵比较（和平主义者）：对手通灵总和 vs 你的通灵
+function campRivalsPsionicSum(playerIdx){ return G.players.reduce((n,q,j)=>n+(j!==playerIdx?(q.res.psionic||0):0),0); }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -2313,7 +2342,7 @@ function drawSystem(svg, s){
 function drawPieces(g, s, r){
   // 建筑：在系统下方排列
   s.pieces.buildings.forEach((b,i)=>{
-    const col=PCOLORS.find(c=>c.key===b.owner).hex;
+    const bc=PCOLORS.find(c=>c.key===b.owner)||(b.owner==='free'?{hex:'#9aa3b2'}:null); if(!bc) return; const col=bc.hex;
     const yy=s.y+r+26;
     const xx=s.x-(s.pieces.buildings.length-1)*24+i*48;
     if(b.type==='city'){
@@ -4970,6 +4999,15 @@ function openCampaignPanel(){
         if(need===0){ campFire('magnateExport',{playerIdx:i}); } else toast('资源不足3个'); render(); closeModal(); openCampaignPanel(); }; mg.appendChild(exp);
       m.appendChild(mg);
     });
+    // 奠基者(2)：自由城市
+    if(G.players.some(p=>p.fate===2)){
+      const fcRow=el('div','row'); fcRow.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      fcRow.appendChild(el('span',null,`🕊自由城市×${campFreeCities().length}（守住 ${campFounderFreeCities()}）：`));
+      const addfc=el('button','btn ghost sm','放置自由城市'); addfc.onclick=()=>{ closeModal();
+        const sys=Object.keys(G.map).filter(id=>!G.map[id].outOfPlay);
+        pickFromList('放置自由城市于哪个系统', sys.map(id=>({label:`${id}　${expSysBrief(id)}`,val:id})), id=>{ campPlaceFreeCity(id); render(); openCampaignPanel(); }); }; fcRow.appendChild(addfc);
+      m.appendChild(fcRow);
+    }
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
