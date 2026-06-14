@@ -1105,6 +1105,9 @@ function guildCardCount(p){ return (p.guildCards||[]).length; }
 function hasMostGuildCards(p,i){ return G.players.every((q,j)=> j===i || guildCardCount(p)>guildCardCount(q)); }
 // 各命运各幕进度推进规则: fn(ev,data,player,idx) => delta（仅计时型幕需要）
 const FATE_PROGRESS = {
+  1:{ // Steward 摄政官：第一幕「以首席摄政身份赢得雄心」——每获 1 点权力推进 1 格（含城市奖励）
+    1:(ev,d,p,i)=>{ if(ev==='ambitionWon' && d.playerIdx===i && G.campaign.firstRegentIdx===i) return d.power||0; return 0; },
+  },
   6:{ // Partisan 游击者
     1:(ev,d,p,i)=>{ let n=0;
         if(ev==='initiativeSeized' && d.playerIdx===i) n+=1;
@@ -1115,7 +1118,8 @@ const FATE_PROGRESS = {
 };
 // 计时阈值: [fate][act][numPlayers]
 const FATE_THRESHOLD = {
-  6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },
+  1:{ 1:{2:20,3:17,4:14} },                         // Steward 摄政官 第一幕
+  6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
 };
 function fateThreshold(num,act,np){ const t=FATE_THRESHOLD[num]&&FATE_THRESHOLD[num][act]; return t?(t[np]||null):null; }
 // 非计时型目标判定（双目标/终局幕）: fn(player,idx) => bool
@@ -1153,6 +1157,50 @@ function campChapterEndJudge(){
   });
   autosaveCampaign(); return winners;
 }
+
+/* ===== 阶段4：帝国身份轴 + 帝国议会 + 帝国信托 ===== */
+// 帝国议会：固定宫廷卡（双面 会期中/已裁决），不入牌堆、不计钥匙
+function makeImperialCouncilCard(){ return {id:'imperial_council', council:true, campaign:true, t:'special',
+  name:'帝国议会', en:'Imperial Council', keys:0, eff:null,
+  txt:'双面卡。会期中：可被攫取。攫取→翻到「已裁决」由你掌握本回合决策权；回合末交回宫廷并依序：①可召开峰会 ②摄政→升首席摄政 ③法外者→从首席摄政信托偷取 ④结算危机或敕令。', agents:{} }; }
+function imperialCouncilCard(){ return G.court.find(c=>c&&c.council)||null; }
+function campSetupImperialCouncil(){ // 战役开局把帝国议会放入宫廷
+  if(!G.court.some(c=>c&&c.council)) G.court.push(makeImperialCouncilCard());
+  G.campaign.council='session'; G.campaign.councilHolder=null;
+}
+// 攫取帝国议会 → 翻到「已裁决」，记录持有者（本回合掌握决策权）
+function campSecureCouncil(playerIdx){
+  G.campaign.council='decided'; G.campaign.councilHolder=playerIdx;
+  campLog(`${pname(playerIdx)} 攫取帝国议会 → 翻到「已裁决」，本回合掌握决策权`);
+}
+// 回合末结算「已裁决」的帝国议会（峰会P6/危机敕令P5暂为占位，身份与信托链已实装）
+function campResolveCouncil(){
+  if(!G.campaign || !G.campaign.enabled) return;
+  if(G.campaign.council!=='decided' || G.campaign.councilHolder==null) return;
+  const pi=G.campaign.councilHolder; const p=G.players[pi]; if(!p){ G.campaign.council='session'; G.campaign.councilHolder=null; return; }
+  campLog(`—— 帝国议会结算（持有者 ${pname(pi)}）——`);
+  // ①峰会（P6 暂略）；②摄政→首席摄政；③法外者→从信托偷取；④危机/敕令（P5 暂略）
+  if(p.identity==='regent'){ if(G.campaign.firstRegentIdx!==pi) campSetFirstRegent(pi); else campLog(`${pname(pi)} 已是首席摄政`); }
+  else if(p.identity==='outlaw'){
+    if(G.campaign.firstRegentIdx!=null && campTrustTotal()>0){ const got=campTrustTakeAny(p);
+      if(got) campLog(`${pname(pi)}（法外者）从帝国信托偷取 1 ${RESOURCES[got].name}`); }
+    else campLog(`${pname(pi)}（法外者）欲从首席摄政偷取，但信托为空或无首席摄政`);
+  }
+  G.campaign.council='session'; G.campaign.councilHolder=null; autosaveCampaign();
+}
+// 帝国信托
+function campTrustTotal(){ return RES_ORDER.reduce((n,r)=>n+(G.campaign.trust[r]||0),0); }
+function campTrustAdd(res,n){ n=n||1; G.campaign.trust[res]=(G.campaign.trust[res]||0)+n; return n; }
+function campTrustTake(res,n){ n=n||1; const t=Math.min(G.campaign.trust[res]||0,n); G.campaign.trust[res]-=t; return t; }
+function campTrustTakeAny(toPlayer){ for(const r of RES_ORDER){ if((G.campaign.trust[r]||0)>0){ G.campaign.trust[r]--; if(toPlayer) toPlayer.res[r]=(toPlayer.res[r]||0)+1; return r; } } return null; }
+function campEmptyTrust(){ const n=campTrustTotal(); RES_ORDER.forEach(r=>{ if(G.campaign.trust[r]>0){ G.resSupply[r]+=G.campaign.trust[r]; G.campaign.trust[r]=0; } }); return n; }
+// 身份转换：摄政 ↔ 法外者；首席摄政变法外者则让出首席摄政席位
+function campSetIdentity(idx, id){ const p=G.players[idx]; if(!p) return; const old=p.identity; p.identity=id;
+  if(old!==id) campLog(`${pname(idx)} 身份：${old==='regent'?'摄政':'法外者'} → ${id==='regent'?'摄政':'法外者'}`);
+  if(id==='outlaw' && G.campaign.firstRegentIdx===idx){ G.campaign.firstRegentIdx=null; campLog(`${pname(idx)} 让出首席摄政席位`); }
+}
+function campBecomeOutlaw(idx){ campSetIdentity(idx,'outlaw'); }
+function campBecomeRegent(idx){ campSetIdentity(idx,'regent'); }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -2339,6 +2387,7 @@ function endRoundDiscard(){
     else G.discard.push(pl.card);
   }
   G.played=[]; G.lead=null; G.seizedBy=null;
+  if(G.campaign && G.campaign.enabled) campResolveCouncil(); // 战役：回合末结算「已裁决」的帝国议会
   if(G.players.some(p=>p.hand.length>0)) beginRound(); else endChapter();
 }
 
@@ -2432,12 +2481,13 @@ function scoreAmbitions(){
     if(firsts.length===1){
       const f=firsts[0];
       if(f.real){
+        const _p0=G.players[f.i].power;
         if(leaderDowngradesAmb(f.i,k)){ // 该领袖本人首位 → 按次位分，且无城市奖励
           award(f.i, lo, `${AMBITIONS[k].name} 首位（领袖降级→次位分 +${lo}，无城市奖励）`);
         } else { const bonus=cityBonus(G.players[f.i]);
           award(f.i, hi+bonus, `${AMBITIONS[k].name} 首位 +${hi}${bonus?`(+${bonus}城市奖励)`:''}`);
         }
-        campFire('ambitionWon',{playerIdx:f.i, ambition:k}); // 战役：赢得雄心（首位）
+        campFire('ambitionWon',{playerIdx:f.i, ambition:k, power:G.players[f.i].power-_p0}); // 战役：赢得雄心（首位）
       } else logMsg(`雄心 ${AMBITIONS[k].name}：首位由虚拟第三方占据（不得分）`,'score');
       // 次位：余者中的最高且必须唯一；并列次位则无人得分（官方 p18）
       const rest=cs.filter(o=>o!==f);
@@ -2455,9 +2505,9 @@ function scoreAmbitions(){
       // 并列首位：各方改得「次位」分（虚拟第三方仍不得分），且不再另设次位
       firsts.forEach(o=>{ if(!o.real){ logMsg(`雄心 ${AMBITIONS[k].name}：虚拟第三方并列首位（不得分）`,'score'); return; }
         // Noble/Proud（扩展）：计分只有唯一第一名才得分 → 并列首位时该玩家不得分
-        if(G.useExpansion && leaderHas(G.players[o.i],'proud')){ logMsg(`雄心 ${AMBITIONS[k].name}：${pname(o.i)} 骄傲——并列首位不得分`,'score'); campFire('ambitionWon',{playerIdx:o.i, ambition:k}); return; }
+        if(G.useExpansion && leaderHas(G.players[o.i],'proud')){ logMsg(`雄心 ${AMBITIONS[k].name}：${pname(o.i)} 骄傲——并列首位不得分`,'score'); campFire('ambitionWon',{playerIdx:o.i, ambition:k, power:0}); return; }
         award(o.i, lo, `${AMBITIONS[k].name} 并列首位 +${lo}`);
-        campFire('ambitionWon',{playerIdx:o.i, ambition:k}); // 战役：赢得雄心（并列首位）
+        campFire('ambitionWon',{playerIdx:o.i, ambition:k, power:lo}); // 战役：赢得雄心（并列首位）
       });
     }
   });
@@ -3743,6 +3793,13 @@ function majorityOn(c,col){ const mine=c.agents[col]||0; if(mine<=0) return fals
   for(const k in c.agents){ if(k!==col&&c.agents[k]>=mine) return false; } return true; }
 function doSecure(c){
   const me=G.players[G.actor]; const col=me.color.key; let captured=0;
+  // 战役：攫取帝国议会 → 翻到「已裁决」，本回合由你掌握（回合末结算），不计入正常收纳
+  if(c && c.council){
+    if(G.campaign.council==='decided'){ toast('帝国议会本回合已被裁决，无法再攫取'); return; }
+    for(const k in c.agents){ if(c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); if(rp) rp.supply.agents+=c.agents[k]; } }
+    c.agents={}; campSecureCouncil(G.actor);
+    consumeAction(`${pname(G.actor)} 攫取帝国议会（已裁决，回合末结算）`); return;
+  }
   if(paranoidBlocksSecure(me,c)){ toast('偏执：不能攫取你只有 1 个忠诚密探的公会卡'); return; }
   for(const k in c.agents){ if(k!==col&&c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); rp.supply.agents+=c.agents[k]; captured+=c.agents[k]; } }
   me.captives+=captured; me.supply.agents+=(c.agents[col]||0);
@@ -4358,6 +4415,7 @@ function startCampaignSetup(np, names, setupV){
     w.style.display='none';
     const label='战役·'+names.slice(0,np).map((n,i)=>n||PCOLORS[i].name).join('/');
     newGame(np, names.slice(0,np), false, setupV, {fates:chosen.slice(0,np), label});
+    campSetupImperialCouncil(); // 战役：帝国议会入宫廷
     // 第一幕开局设置：逐玩家执行其命运 Act I setup（有脚本者自动执行，无脚本者待 P9 编码）
     G.players.forEach((p,i)=>campRunActSetup(i));
     saveCampaignSlot('auto', label);
@@ -4398,6 +4456,11 @@ function openCampaignPanel(){
     const st=el('div','hintbox'); st.style.cssText='text-align:left';
     let stHtml=`场次 ${cp.session} · 第 ${cp.act}/3 幕`;
     if(cp.firstRegentIdx!=null && G.players[cp.firstRegentIdx]) stHtml+=` · 首席摄政：<b style="color:${G.players[cp.firstRegentIdx].color.css}">${G.players[cp.firstRegentIdx].name}</b>`;
+    // 帝国议会状态
+    const councilTxt = cp.council==='decided'
+      ? `已裁决（持有者 ${cp.councilHolder!=null&&G.players[cp.councilHolder]?G.players[cp.councilHolder].name:'?'}，回合末结算）`
+      : '会期中（议会区可攫取）';
+    stHtml+=`<br>帝国议会：${councilTxt}`;
     const trust=RES_ORDER.filter(r=>cp.trust[r]>0).map(r=>`${RESOURCES[r].icon}${cp.trust[r]}`).join(' ');
     stHtml+=`<br>帝国信托：${trust||'（空）'}`;
     st.innerHTML=stHtml; m.appendChild(st);
