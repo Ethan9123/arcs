@@ -1115,11 +1115,15 @@ const FATE_PROGRESS = {
         return n; },
     2:(ev,d,p,i)=>{ return (ev==='actionWithInitiative' && d.playerIdx===i) ? 1 : 0; },
   },
+  21:{ // Naturalist 博物学家：第一幕「在花园中安居」——每章末按你控制的带新鲜凋敝的星系数推进
+    1:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campFreshBlightSystemsControlled(i) : 0; },
+  },
 };
 // 计时阈值: [fate][act][numPlayers]
 const FATE_THRESHOLD = {
   1:{ 1:{2:20,3:17,4:14} },                         // Steward 摄政官 第一幕
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
+  21:{ 1:{2:18,3:16,4:14} },                        // Naturalist 博物学家 第一幕
 };
 function fateThreshold(num,act,np){ const t=FATE_THRESHOLD[num]&&FATE_THRESHOLD[num][act]; return t?(t[np]||null):null; }
 // 非计时型目标判定（双目标/终局幕）: fn(player,idx) => bool
@@ -1248,8 +1252,8 @@ function campResolveEdict(){
   else if(pol==='escalation'){ G.campaign.imperialShips=(G.campaign.imperialShips||0)+2; campLog('升级·帝国行动：帝国星舰池 +2（地图放置待帝国棋子阶段）'); }
   autosaveCampaign();
 }
-// 危机结算（占位：危机卡逐张效果在凋敝/逐命运阶段接线）
-function campResolveCrisis(){ campLog('—— 结算危机（占位：危机卡个体效果将在后续阶段逐卡接线）——'); }
+// 危机结算：凋敝危机（每新鲜凋敝3击/受损1击，先击帝国舰再击各玩家忠诚舰）；危机卡个体效果在 P9 逐卡接线
+function campResolveCrisis(){ campLog('—— 结算危机 ——'); if(typeof campResolveBlightCrisis==='function') campResolveBlightCrisis(); }
 // 事件骰：📜敕令 / ★危机（面分布近似 3:3，可按实体骰调整）
 function campRollEventDie(){ return (Math.floor(Math.random()*6)<3)?'edict':'crisis'; }
 // 回合末事件结算：议会已裁决→结算议会；否则掷事件骰→敕令/危机
@@ -1334,6 +1338,60 @@ function campDelegateAuthority(fromIdx, toIdx, card){
   card.agents[bc]=(card.agents[bc]||0)+1; b.supply.agents--;
   campLog(`${pname(fromIdx)} 在「${card.name}」上的密探委派给 ${pname(toIdx)}`); return true;
 }
+
+/* ===== 阶段7：凋敝(Blight) 棋子层 + 凋敝危机 + 蔓延/中场处理 ===== */
+function blightTotal(s){ return (s&&s.pieces&&s.pieces.blight)||0; }
+function blightDmg(s){ return (s&&s.pieces&&s.pieces.blightDmg)||0; }
+function blightFresh(s){ return blightTotal(s)-blightDmg(s); }
+function campPlaceBlight(sysId, damaged, n){ const s=G.map[sysId]; if(!s||s.outOfPlay) return 0; n=n||1;
+  s.pieces.blight=(s.pieces.blight||0)+n; if(damaged) s.pieces.blightDmg=(s.pieces.blightDmg||0)+n;
+  campLog(`凋敝：${sysId} +${n} ${damaged?'受损':'新鲜'}凋敝`); return n; }
+// 施加 hits 到凋敝（Tough：每 2 击推进一档 新鲜→受损→摧毁）；返回被摧毁数（→战利品归 destroyer）
+function campHitBlight(sysId, hits, destroyer){ const s=G.map[sysId]; if(!s) return 0; let destroyed=0; let acc=hits|0;
+  while(acc>=2 && blightTotal(s)>0){
+    if(blightFresh(s)>0){ s.pieces.blightDmg=(s.pieces.blightDmg||0)+1; }              // 新鲜→受损
+    else { s.pieces.blight--; s.pieces.blightDmg--; destroyed++; if(destroyer) destroyer.trophies++; } // 受损→摧毁
+    acc-=2;
+  }
+  if((s.pieces.blight||0)<=0){ s.pieces.blight=0; s.pieces.blightDmg=0; }
+  return destroyed;
+}
+function campRepairAllBlight(){ let n=0; for(const id in G.map){ const s=G.map[id]; if(s.pieces&&s.pieces.blightDmg){ n+=s.pieces.blightDmg; s.pieces.blightDmg=0; } } if(n) campLog(`修复 ${n} 个受损凋敝（→新鲜）`); return n; }
+// 凋敝危机：每系统 fresh×3 + dmg×1 击；先击帝国舰，无则击该系统每名玩家的忠诚舰（各自承受，新鲜优先）
+function campResolveBlightCrisis(){ let total=0;
+  for(const id in G.map){ const s=G.map[id]; const fr=blightFresh(s), dm=blightDmg(s); const hits=fr*3+dm*1; if(hits<=0) continue;
+    total+=hits; campLog(`凋敝危机 ${id}：${fr}新鲜+${dm}受损 → ${hits} 击`);
+    const imp=(s.pieces.ships&&s.pieces.ships.imperial)||0;
+    if(imp>0) applyShipHits(id,'imperial',hits,null);
+    else G.players.forEach(p=>{ if((s.pieces.ships[p.color.key]||0)>0) applyShipHits(id,p.color.key,hits,null); });
+  }
+  if(!total) campLog('凋敝危机：地图上无凋敝');
+  return total;
+}
+// 中场凋敝处理：修复全部受损凋敝；摧毁「有凋敝且无舰」系统中的建筑（归还供应）
+function campIntermissionBlight(){ campRepairAllBlight();
+  for(const id in G.map){ const s=G.map[id]; if(blightTotal(s)>0){ const anyShip=Object.values(s.pieces.ships||{}).some(n=>n>0);
+    if(!anyShip && s.pieces.buildings.length){ const removed=s.pieces.buildings.length;
+      s.pieces.buildings.forEach(b=>{ const o=G.players.find(p=>p.color.key===b.owner); if(o){ if(b.type==='city')o.supply.cities++; else o.supply.starports++; } });
+      s.pieces.buildings=[]; campLog(`中场：${id} 有凋敝且无舰 → 摧毁 ${removed} 座建筑`); } } }
+}
+// Act II/III 布置：星门加凋敝（无凋敝无舰的星门各 1 受损）
+function campAddBlightToGates(){ let n=0; for(let cl=1;cl<=6;cl++){ const id='G'+cl; const s=G.map[id]; if(!s||s.outOfPlay) continue;
+  const anyShip=Object.values(s.pieces.ships||{}).some(x=>x>0);
+  if(blightTotal(s)===0 && !anyShip){ campPlaceBlight(id,true,1); n++; } } return n; }
+// Act II/III 布置：在某星簇所有无凋敝行星各放 1 受损凋敝
+function campAddBlightToCluster(cl){ let n=0; ['A','B','C'].forEach(pl=>{ const id=cl+pl; const s=G.map[id]; if(s&&!s.outOfPlay&&blightTotal(s)===0){ campPlaceBlight(id,true,1); n++; } }); return n; }
+// 清剿凋敝：玩家以所在系统新鲜忠诚舰数掷突袭骰攻击凋敝（每 2 击推进一档，摧毁→战利品）
+function campAssaultBlight(sysId, playerIdx){ const s=G.map[sysId]; const p=G.players[playerIdx]; if(!s||!p) return 0;
+  const col=p.color.key; const dice=freshShips(s,col); if(dice<=0||blightTotal(s)<=0) return 0;
+  let hits=0; for(let i=0;i<dice;i++){ const f=DICE.skirmish.faces[Math.floor(Math.random()*6)]; hits+=f.hit||0; }
+  const before=blightTotal(s); const destroyed=campHitBlight(sysId,hits,p);
+  campLog(`${pname(playerIdx)} 清剿 ${sysId} 凋敝：掷 ${dice} 突袭骰命中 ${hits}，摧毁 ${destroyed}（剩 ${blightTotal(s)}）`);
+  return destroyed;
+}
+// 玩家是否控制「带新鲜凋敝」的系统（博物学家命运用）
+function campFreshBlightSystemsControlled(playerIdx){ const p=G.players[playerIdx]; if(!p) return 0; let n=0;
+  for(const id in G.map){ if(blightFresh(G.map[id])>0 && controllerOf(id)===p.color.key) n++; } return n; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -2050,7 +2108,7 @@ function drawPieces(g, s, r){
   // 船：系统上方按颜色分组。新鲜=正立三角(实心)；受损=倒置三角(半透明虚边)，各自标数。
   let ships=Object.entries(s.pieces.ships).filter(([c,n])=>n>0);
   ships.forEach(([c,n],i)=>{
-    const col=PCOLORS.find(cc=>cc.key===c).hex;
+    const ci=PCOLORS.find(cc=>cc.key===c)||(c==='imperial'?{hex:'#b8a24a'}:null); if(!ci) return; const col=ci.hex;
     const fresh=freshShips(s,c), dmg=dmgShipsN(s,c);
     const ang=-90+(i-(ships.length-1)/2)*30; const baseR=r+38;
     const fx=s.x+baseR*Math.cos(ang*Math.PI/180), fy=s.y+baseR*Math.sin(ang*Math.PI/180);
@@ -2065,6 +2123,13 @@ function drawPieces(g, s, r){
       const tn=svgEl('text',{x:dx,y:dy-4,'text-anchor':'middle',fill:'#000','font-size':22,'font-weight':800}); tn.textContent=dmg; g.appendChild(tn);
     }
   });
+  // 凋敝(Blight)：系统左侧暗色生物危害标记（新鲜=深紫实心、受损=半透明），标总数
+  const bt=blightTotal(s);
+  if(bt>0){ const fr=blightFresh(s); const bx=s.x-r-30, by=s.y;
+    g.appendChild(svgEl('circle',{cx:bx,cy:by,r:18,fill:fr>0?'#6b3fa0':'#3a2456',stroke:'#1a0e2e','stroke-width':3,opacity:fr>0?0.95:0.6}));
+    const bi=svgEl('text',{x:bx,y:by-2,'text-anchor':'middle',fill:'#e6d6ff','font-size':16,'font-weight':800}); bi.textContent='☣'; g.appendChild(bi);
+    const bn=svgEl('text',{x:bx,y:by+14,'text-anchor':'middle',fill:'#e6d6ff','font-size':13,'font-weight':800}); bn.textContent=fr+'/'+bt; g.appendChild(bn);
+  }
 }
 function triPts(x,y,s){return `${x},${y-s} ${x-s},${y+s} ${x+s},${y+s}`;}
 function triPtsDown(x,y,s){return `${x},${y+s} ${x-s},${y-s} ${x+s},${y-s}`;}
@@ -4618,6 +4683,21 @@ function openCampaignPanel(){
       lb.innerHTML='<b style="color:#d9b25a">律法书 Lawbook</b><br>'+cp.lawbook.map((id,i)=>{ const c=campCardById(id); return `${i+1}. ${c?c.cn:id}`; }).join('<br>');
       m.appendChild(lb);
     }
+    // 凋敝(Blight)概览 + 控制
+    const blighted=Object.keys(G.map).filter(id=>blightTotal(G.map[id])>0);
+    const bb=el('div','hintbox'); bb.style.cssText='text-align:left';
+    bb.innerHTML='<b style="color:#9a6fd0">☣ 凋敝 Blight</b><br>'+(blighted.length
+      ? blighted.map(id=>`${id}：${blightFresh(G.map[id])}新鲜/${blightTotal(G.map[id])}总`).join('　')
+      : '地图上暂无凋敝');
+    m.appendChild(bb);
+    const br=el('div','row'); br.style.cssText='gap:5px;flex-wrap:wrap';
+    const gb=el('button','btn ghost sm','星门播撒'); gb.title='无凋敝无舰的星门各放1受损凋敝';
+    gb.onclick=()=>{ campAddBlightToGates(); render(); closeModal(); openCampaignPanel(); }; br.appendChild(gb);
+    const clb=el('button','btn ghost sm','星簇播撒'); clb.title='掷一个星簇，其所有无凋敝行星各放1受损凋敝';
+    clb.onclick=()=>{ campAddBlightToCluster(Math.floor(Math.random()*6)+1); render(); closeModal(); openCampaignPanel(); }; br.appendChild(clb);
+    const rb2=el('button','btn ghost sm','修复受损凋敝'); rb2.onclick=()=>{ campRepairAllBlight(); render(); closeModal(); openCampaignPanel(); }; br.appendChild(rb2);
+    const cb2=el('button','btn ghost sm','★结算凋敝危机'); cb2.onclick=()=>{ campResolveBlightCrisis(); render(); closeModal(); openCampaignPanel(); }; br.appendChild(cb2);
+    m.appendChild(br);
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
