@@ -730,6 +730,373 @@ const CAMPAIGN_FATES=[
   {num:23,en:'Conspirator',cn:'阴谋家',cx:2,theme:'孵化"阴谋"暗中预测谁将赢得或并列雄心榜首，预言越准越接近胜利；可放弃旗舰来补充舰队，但自己不再能宣布雄心。',acts:['掌控全局：达到先攻刻度即完成目标。','（终局）','（终局）']},
   {num:24,en:'Judge',cn:'裁判',cx:3,theme:'绝对权力使人绝对腐化——裁判通过维持各玩家在雄心上的并列第一来"平衡远疆"，可弃旗舰补充舰队，任由对手偷取自己的战利品与俘虏。',acts:['（仅第三幕进入战役）','（仅第三幕进入战役）','平衡远疆：每章末按存在玩家并列第一的雄心数推进。']},
 ];
+/* 全部 277 张战役卡权威数据表（共享议会15 + 各命运专属，转录自本地游戏指南，个人离线版用）。
+   k: guild/vox/court/lawbook/regent/token/objective；f: 所属命运num(共享卡无)；eff: 中文效果摘要。
+   阶段2提供数据登记与牌库变更引擎；逐卡 gameplay 效果按命运在后续阶段接线。 */
+const CAMPAIGN_CARDS=[
+  {id:'mining_interest',en:'Mining Interest',cn:'采矿利益集团',k:'guild',keys:2,eff:'课税·建造(Manufacture/Build)：获得1物资。 序幕(Prelude)：你可以弃掉本卡，获得物资，数量至多等于你空置的资源槽数量。如果物资供应区因此被取空，则改为偷取这些物资。'},
+  {id:'construction_union',en:'Construction Union',cn:'建造工会',k:'guild',keys:2,eff:'序幕(Prelude)：你可以把本卡放到一张正面朝上、已打出的「建造(Construction)」牌旁边。本回合结束时，把那张建造牌抽入你的手牌，并弃掉本卡。'},
+  {id:'gatekeepers',en:'Gatekeepers',cn:'守门人',k:'guild',keys:2,eff:'当你在星门(gate)中战斗时，你可以多收集2颗骰子。 序幕(Prelude)：你可以弃掉本卡，在每个星门中各放置1艘星舰。'},
+  {id:'shipping_interest',en:'Shipping Interest',cn:'航运利益集团',k:'guild',keys:2,eff:'合成·建造(Synthesize/Build)：获得1燃料。 序幕(Prelude)：你可以弃掉本卡，获得燃料，数量至多等于你空置的资源槽数量。如果燃料供应区因此被取空，则改为偷取这些燃料。'},
+  {id:'skirmishers',en:'Skirmishers',cn:'散兵',k:'guild',keys:2,eff:'在战斗(battle)中掷骰后，你可以重掷若干颗突袭骰(skirmish dice)，数量至多等于你从资源和卡牌获得的武器(Weapon)标志总数。 序幕(Prelude)：你可以弃掉本卡，在一个你控制的星系中放置3艘星舰。'},
+  {id:'arms_union',en:'Arms Union',cn:'军备工会',k:'guild',keys:2,eff:'序幕(Prelude)：你可以把本卡放到一张正面朝上、已打出的「侵略(Aggression)」牌旁边。本回合结束时，把那张侵略牌抽入你的手牌，并弃掉本卡。'},
+  {id:'lattice_spies',en:'Lattice Spies',cn:'晶格间谍',k:'guild',keys:2,eff:'序幕(Prelude)：在进行任何其他行动之前，你可以弃掉本卡来夺取先攻(seize the initiative)。 （如果你已持有先攻，或本回合先攻已被夺取过，则你无法夺取先攻！）'},
+  {id:'silver_tongues',en:'Silver-Tongues',cn:'巧舌者',k:'guild',keys:2,eff:'序幕(Prelude)：你可以弃掉本卡，偷取一张公会卡(Guild card)或一个资源。'},
+  {id:'sworn_guardians',en:'Sworn Guardians',cn:'宣誓守卫',k:'guild',keys:1,eff:'对手(Rivals)无法偷取你的资源和你的其他公会卡。（在战斗中，他们可以先偷走本卡，再花费1把钥匙来偷其他东西。） 如果本卡被偷走，将其埋入牌库（置于议会牌库底）。'},
+  {id:'elder_broker',en:'Elder Broker',cn:'元老掮客',k:'guild',keys:2,eff:'贸易·课税(Trade/Tax)：选择一座你控制的敌方城市(Rival city)。与该对手交换1个资源——从他们处拿取1个该城市类型的资源，并给他们1个他们没有的资源。（此效果不视为偷取，无法被宣誓守卫阻挡。） 序幕(Prelude)：你可以弃掉本卡，获得1物资、1燃料和1武器。'},
+  {id:'populist_demands',en:'Populist Demands',cn:'民意诉求',k:'vox',eff:'危机(Crisis)：将「权力(Power)」最高的那个已宣告的雄心标记(declared ambition marker)放回可用雄心区(Available Ambitions)。 攫取时(When Secured)：你可以宣告任意一个雄心。（必须有可用的雄心标记。）将本卡埋入牌库(bury)。'},
+  {id:'council_intrigue',en:'Council Intrigue',cn:'议会阴谋',k:'vox',eff:'危机(Crisis)：将「帝国议会(Imperial Council)」翻到「会议中(In Session)」面。将本卡上的密探移动到帝国议会上。将本卡埋入牌库(bury)。 攫取时(When Secured)：将「帝国议会」翻到「会议中」面。你可以把本卡上的任意忠诚密探(Loyal agents)移动到其他议会卡上（甚至包括议会本身）。将本卡埋入牌库。 （注：若帝国议会已被先一步占据而不在议会区中，则无法翻面或施加影响，本卡上的密探须送往别处，危机情况下则归还其拥有者。）'},
+  {id:'diplomatic_fiasco',en:'Diplomatic Fiasco',cn:'外交惨败',k:'vox',eff:'危机(Crisis)：按行动顺位(turn order)，每位手中公会卡数量多于其供应区密探数量的玩家，必须弃掉公会卡，直到其公会卡数量等于其密探数量。将本卡埋入牌库(bury)。（计入受保护的公会卡，但不要弃掉它们。） 攫取时(When Secured)：改由各对手(Rivals)来结算此危机。'},
+  {id:'song_of_freedom',en:'Song of Freedom',cn:'自由之歌',k:'vox',eff:'危机(Crisis)：权力(Power)最高的玩家必须将一座忠诚城市(Loyal city)替换为一座自由城市(Free city)。 攫取时(When Secured)：你可以将任意一座你控制的忠诚或敌方城市(Loyal or Rival city)替换为一座自由城市(Free city)。若如此做，你可以夺取先攻(seize the initiative)。将本卡洗回议会牌库(shuffle into the Court deck)。 （注：必须控制该城市才能解放它，对忠诚城市与敌方城市皆适用；只能替换棋盘上的城市，不能替换旗舰上的城市。）'},
+  {id:'blight_looms',en:'Blight Looms',cn:'凋敝逼近',k:'vox',eff:'危机(Crisis)：修复(Repair)所掷出星系(cluster)中的所有凋敝(Blight)。在每个掷出符号(rolled symbol)、且没有凋敝的行星上，各放置1个受损的凋敝(damaged Blight)。将本卡埋入牌库(bury)。 攫取时(When Secured)：你可以摧毁(destroy)一个含有忠诚棋子(Loyal pieces)的星系中的所有受损凋敝(damaged Blight)。将本卡埋入牌库。'},
+  {id:'first_regent_tile',en:'First Regent (tile)',cn:'首席摄政(板块)',k:'regent',f:1,eff:'第一幕 Setup 获得的板块，标识你为首席摄政；其上设有帝国信托(Imperial Trust)用于存放征缴来的资源。'},
+  {id:'imperial_authority',en:'Imperial Authority',cn:'帝国权威',k:'court',f:1,eff:'传说(Lore)卡，编号02。若你是法外者则将其埋葬。你可将帝国控制的任意城市视作忠诚城市来课税，无视帝国的存在与停战律法(不抓俘虏)。'},
+  {id:'dealmakers',en:'Dealmakers',cn:'掮客',k:'court',f:1,eff:'公会(Guild)卡，编号03。攫取(Secure)讨价还价：选择一张对手能攫取的议会卡，他们攫取它但归还原本会抓走的密探；你按对方在该卡上的每个密探影响(influence)一次，然后你攫取一次。'},
+  {id:'tax_collectors',en:'Tax Collectors',cn:'税吏',k:'court',f:1,eff:'公会(Guild)卡，编号06。若你是法外者则将其埋葬。当你课税一座法外者城市时，你可从其玩家板上拿取该资源。'},
+  {id:'hunter_squads',en:'Hunter Squads',cn:'猎手小队',k:'court',f:1,eff:'公会(Guild)卡，编号07。在战斗中攻击法外者时，你可重掷不超过你武器资源与卡牌总数的突袭骰。序幕(Prelude)：可弃掉此卡以在你控制的一个系统中放置3艘星舰。'},
+  {id:'imperial_protectors',en:'Imperial Protectors',cn:'帝国守护者',k:'lawbook',f:1,eff:'律法(Law)卡，编号08，加入规则书。凋敝(Blight)危机不会在帝国控制的系统中发生(即任何有新锐帝国星舰的系统)。'},
+  {id:'empire_falls',en:'Empire Falls',cn:'帝国崩塌',k:'court',f:1,eff:'帝国之声(Vox)卡，编号09。危机：若掷出了战舰(突袭)图标，所有摄政变为法外者，命中地图上每艘帝国星舰，弃掉此卡。攫取时：你可拿取此处任意忠诚密探并放到其它议会卡上，埋葬此卡。(FAQ：帝国信托应被清空，且首席摄政承受如同最后一名帝国玩家离开帝国时通常会发生的权力损失。)'},
+  {id:'lesser_regent',en:'Lesser Regent',cn:'次级摄政',k:'court',f:1,eff:'公会(Guild)卡，编号10-11、20-22。序幕(Prelude)：可弃掉此卡以宣告任意一个雄心。'},
+  {id:'imperial_quorum',en:'Imperial Quorum',cn:'帝国法定人数',k:'lawbook',f:1,eff:'敕令(Edict)卡，编号13，加入敕令。按以下顺序结算敕令03(治理帝国远疆，或第三幕的以权威治理)的效果，然后跳过敕令03本身：第一、征收(Collect Demand)——首席摄政收取征缴;第二、行动(Take Action)——建造星港最多的摄政可执行帝国行动，平手则跳过;第三、变更政策(Change Policy)——建造城市最多的摄政可变更敕令03的政策，平手则跳过。「建造最多星港/城市」的判定包含旗舰板上的城市与星港。'},
+  {id:'navy_reprisal',en:'Navy Reprisal',cn:'海军反击',k:'court',f:1,eff:'帝国之声(Vox)卡，编号15。危机：每艘帝国星舰命中其所在系统中每个法外者的1艘星舰，优先新锐星舰，埋葬此卡。攫取时：你可在你选择的一个星团中结算该危机，或命中你选择的一个星团中所有帝国星舰，埋葬此卡。(注：实体卡存在制造错误，正面误印为事件卡，可剔除或自制代用卡。)'},
+  {id:'council_insiders',en:'Council Insiders',cn:'议会内应',k:'court',f:1,eff:'公会(Guild)卡，编号16。当你攫取一张公会卡时，你可将帝国议会翻到会期中；若它已是会期中，则你可影响(influence)帝国议会。'},
+  {id:'galactic_bards',en:'Galactic Bards',cn:'银河吟游诗人',k:'court',f:1,eff:'公会(Guild)卡，编号17。当你超越(Surpass)或转向(Pivot)时，在执行任何行动之前，若本回合尚未宣告雄心，你可宣告你所打出卡牌上的雄心；不放置零分标记。'},
+  {id:'imperial_defectors',en:'Imperial Defectors',cn:'帝国叛逃者',k:'court',f:1,eff:'帝国之声(Vox)卡，编号18-19。危机：在掷出的星团中，用回合顺序最靠前的法外者的星舰替换所有帝国星舰，埋葬此卡。攫取时：你可在任意星团中结算该危机，埋葬或弃掉此卡。'},
+  {id:'imperial_sponsor',en:'Imperial Sponsor',cn:'帝国资助',k:'lawbook',f:1,eff:'敕令(Edict)卡，编号23，第三幕加入规则书。首席摄政必须把「受资助」标记放到一个尚未宣告的雄心格(若已放置可保留在当前雄心格)，随后可将自己拥有的1个资源加入帝国信托。当某玩家宣告该「受资助」雄心时，须从帝国信托取1个资源、获得该雄心标记上第二名的权力，并把「受资助」标记归还首席摄政板块；若该玩家是法外者，则其变为摄政。'},
+  {id:'govern_with_authority_a_policy_of_war',en:'Govern with Authority - A Policy of War',cn:'以权威治理·战争政策',k:'lawbook',f:1,eff:'敕令(Edict)卡，编号24，第三幕加入规则书。前置：非帝国或摄政方→加武器+任意资源。1.征收：从每名敌对摄政、以及每个其忠诚城市或旗舰被帝国控制的法外者处，各取1个战利品或俘虏(不取帝国或摄政棋子)；若对方没有，则从其供应区取1个密探作为恩惠;若某摄政没有密探，你可使其变为法外者。2.帝国行动：从供应区给每名摄政1个武器和任意1个资源;若供应区空，则从帝国信托给予。'},
+  {id:'govern_with_authority_a_policy_of_escalation',en:'Govern with Authority - A Policy of Escalation',cn:'以权威治理·升级政策',k:'lawbook',f:1,eff:'敕令(Edict)卡，编号25，第三幕加入规则书。前置：武器/燃料/物资→+4新锐星舰。1.征收：从每名摄政(含你自己)、以及每个其忠诚城市或旗舰被帝国控制的法外者处，各取1个武器、燃料或物资，放入你首席摄政板块的帝国信托;若对方没有，则取1个密探作为恩惠;若某摄政没有密探，你可使其变为法外者。2.帝国行动：在帝国控制的一个系统中放置4艘新锐帝国星舰;若没有，则放在一个忠诚星港。'},
+  {id:'govern_with_authority_a_policy_of_peace',en:'Govern with Authority - A Policy of Peace',cn:'以权威治理·和平政策',k:'lawbook',f:1,eff:'敕令(Edict)卡，编号26，第三幕加入规则书。前置：遗物/通灵→城市权力x2。1.征收：从每名摄政(含你自己)、以及每个其忠诚城市或旗舰被帝国控制的法外者处，各取1个遗物或通灵，放入你首席摄政板块的帝国信托;若对方没有，则取1个密探作为恩惠;若某摄政没有密探，你可使其变为法外者。2.帝国行动：每名摄政从其玩家板已揭开城市槽位获得的奖励城市权力翻倍。'},
+  {id:'sponsored_token',en:'Sponsored token',cn:'受资助标记',k:'token',f:1,eff:'第三幕 Setup 放到首席摄政板块上的标记，配合「帝国资助 Imperial Sponsor(23)」使用：标记被放到某个未宣告的雄心格上，宣告该雄心的玩家可获得额外奖励并触发资助效果。'},
+  {id:'parade_fleets',en:'Parade Fleets',cn:'游行舰队',k:'regent',f:2,eff:''},
+  {id:'book_of_liberation',en:'Book of Liberation',cn:'解放之书',k:'lawbook',f:2,eff:''},
+  {id:'political_intrigue',en:'Political Intrigue',cn:'政治阴谋',k:'court',f:2,eff:'共3张加入议会牌库。FAQ：双人局中，若摇出月亮，危机效果会使双方互相给予恩惠(对手既在你左侧也在你右侧)。'},
+  {id:'admin_union',en:'Admin Union',cn:'行政工会',k:'court',f:2,eff:'共2张(10-11)，根据各幕结果加入或废弃于议会牌库。'},
+  {id:'founder_of_the_commonwealth',en:'Founder of the Commonwealth',cn:'联邦奠基者',k:'regent',f:2,eff:'第二幕获得(13)；失败时废弃(此处文档编号记为12)。'},
+  {id:'commonwealth_ambition',en:'Commonwealth Ambition',cn:'联邦雄心',k:'lawbook',f:2,eff:'律法(14)加入规则书；并有同名「联邦雄心」标记放在命运卡上。FAQ：若该标记未伴随至少一枚雄心标记，随时(及第三幕设置时)退回命运卡；尽管名为雄心，它并非雄心标记，仅受明确提及它的效果影响。'},
+  {id:'call_for_armistice',en:'Call for Armistice',cn:'停战号召',k:'lawbook',f:2,eff:'敕令(15)加入规则书，第三幕被废弃并由「群体停战号召」替换。'},
+  {id:'armistice',en:'Armistice',cn:'停战',k:'lawbook',f:2,eff:'共2张(16-17)，塞于「停战号召」敕令(15)下方。'},
+  {id:'member_of_the_commonwealth',en:'Member of the Commonwealth',cn:'联邦成员',k:'lawbook',f:2,eff:'头衔卡(18-21)，第二幕设置时发给每位玩家(含奠基者)各1张。'},
+  {id:'commonwealth_membership',en:'Commonwealth Membership',cn:'联邦成员资格',k:'lawbook',f:2,eff:'(22)加入规则书并向所有人讲解。FAQ：成员不得在结算诸如插放霸主旗等效果时把自由(Free)建筑视为忠诚；卡上所列特权即全部可做之事，自由建筑仅在课税、建造、修理行动中视为忠诚。'},
+  {id:'spirit_of_freedom',en:'Spirit of Freedom',cn:'自由之魂',k:'regent',f:2,eff:'第二幕成功时获得(24)，失败时废弃。'},
+  {id:'mass_call_for_armistice',en:'Mass Call for Armistice',cn:'群体停战号召',k:'lawbook',f:2,eff:'敕令(26)，第三幕设置时替换「停战号召」加入规则书；与之前相同，但奠基者本人现在也可发起停战。'},
+  {id:'freedom_fighters',en:'Freedom Fighters',cn:'自由斗士',k:'regent',f:2,eff:'第三幕设置时获得(27)。'},
+  {id:'commonwealth_ambition_marker',en:'Commonwealth Ambition marker',cn:'联邦雄心标记',k:'token',f:2,eff:'第二幕放到命运卡上；失败时废弃。详见「联邦雄心」FAQ的移动/退回规则。'},
+  {id:'merchant_league',en:'Merchant League',cn:'商人联盟',k:'court',f:3,eff:'公会卡(02)。危机：弃掉此处所有物资。当你宣告雄心时，可将任意2个物资置于此卡上;这些物资被冻结，仅能用于峰会中的「转移资产」行动。'},
+  {id:'relic_fence',en:'Relic Fence',cn:'遗物销赃',k:'court',f:3,eff:''},
+  {id:'prison_wardens',en:'Prison Wardens',cn:'狱卒',k:'court',f:3,eff:''},
+  {id:'material_cartel',en:'Material Cartel',cn:'物资卡特尔',k:'court',f:3,eff:''},
+  {id:'fuel_cartel',en:'Fuel Cartel',cn:'燃料卡特尔',k:'court',f:3,eff:''},
+  {id:'weapon_cartel',en:'Weapon Cartel',cn:'武器卡特尔',k:'court',f:3,eff:''},
+  {id:'psionic_cartel',en:'Psionic Cartel',cn:'通灵卡特尔',k:'court',f:3,eff:''},
+  {id:'relic_cartel',en:'Relic Cartel',cn:'遗物卡特尔',k:'court',f:3,eff:''},
+  {id:'material_monopoly',en:'Material Monopoly',cn:'物资垄断',k:'token',f:3,eff:'垄断卡(13-17之一)。持有者掌控对应物资供应;垄断上的物资计入你的持有量与雄心，但不能花用，且其他玩家在峰会中需经你同意才能给出该物资。'},
+  {id:'fuel_monopoly',en:'Fuel Monopoly',cn:'燃料垄断',k:'token',f:3,eff:'垄断卡。'},
+  {id:'weapon_monopoly',en:'Weapon Monopoly',cn:'武器垄断',k:'token',f:3,eff:'垄断卡。'},
+  {id:'psionic_monopoly',en:'Psionic Monopoly',cn:'通灵垄断',k:'token',f:3,eff:'垄断卡。'},
+  {id:'relic_monopoly',en:'Relic Monopoly',cn:'遗物垄断',k:'token',f:3,eff:'垄断卡。'},
+  {id:'gain_monopolies',en:'Gain Monopolies',cn:'获得垄断',k:'lawbook',f:3,eff:'敕令卡(18)。对每种物资，若某玩家持有该类型场上总量的过半(通常5个中持有3个)，即取得对应类型的「垄断」卡。'},
+  {id:'monopoly_consent',en:'Monopoly Consent',cn:'垄断同意',k:'lawbook',f:3,eff:'峰会卡(19)。峰会中，玩家用「转移资产」给出某物资时需获得该物资垄断持有者的同意;无人持有该垄断则不需同意。在「召集议程(Call to Order)」中，召集峰会的玩家可归还1点该持有者的好感来强制其同意。'},
+  {id:'war_profiteering',en:'War Profiteering',cn:'战争投机',k:'lawbook',f:3,eff:'律法卡(20)。第二、三幕开局时，把「战争投机商」标记放到军阀雄心格;此后军阀雄心同时计算来自物资与卡牌的战利品(Trophy)与武器(Weapon)图标总数。'},
+  {id:'war_profiteer_marker',en:'War Profiteer marker',cn:'战争投机商标记',k:'token',f:3,eff:'放置于军阀(Warlord)雄心格的标记，配合「战争投机」律法生效。'},
+  {id:'prospectors',en:'Prospectors',cn:'探矿者',k:'court',f:3,eff:''},
+  {id:'extortion',en:'Extortion',cn:'勒索',k:'court',f:3,eff:'议会卡(23、24两张)。'},
+  {id:'economy',en:'Economy',cn:'经济',k:'lawbook',f:3,eff:'律法/经济卡(26)，双面。摄政时为「封闭经济」：其他摄政除非持有对应垄断，否则不能课税帝国控制的城市(连忠诚城市也不行)。大亨变为法外者时翻到「开放经济」面。'},
+  {id:'closed_open_economy',en:'Closed & Open Economy',cn:'封闭与开放经济',k:'lawbook',f:3,eff:'律法卡(27)。封闭经济(大亨为摄政)：摄政除非持有对应垄断，否则不能课税帝国控制城市。开放经济(大亨为法外者)：玩家每回合可多次课税忠诚城市;大亨还可每回合多次课税对手城市与自由城市(Free City)。'},
+  {id:'guild_investigators_02',en:'Guild Investigators (02)',cn:'行会调查员',k:'court',f:4,eff:'第一幕设置时获得。FAQ说明：当议会中所有卡都已附有密探，或唯一没有密探的卡上已附有其他卡时，无法结算其能力(忽略附着要求的规则文本在此不适用，因为你并非被强制使用该能力)。'},
+  {id:'guild_overseers_03',en:'Guild Overseers (03)',cn:'行会监督者',k:'court',f:4,eff:'第一幕设置时获得，带「攫取时(When Secured)」效果(设置时不结算，进入议会牌库后才相关)。FAQ说明：所谓「行会卡上的行动」指序幕(Prelude)效果和新行动(New Action)效果(带加粗文字并在括号中含基本行动名的)；攫取时效果及非加粗文字引导的效果不受影响。只要你在某个已宣告雄心上处于第一、并列第一或第二(但非并列第二)，即可使用行会卡行动。'},
+  {id:'material_liaison_05',en:'Material Liaison (05)',cn:'物资联络员',k:'court',f:4,eff:''},
+  {id:'fuel_liaison_06',en:'Fuel Liaison (06)',cn:'燃料联络员',k:'court',f:4,eff:''},
+  {id:'weapons_liaison_07',en:'Weapons Liaison (07)',cn:'武器联络员',k:'court',f:4,eff:''},
+  {id:'relic_liaison_08',en:'Relic Liaison (08)',cn:'遗物联络员',k:'court',f:4,eff:''},
+  {id:'psionic_liaison_09',en:'Psionic Liaison (09)',cn:'通灵联络员',k:'court',f:4,eff:''},
+  {id:'diplomatic_fiasco_10',en:'Diplomatic Fiasco (10)',cn:'外交惨败',k:'court',f:4,eff:'第一幕成功时加入议会牌库；失败时废弃。'},
+  {id:'guild_struggle_11',en:'Guild Struggle (11)',cn:'行会斗争',k:'court',f:4,eff:'第一幕成功时废弃；失败时加入议会牌库。'},
+  {id:'advocate_s_demand_13',en:'Advocate\'s Demand (13)',cn:'代言人的要求',k:'lawbook',f:4,eff:'敕令卡，第二幕设置时加入律法书。FAQ说明：若被要求的卡是受保护(protected)的卡，则无论如何都不能交出，目标方只能交出一个恩惠(favor)来满足要求。第二幕失败时从律法书废弃。'},
+  {id:'guild_negotiations_14',en:'Guild Negotiations (14)',cn:'行会谈判',k:'lawbook',f:4,eff:'律法卡，第二幕设置时加入律法书。FAQ说明：受保护的卡无论自愿与否都不能交出(卡上相关澄清文字其实多余且易混淆)。若通过归还恩惠(Return Favors)强制代言人转移一张行会卡，则无需额外支付恩惠以获取同意——强制谈判已包含目标方的全部同意；但若要强制代言人以外的玩家转移行会卡，仍需获得代言人的同意。'},
+  {id:'guild_fair_16',en:'Guild Fair (16)',cn:'行会博览会',k:'court',f:4,eff:'第二幕成功时加入议会牌库；失败时废弃。'},
+  {id:'material_guildmasters_17',en:'Material Guildmasters (17)',cn:'物资行会大师',k:'court',f:4,eff:''},
+  {id:'fuel_guildmasters_18',en:'Fuel Guildmasters (18)',cn:'燃料行会大师',k:'court',f:4,eff:''},
+  {id:'weapons_guildmasters_19',en:'Weapons Guildmasters (19)',cn:'武器行会大师',k:'court',f:4,eff:''},
+  {id:'relic_guildmasters_20',en:'Relic Guildmasters (20)',cn:'遗物行会大师',k:'court',f:4,eff:''},
+  {id:'psionic_guildmasters_21',en:'Psionic Guildmasters (21)',cn:'通灵行会大师',k:'court',f:4,eff:''},
+  {id:'guilds_withdraw_22',en:'Guilds Withdraw (22)',cn:'行会撤离',k:'court',f:4,eff:'第二幕成功时废弃；失败时加入议会牌库。'},
+  {id:'guild_loyalty_24',en:'Guild Loyalty (24)',cn:'行会忠诚',k:'court',f:4,eff:'第三幕设置时获得。FAQ说明：其本意是防止行会卡因「激愤(Outrage)」而被弃置(discarded)。'},
+  {id:'guild_supremacy_25',en:'Guild Supremacy (25)',cn:'行会至上',k:'lawbook',f:4,eff:'第三幕设置时加入律法书并向所有人解释。'},
+  {id:'guild_supremacy_26',en:'Guild Supremacy (26)',cn:'行会至上(第二份)',k:'token',f:4,eff:'第二份作为提醒放在雄心格附近。'},
+  {id:'golem_beacon_02',en:'Golem Beacon (02)',cn:'傀儡信标 (02)',k:'regent',f:5,eff:''},
+  {id:'golem_hearth_03',en:'Golem Hearth (03)',cn:'傀儡熔炉 (03)',k:'regent',f:5,eff:'为傀儡指定一个攫取(raid)代价；可承放从地图收回的傀儡标记。'},
+  {id:'stone_speakers_04',en:'Stone-Speakers (04)',cn:'石语者 (04)',k:'court',f:5,eff:''},
+  {id:'golems_05',en:'Golems (05)',cn:'傀儡 (05)',k:'lawbook',f:5,eff:'规则书卡：定义傀儡的运作方式(在多方面如同资源/物资般运作，可被攫取)。'},
+  {id:'golem_actions_06',en:'Golem Actions (06)',cn:'傀儡行动 (06)',k:'lawbook',f:5,eff:'规则书卡：定义可花费傀儡执行的行动；其中战士傀儡(Warrior)行动会摧毁星舰，受停战律法(Truce Law)约束。'},
+  {id:'unstable_harvester_08',en:'Unstable Harvester (08)',cn:'不稳定·采集者 (08)',k:'court',f:5,eff:''},
+  {id:'unstable_seeker_09',en:'Unstable Seeker (09)',cn:'不稳定·探寻者 (09)',k:'court',f:5,eff:''},
+  {id:'unstable_protector_10',en:'Unstable Protector (10)',cn:'不稳定·守护者 (10)',k:'court',f:5,eff:''},
+  {id:'unstable_warrior_11',en:'Unstable Warrior (11)',cn:'不稳定·战士 (11)',k:'court',f:5,eff:''},
+  {id:'librarians_13',en:'Librarians (13)',cn:'书库管理员 (13)',k:'court',f:5,eff:'在你已拥有此卡的前提下，当你执行攫取(Secure)行动时触发其攫取效果(此卡自身被攫取时不触发)。'},
+  {id:'knowledge_set_free_14',en:'Knowledge Set Free (14)',cn:'知识获得释放 (14)',k:'lawbook',f:5,eff:'规则书卡。'},
+  {id:'event_15',en:'Event (15)',cn:'事件卡 (15)',k:'token',f:5,eff:'额外的事件卡，洗入行动牌堆；该卡不标注卡号。'},
+  {id:'golem_worship_17',en:'Golem Worship (17)',cn:'傀儡崇拜 (17)',k:'court',f:5,eff:''},
+  {id:'golem_worship_18',en:'Golem Worship (18)',cn:'傀儡崇拜 (18)',k:'court',f:5,eff:''},
+  {id:'golem_worship_19',en:'Golem Worship (19)',cn:'傀儡崇拜 (19)',k:'court',f:5,eff:''},
+  {id:'golems_sate_their_appetite_21',en:'Golems Sate Their Appetite (21)',cn:'傀儡满足其欲 (21)',k:'lawbook',f:5,eff:'敕令(Edict)卡，加入规则书。'},
+  {id:'sleeping_golem_tokens',en:'Sleeping Golem tokens',cn:'沉睡傀儡标记',k:'token',f:5,eff:'共4枚，开局以沉睡面置于无帝国星舰星系团的星门处；后续翻至清醒(Awake)面。'},
+  {id:'informants',en:'Informants',cn:'线人',k:'court',f:6,eff:'间谍(影响)：每回合一次，把你手上编号最大的行动卡交给一名对手；之后他们必须把自己编号最大的行动卡交给你（可以是同一张卡）。'},
+  {id:'partisan_seizing_ability',en:'Partisan Seizing (Ability)',cn:'游击者攫取（能力卡）',k:'regent',f:6,eff:'若你不是游击者，废弃此卡并清除你所有民愤。你不能再通过弃第二张行动卡来夺取先攻(seize the initiative)；改为：当你打出一张卡且选择用一种非民愤状态的物资激起民愤时，可夺取先攻（弃掉该民愤类型的物资和公会卡，在对应民愤格放置一个密探）。提醒：若你已持有先攻或先攻已被夺取，则不能夺取。'},
+  {id:'loyal_engineers',en:'Loyal Engineers',cn:'忠诚工程师',k:'court',f:6,eff:'若你激起民愤，保留此卡。你可把任意物资当作物资(Material)花费；为其序幕(Prelude)行动花费物资时无视民愤。'},
+  {id:'loyal_pilots',en:'Loyal Pilots',cn:'忠诚飞行员',k:'court',f:6,eff:'若你激起民愤，保留此卡。你可把任意物资当作燃料(Fuel)花费；为其序幕行动花费燃料时无视民愤。'},
+  {id:'loyal_marines',en:'Loyal Marines',cn:'忠诚陆战队',k:'court',f:6,eff:'若你激起民愤，保留此卡。你可把任意物资当作武器(Weapons)花费；为其序幕行动花费武器时无视民愤。序幕：你可废弃此卡以在你控制的一个星系放置3艘星舰。'},
+  {id:'loyal_empaths',en:'Loyal Empaths',cn:'忠诚共情者',k:'court',f:6,eff:'若你激起民愤，保留此卡。你可把任意物资当作通灵(Psionic)花费；为其序幕行动花费通灵时无视民愤。'},
+  {id:'loyal_keepers',en:'Loyal Keepers',cn:'忠诚守护者',k:'court',f:6,eff:'若你激起民愤，保留此卡。你可把任意物资当作遗物(Relics)花费；为其序幕行动花费遗物时无视民愤。'},
+  {id:'spacing_union',en:'Spacing Union',cn:'太空联盟',k:'court',f:6,eff:'序幕：你可把此卡放在一张正面朝上、已打出的动员(Mobilization)卡旁。本回合结束时，把那张卡抽入手牌并弃掉此卡。'},
+  {id:'outrage_spreads',en:'Outrage Spreads',cn:'民愤蔓延',k:'court',f:6,eff:'Vox卡。危机：每位玩家就掷出星球的类型激起民愤；弃掉此卡。当被攫取(secure)时：你可选择一种民愤类型，每位玩家（包括你）都必须就该类型激起民愤；弃掉此卡。'},
+  {id:'partisan_seizing_law',en:'Partisan Seizing (Law)',cn:'游击者攫取（律法）',k:'lawbook',f:6,eff:'律法(Law)：你不能通过弃第二张行动卡来夺取先攻（不限制其他夺取方式）；改为：当你打出一张卡且选择用非民愤状态的物资激起民愤时，可夺取先攻（弃掉该民愤类型的物资和公会卡，在对应民愤格放置一个密探）。提醒：若你已持有或先攻已被夺取则不能夺取。'},
+  {id:'people_s_hero',en:'People\'s Hero',cn:'人民英雄',k:'court',f:6,eff:'传说卡(Lore)。当你宣告一个雄心时，只要你持有该民愤类型的公会卡比每位对手都多，便可清除你拥有的1点民愤。'},
+  {id:'guilds_decry_terror',en:'Guilds Decry Terror',cn:'公会谴责恐怖',k:'lawbook',f:6,eff:'敕令(Edict)：若『外交惨败(Diplomatic Fiasco)』不在议会中，从议会牌库找出它、附着到帝国议会(Imperial Council)卡上，并把帝国议会翻到其『开会中(In Session)』面。'},
+  {id:'terror_strike',en:'Terror Strike',cn:'恐怖突袭',k:'court',f:6,eff:'Vox卡。危机：摧毁位于任意玩家民愤类型对应星球上的所有受损棋子；把此卡洗回议会牌库。当被攫取时：结算该危机，但不摧毁忠诚(Loyal)棋子。'},
+  {id:'sower_of_division',en:'Sower of Division',cn:'分裂播种者',k:'court',f:6,eff:'传说卡(Lore)。在一个回合结束时，当你因超越(Surpassing)而取得先攻标记时，你可在一名对手的空民愤格上放置一个忠诚密探（这不会激起民愤）。'},
+  {id:'sow_division_in_the_reach_appeal_to_your_supporters',en:'Sow Division in the Reach / Appeal to Your Supporters',cn:'在远疆播下分裂 / 向支持者请愿',k:'objective',f:6,eff:'第一幕目标卡(01)，门槛2人12/3人11/4人10。'},
+  {id:'show_your_leadership_burnish_your_image',en:'Show Your Leadership / Burnish Your Image',cn:'展现领导力 / 洗白形象',k:'objective',f:6,eff:'第二幕目标卡(15)，门槛2人18/3人14/4人12。'},
+  {id:'form_a_dominant_power_bloc',en:'Form a Dominant Power Bloc',cn:'组建主导权力集团',k:'objective',f:6,eff:'第三幕目标卡(24)：公会卡多于每位对手；且持有先攻标记。'},
+  {id:'imperial_officers',en:'Imperial Officers',cn:'帝国军官',k:'court',f:7,eff:'公会卡(GUILD 02)。若你是法外者(Outlaw)，将其埋藏(Bury)。你无视帝国的「存在律法」与「移动律法」：在你的回合，你可用任意帝国星舰行动，并控制所有帝国所控制的星系，且两种情况都不需要忠诚(Loyal)棋子。'},
+  {id:'use_imperial_foundries',en:'Use Imperial Foundries',cn:'动用帝国铸造厂',k:'lawbook',f:7,eff:'敕令卡(EDICT 03)，行动值55。由持有「帝国军官」的玩家结算。每个忠诚星港(Loyal starport)，你可将其所在星系内的1艘忠诚星舰替换为1艘帝国星舰。若你是海军上将，记得在赢得雄心时推进你的目标。'},
+  {id:'honor_guard',en:'Honor Guard',cn:'荣誉卫队',k:'court',f:7,eff:'公会卡(GUILD 05)。当你持有任意武器(Weapons资源)时，你的武器公会卡(Weapon Guild cards)不会被偷取。'},
+  {id:'rogue_admirals',en:'Rogue Admirals',cn:'叛变上将',k:'court',f:7,eff:'公会卡(GUILD 06-07，带2钥匙攫取标志)。若你是法外者，将其埋藏(Bury)。你无视帝国的「存在律法」「移动律法」与「停战律法」。序幕(Prelude)：你可弃掉此卡，在你控制的一个星系放置3艘帝国星舰。'},
+  {id:'court_enforcers',en:'Court Enforcers',cn:'议会执法者',k:'court',f:7,eff:'公会卡(GUILD 08-09，带2钥匙攫取标志)。劫持(Abduct，战斗)：从议会中一张「敌对密探数少于你来自资源与卡牌的武器图标总数」的卡上，俘获其全部敌对密探(Rival agents)。序幕(Prelude)：你可弃掉此卡，在你控制的一个星系放置3艘星舰。'},
+  {id:'command_chaos',en:'Command Chaos',cn:'指挥混乱',k:'court',f:7,eff:'异音(VOX 13)。危机(Crisis)：将「帝国军官」附着于此卡，并把议会弃牌堆中所有「叛变上将」洗回议会牌库。攫取时(When Secured)：影响(影响行动)一次。你可成为摄政。将此卡洗回议会牌库。'},
+  {id:'mass_uprising',en:'Mass Uprising',cn:'大规模起义',k:'court',f:7,eff:'异音(VOX 17-18)。危机(Crisis)：摧毁每一艘受损星舰，并将此卡埋藏(Bury)。攫取时(When Secured)：选择地图上一个星团，你在该星团的每个星系放置1艘星舰，然后弃掉此卡。'},
+  {id:'martial_law',en:'Martial Law',cn:'戒严令',k:'lawbook',f:7,eff:'律法卡(LAW 20-21，两份)。除海军上将外的摄政，若不持有「帝国军官」或「叛变上将」，则遵守以下规则：你不能指挥帝国舰队（你的回合不控制帝国所控制的星系、不能用帝国星舰行动）；若你是首席摄政，在雄心、目标与事件结算时你不视为控制帝国所控制的星系；进行弹射(Catapult)移动时，帝国对星门(gates)的控制会终止你的移动。第二份副本作为提醒塞在出牌区下方。'},
+  {id:'spreading_the_faith',en:'Spreading the Faith',cn:'传播信仰',k:'regent',f:8,eff:'第一幕开局获得的玩家专属卡;可用它把信徒行动卡从牌堆贴到帝国议会的卡上(经勘误:须满足被贴卡的全部要求,贴成后才从牌库废弃一张行动卡)。'},
+  {id:'faithful_disciples',en:'Faithful Disciples',cn:'忠实信徒',k:'regent',f:8,eff:'第一幕开局获得的玩家专属卡。'},
+  {id:'faithful_action_cards_04_12',en:'Faithful action cards (04-12)',cn:'信徒行动卡(04-12)',k:'token',f:8,eff:'9张编号1-9的新花色行动卡,按号叠成牌堆(\'1\'在底、\'9\'在顶),卡面不印编号;攫取(secure)时抽入手牌。'},
+  {id:'faithful_cards',en:'Faithful Cards',cn:'信徒卡',k:'lawbook',f:8,eff:'律法:信徒卡是新花色行动卡;从议会攫取(secure)一张即抽入手牌。打出时选择\'狂热\'(Zeal:可移动/影响/战斗/课税)或\'智慧\'(Wisdom:可建造/修理/攫取)面。盖过(Surpass)信徒卡须以同一面的信徒卡盖过;以\'7\'号信徒行动卡盖过时不夺取先攻。'},
+  {id:'pluralistic_faith',en:'Pluralistic Faith',cn:'多元信仰',k:'lawbook',f:8,eff:'律法:当你主导(Lead)一张信徒行动卡时,可用它宣告任意雄心,效果等同主导一张\'7\'号行动卡。第二幕开局被废弃。'},
+  {id:'the_young_light',en:'The Young Light',cn:'年轻之光',k:'court',f:8,eff:'第一幕成功时获得的卡。'},
+  {id:'plot_to_kidnap',en:'Plot to Kidnap',cn:'绑架阴谋',k:'court',f:8,eff:'第一幕成功时加入议会牌库。勘误:取走的卡无须展示(诚信制);若无信徒行动卡则不取任何卡,该卡仍被弃掉。'},
+  {id:'the_prodigal_one',en:'The Prodigal One',cn:'浪子',k:'court',f:8,eff:'第一幕失败时加入议会牌库。'},
+  {id:'secret_order',en:'Secret Order',cn:'秘密教团',k:'court',f:8,eff:'议会卡。第一幕失败时(编号19)加入议会牌库;第二幕另有编号26版本,失败时加入议会牌库、成功时废弃。'},
+  {id:'ideal_markers',en:'Ideal markers',cn:'理念标记',k:'token',f:8,eff:'共5枚,双面(狂热/智慧)。在打出信徒行动卡的回合,放到所宣告的雄心格上。'},
+  {id:'set_doctrine',en:'Set Doctrine',cn:'设定教义',k:'lawbook',f:8,eff:'敕令(Edict):持有\'年轻之光\'或\'先知\'的玩家可把\'教义\'改为狂热或智慧,即翻转塞在地图出牌区的教义卡。教义决定信徒行动卡必须打在哪一面,以及主导信徒行动卡可宣告哪些雄心。'},
+  {id:'doctrine',en:'Doctrine',cn:'教义',k:'token',f:8,eff:'双面卡(狂热/智慧)。狂热面:信徒行动卡必须打狂热面;打出信徒行动卡的回合不能宣告带智慧理念的雄心,若宣告无理念的雄心则在其雄心格狂热面放一枚理念标记。第三幕开局朝向标记更多的理念,平局朝智慧。'},
+  {id:'doctrinal_faith',en:'Doctrinal Faith',cn:'教义信仰',k:'lawbook',f:8,eff:'律法:第二幕开局加入规则书,规定玩家在打出信徒行动卡的回合于所宣告雄心上放置理念标记。'},
+  {id:'the_prophet',en:'The Prophet',cn:'先知',k:'court',f:8,eff:'第二幕成功且持有\'年轻之光\'时,废弃年轻之光并获得本卡;否则废弃本卡。'},
+  {id:'set_lay_doctrine',en:'Set Lay Doctrine',cn:'设定俗众教义',k:'lawbook',f:8,eff:'第二幕失败时加入规则书(成功时废弃,编号27)。'},
+  {id:'repressed_faith',en:'Repressed Faith',cn:'被压制的信仰',k:'lawbook',f:8,eff:'第二幕失败时加入规则书(成功时废弃,编号28)。'},
+  {id:'dominant_faith',en:'Dominant Faith',cn:'主导信仰',k:'lawbook',f:8,eff:'第三幕开局塞在规则书\'教义信仰\'之前,须向所有人讲解。'},
+  {id:'breaking_the_faith',en:'Breaking the Faith',cn:'打破信仰',k:'lawbook',f:8,eff:'第三幕开局加入规则书,须向所有人讲解。'},
+  {id:'spread_the_good_word',en:'Spread the Good Word',cn:'传扬福音',k:'objective',f:8,eff:'第一幕命运目标卡(F8-01),见第一幕目标。'},
+  {id:'develop_the_ideals_of_your_faith',en:'Develop the Ideals of your Faith',cn:'发展信仰的理念',k:'objective',f:8,eff:'第二幕命运目标卡(F8-20),见第二幕目标。'},
+  {id:'guide_the_flock',en:'Guide the Flock',cn:'引导信众',k:'objective',f:8,eff:'第三幕命运目标卡(F8-29),见第三幕目标。'},
+  {id:'uncovering_clues_02',en:'Uncovering Clues (02)',cn:'揭示线索 (02)',k:'court',f:9,eff:'第二幕开局获得的卡。可执行其行动以获得资源与星舰；当所有线索标记都已放上场时，你右手边的玩家选择移除一个线索标记并将其置入某星系。'},
+  {id:'clues_to_the_portal_03',en:'Clues to the Portal (03)',cn:'通往传送门的线索 (03)',k:'court',f:9,eff:'双面卡，连同6个线索标记与传送门标记交给右手边玩家持有，用于隐藏并最终揭示传送门所在。'},
+  {id:'call_to_pilgrimage_05',en:'Call to Pilgrimage (05)',cn:'朝圣召唤 (05)',k:'court',f:9,eff:'第二幕成功时加入议会牌库；失败时被废弃。'},
+  {id:'portal_seekers_06',en:'Portal Seekers (06)',cn:'传送门追寻者 (06)',k:'court',f:9,eff:'第二幕成功时被废弃；失败时加入议会牌库。'},
+  {id:'pilgrims_08',en:'Pilgrims (08)',cn:'朝圣者 (08)',k:'court',f:9,eff:'第三幕开局获得；其前奏(prelude)行动可让每个朝圣者各自独立移入任意星系(由卡面「once」一词支持每个朝圣者一次)。'},
+  {id:'seek_the_portal_09',en:'Seek the Portal (09)',cn:'寻找传送门 (09)',k:'court',f:9,eff:'第三幕开局置于议会牌库顶。'},
+  {id:'seek_the_portal_10',en:'Seek the Portal (10)',cn:'寻找传送门 (10)',k:'court',f:9,eff:'第三幕开局塞入「朝圣者」与「传送门」卡(08)下方。'},
+  {id:'seek_the_portal_11',en:'Seek the Portal (11)',cn:'寻找传送门 (11)',k:'court',f:9,eff:'第三幕开局塞入「朝圣者」与「传送门」卡(08)下方。'},
+  {id:'flagship_board',en:'Flagship board',cn:'旗舰板',k:'token',f:9,eff:'第二幕开局获得；按板背说明布置。其上含滑流引擎升级与船体升级两处可放置棋子的位置。'},
+  {id:'clue_token',en:'Clue token',cn:'线索标记',k:'token',f:9,eff:'共6个，第二幕开局交给右手边玩家；失败时全部废弃。'},
+  {id:'portal_token',en:'Portal token',cn:'传送门标记',k:'token',f:9,eff:'第二幕开局交给右手边玩家持有；第二幕失败时放到记录的星系上，标示传送门位置。'},
+  {id:'pilgrim_token',en:'Pilgrim token',cn:'朝圣者标记',k:'token',f:9,eff:'共6个，第三幕开局按所掷事件骰符号放置于对应行星上。'},
+  {id:'planting_banners_02',en:'Planting Banners (02)',cn:'插旗',k:'regent',f:10,eff:'命运能力卡(F10, ABILITY 02)。若你没有旗舰则废弃此卡。旗帜标记是你的忠诚棋子。序幕(Prelude)：若你旗舰所在的星球上没有旗帜、也没有任何非忠诚的星舰或建筑，你可以在该处放置一个旗帜（可多次执行）。'},
+  {id:'banners_of_hegemony_03',en:'Banners of Hegemony (03)',cn:'霸权之旗',k:'lawbook',f:10,eff:'律法卡(F10, LAW 03)，加入规则书并向所有人讲解。霸主可在其旗舰所在星球上放置旗帜（前提该星球没有非忠诚的星舰或建筑）。建筑属性：旗帜可像建筑一样被『损害(harm)』与『修理(repair)』（不能被劫掠；若其星系内没有星舰，凋敝(Blight)会在幕间消灭它们）。贵重属性(价值2)：结算『军阀(Warlord)』雄心时，你战利品中每有1个旗帜就额外获得2点力量（即使没在军阀里获得力量也能拿到这些力量）。'},
+  {id:'song_of_the_banner_04',en:'Song of the Banner (04)',cn:'旗之歌',k:'regent',f:10,eff:'命运传说卡(F10, LORE 04)。你可以在带有旗帜的星球之间移动，如同它们相邻一样。召唤精魂(Call Spirits，课税)：每回合一次，获取一个带旗帜星球上的2个物资。召唤躯体(Call Bodies，建造)：每回合一次，在一个旗帜处放置2艘新星舰。'},
+  {id:'mind_managers_06',en:'Mind Managers (06)',cn:'心智管理者',k:'court',f:10,eff:'议会公会卡(F10, GUILD 06)。操纵(Manipulate，影响)：选择一名你持有其俘虏的宿敌，查看其手牌，从中拿取1张牌，然后给其你手牌中的任意1张牌。'},
+  {id:'prison_wardens_07',en:'Prison Wardens (07)',cn:'典狱长',k:'court',f:10,eff:'议会公会卡(F10, GUILD 07)。强征(Pressgang，建造)：归还任意数量你的俘虏，每归还1个获得任意1个物资。处决(Execute，影响)：将任意数量你的俘虏移入你的战利品。序幕(Prelude)：你可以弃掉此卡，在一个你控制的星系中放置3艘星舰。'},
+  {id:'prison_wardens_08',en:'Prison Wardens (08)',cn:'典狱长',k:'court',f:10,eff:'议会公会卡(F10, GUILD 08)，与07同文：强征(建造)归还俘虏换物资；处决(影响)将俘虏移入战利品；序幕可弃掉以在你控制的星系放置3艘星舰。'},
+  {id:'against_the_hegemony_09',en:'Against the Hegemony (09)',cn:'反抗霸权',k:'court',f:10,eff:'议会帝国之声(Vox)卡(F10, VOX 09)。若地图上没有旗帜则废弃此卡。危机(Crisis)：将此卡埋入(Bury)。当被攫取(When Secured)：你可以把你控制的任意旗帜当作战利品拿取，然后弃掉此卡。'},
+  {id:'against_the_hegemony_10',en:'Against the Hegemony (10)',cn:'反抗霸权',k:'court',f:10,eff:'议会帝国之声(Vox)卡(F10, VOX 10)，与09同文：无旗帜在图则废弃；危机将其埋入；被攫取时可把你控制的旗帜当作战利品拿取并弃掉此卡。'},
+  {id:'happy_hosts_12',en:'Happy Hosts (12)',cn:'欢乐东道主',k:'court',f:10,eff:'议会公会卡(F10, GUILD 12)。安抚(Pacify，攫取/secure)：俘虏你控制的所有受损星舰（忠诚星舰除外）。当计分时归还俘虏(When Captives are returned in scoring)：你控制或无人控制的旗帜每有1个，你就可以保留1名俘虏。'},
+  {id:'banner_tokens',en:'Banner tokens',cn:'旗帜标记',k:'token',f:10,eff:'共8个旗帜标记，于第二幕开局随『插旗』一并获得。旗帜是霸主的忠诚棋子，可作为建筑被损害/修理，并在结算与失败处理中作为关键计数对象。'},
+  {id:'flagship',en:'Flagship',cn:'旗舰',k:'token',f:10,eff:'第二幕开局获得：拿取旗舰板并按板背说明布置。旗舰是『插旗』与『霸权之旗』放置旗帜所依托的核心棋子；若失去旗舰则需废弃『插旗』。'},
+  {id:'planet_breaker_act_ii_objective',en:'Planet Breaker - Act II Objective',cn:'碎星者·第II幕目标卡',k:'objective',f:11,eff:'01号。『修复行星之锤』：每从地图取走1枚碎星之锤碎片标记，进度+1。『将行星碾为齑粉』：用行星之锤放置1枚破碎世界标记时，进度+6。收集全部6枚碎片后获得万界之锤。'},
+  {id:'sycophants',en:'Sycophants',cn:'谄媚者',k:'court',f:11,eff:'02号公会卡（兵营标志）。当你激起民愤(Provoke Outrage)时，保留此卡并在该民愤类型的行星放置2艘星舰。序幕(Prelude)：可弃掉此卡，在你控制的一个星系放置3艘星舰。'},
+  {id:'hammer_fragments',en:'Hammer Fragments',cn:'碎星之锤碎片',k:'court',f:11,eff:'03号能力卡(ABILITY)正面。修理(Repair)：取1枚你控制的碎星之锤碎片标记放到本卡上，并在你取走它的行星放置1艘全新星舰。当本卡集齐全部6枚碎片：1) 抽出塞在下方的行星之锤卡并取走，碎片标记此后称为『锤(Hammer)』标记；2) 警告全场：若用行星之锤放置破碎世界标记，所有人都将激起该破碎行星类型的民愤；3) 将本卡翻到『砸碎世界』面，5张难民卡仍塞在其下。'},
+  {id:'breaking_worlds',en:'Breaking Worlds',cn:'砸碎世界',k:'court',f:11,eff:'03号能力卡背面。此行动伤害(Harm)该行星上所有建筑。按行动顺位，每位对手可选择在持有锤标记的行星与你战斗。战斗后若你控制该行星，将锤标记翻到破碎世界面并结算：1) 所有玩家激起该行星类型民愤；2) 抽出塞在下方该类型的难民卡(05-09)置于议会牌堆顶；3) 将该行星上所有建筑放到本卡上；4) 废弃议会中该行星类型的所有公会卡并退回其上密探。破碎世界没有建筑槽位。'},
+  {id:'planet_hammer',en:'Planet Hammer',cn:'行星之锤',k:'court',f:11,eff:'04号传说卡(LORE)。准备(Prepare/建造)：在你控制的一颗行星放置1枚锤标记；若地图上已有一枚，先退回供应区。砸碎世界(Break World/战斗)：若本回合未做准备，则结算砸碎世界卡。'},
+  {id:'forgeworld_refugees',en:'Forgeworld Refugees',cn:'锻造世界难民',k:'court',f:11,eff:'05号公会卡(物资类)。若你持有行星之锤则废弃此卡。安置(Resettle/建造)：在你控制的一颗物资行星建造一座自由城市(Free City)，清除你的物资民愤并按你空置资源槽位数获得物资，然后将此卡塞入砸碎世界卡下方。'},
+  {id:'blazeworld_refugees',en:'Blazeworld Refugees',cn:'烈焰世界难民',k:'court',f:11,eff:'06号公会卡（燃料类难民）。机制同锻造世界难民：安置时建造自由城市、清除对应类型(燃料)民愤并获取对应资源，随后塞回砸碎世界卡下；持有行星之锤则废弃。'},
+  {id:'deadworld_refugees',en:'Deadworld Refugees',cn:'死寂世界难民',k:'court',f:11,eff:'07号公会卡（武器类难民）。安置：建造自由城市、清除武器民愤并获取武器，塞回砸碎世界卡下；持有行星之锤则废弃。'},
+  {id:'lostworld_refugees',en:'Lostworld Refugees',cn:'迷失世界难民',k:'court',f:11,eff:'08号公会卡（遗物类难民）。安置：建造自由城市、清除遗物民愤并获取遗物，塞回砸碎世界卡下；持有行星之锤则废弃。'},
+  {id:'heartworld_refugees',en:'Heartworld Refugees',cn:'核心世界难民',k:'court',f:11,eff:'09号公会卡（通灵类难民）。安置：建造自由城市、清除通灵民愤并获取通灵，塞回砸碎世界卡下；持有行星之锤则废弃。'},
+  {id:'planet_eater_loose',en:'Planet-Eater Loose',cn:'放出噬星者',k:'court',f:11,eff:'11号帝国之声卡(VOX)。危机(Crisis)：再掷一次事件骰，若掷出相同符号，在掷出的行星上放置1枚破碎世界标记并结算砸碎世界卡。被攫取时(When Secured)：每个在此的密探掷1颗劫掠骰，若掷出至少3个武器图标，则获得3点权势、从行动弃牌堆底抽1张牌并将此卡置底；否则此卡及其上密探保留。第II幕失败时加入议会牌堆。'},
+  {id:'planet_breaker_act_iii_objective',en:'Planet Breaker - Act III Objective',cn:'碎星者·第III幕目标卡',k:'objective',f:11,eff:'12号。『砸碎远疆诸界』：无对手赢得军阀雄心，且满足——每位玩家都有民愤；『砸碎世界』卡上的建筑数多于当前章节数，或地图上已无建筑。'},
+  {id:'hammer_fragment_tokens',en:'Hammer Fragment tokens',cn:'碎星之锤碎片标记',k:'token',f:11,eff:'6枚。开局放置于事件骰符号对应行星上；修理行动可将其取到碎星之锤碎片卡上。集齐6枚并取得行星之锤后改称『锤(Hammer)』标记。'},
+  {id:'broken_world_tokens',en:'Broken World tokens',cn:'破碎世界标记',k:'token',f:11,eff:'6枚。锤标记的另一面/对应替换标记；放置在行星上即触发砸碎世界结算，使全场激起该行星类型民愤，破碎世界从此没有建筑槽位。第II幕失败时与砸碎世界卡一并放入供应区供放出噬星者卡使用。'},
+  {id:'pirate_hoard',en:'Pirate Hoard',cn:'海盗宝库',k:'token',f:12,eff:'用于囤积偷来的资源(燃料/物资/遗物)的板块;第二幕成功时可花费其上资源执行序章行动,物资建造无视建造上限,并可将资源放到玩家板上,余下退回供应区(编号02)。'},
+  {id:'pirate_fleet',en:'Pirate Fleet',cn:'海盗舰队',k:'court',f:12,eff:'第二幕设置时获得;若第二幕失败则加入议会牌堆(编号03)。'},
+  {id:'pirate_smugglers',en:'Pirate Smugglers',cn:'海盗走私者',k:'court',f:12,eff:'第二幕成功时获得;若第二幕失败则加入议会牌堆(编号05)。'},
+  {id:'call_to_action',en:'Call to Action',cn:'号召行动',k:'court',f:12,eff:'第二幕成功时废弃;若第二幕失败则加入议会牌堆(编号06)。'},
+  {id:'rumors_spread',en:'Rumors Spread',cn:'谣言扩散',k:'court',f:12,eff:'共2张(编号09-10),第三幕设置时洗入议会牌堆。'},
+  {id:'true_rumor',en:'True Rumor',cn:'真谣言(标记)',k:'token',f:12,eff:'2枚,正面朝下放在不同行星上,显示海盗藏匿处所在的星团与符号标志(如\'星团正确\'\'符号正确\')。'},
+  {id:'false_rumor',en:'False Rumor',cn:'假谣言(标记)',k:'token',f:12,eff:'2枚,正面朝下放在不同行星上,用于误导对手寻找海盗藏匿处。'},
+  {id:'rumors_of_the_haven',en:'Rumors of the Haven',cn:'藏匿处谣言',k:'lawbook',f:12,eff:'第三幕设置时加入规则手册(规则书)并向所有人解释(编号11)。'},
+  {id:'sharing_rumors',en:'Sharing Rumors',cn:'共享谣言',k:'lawbook',f:12,eff:'第三幕设置时加入规则手册(规则书)并向所有人解释(编号12)。FAQ:由此卡放置的密探算作忠诚棋子——其存在使拥有者可建造,且海盗不能宣称该星系内无敌对棋子。'},
+  {id:'spore_ships',en:'Spore Ships',cn:'孢子飞船',k:'court',f:13,eff:'公会卡(GUILD，编号02)。当你进行弹射(Catapult)移动时，凋敝不再终止该移动。生成(建造)：损伤1个你控制的健康凋敝，以在同一系统放置1个受损凋敝。'},
+  {id:'blight_fury',en:'Blight Fury',cn:'凋敝狂怒',k:'objective',f:13,eff:'传说卡(LORE，编号04)。你可以移动并修理你控制的凋敝(它们不能弹射，因为不是忠诚棋子)。狂怒(战斗)：投数值骰。每花费1个通灵，可将投出的点数±1("6"循环为"1"，反之亦然)。在投出的星簇(cluster)的每个系统发生一次凋敝危机(Blight Crisis)。'},
+  {id:'blight_hunters',en:'Blight Hunters',cn:'凋敝猎手',k:'court',f:13,eff:'公会卡(GUILD，编号05)。当你在战斗中进攻时，你可以只造成1次命中(而非2次)就损伤并摧毁凋敝。'},
+  {id:'blight_reapers',en:'Blight Reapers',cn:'凋敝收割者',k:'court',f:13,eff:'公会卡(GUILD，编号06)。收割(课税)：从你控制的一个系统摧毁1个受损凋敝(不作为战利品/Trophy拿取)。获得该系统所在行星的1个对应物资；若该处是星门(gate)，则获得任意1个物资。'},
+  {id:'blight_purge',en:'Blight Purge',cn:'凋敝清除',k:'court',f:13,eff:'VOX(危机/敕令类)卡，共3张(编号07、08、09，内容相同)。危机(Crisis)：每名玩家每持有1个凋敝战利品获得2点势力，然后将本卡埋入(Bury)。被攫取(secure)时：你每持有1个凋敝战利品获得2点势力，将所有对手(Rivals)的凋敝战利品退回备用区，弃掉本卡。'},
+  {id:'blight_panic',en:'Blight Panic',cn:'凋敝恐慌',k:'court',f:13,eff:'VOX卡(编号10)。危机：按行动顺位，每名玩家须为每个位于忠诚建筑或旗舰(Flagship)处的凋敝，从议会退回1名忠诚密探，然后将本卡埋入。被攫取时：摧毁某个含有忠诚棋子的星簇中所有受损凋敝并将其作为战利品拿取，然后将本卡埋入。'},
+  {id:'blight_hunger',en:'Blight Hunger',cn:'凋敝饥饿',k:'objective',f:13,eff:'传说卡(LORE，编号13)。将被凋敝危机(Blight Crisis)摧毁的棋子(包括你自己的)放到本卡上(它们计入你的某个宏大雄心/grand ambition)。计分(scoring)之后，把本卡上的所有棋子退回。'},
+  {id:'blight_speaker_act_ii_setup',en:'Blight Speaker - Act II Setup',cn:'凋敝代言者-第二幕设置',k:'objective',f:13,eff:'设置卡(SETUP，编号01)：1) 获得孢子飞船(02)。2) 从备用区或地图废弃2艘忠诚舰船。3) 补充舰队——若地图上忠诚舰船少于8艘，在任意系统各放置1艘直至达到8艘。翻面。背面为第二幕目标(先攻14-18)。'},
+  {id:'blight_speaker_act_ii_resolution',en:'Blight Speaker - Act II Resolution',cn:'凋敝代言者-第二幕结算',k:'objective',f:13,eff:'结算卡(RESOLUTION，编号03)：等到中场休息再结算。完成目标则按成功项加卡/废卡；失败则按失败项处理(见各幕成功/失败说明)。'},
+  {id:'blight_speaker_act_iii_setup',en:'Blight Speaker - Act III Setup',cn:'凋敝代言者-第三幕设置',k:'objective',f:13,eff:'设置卡(SETUP，编号12)：获得凋敝饥饿(13)。翻面，背面为第三幕目标「以尸身喂饱凋敝」。'},
+  {id:'pacifist_act_ii_objective',en:'Pacifist - Act II Objective',cn:'和平主义者 - 第二幕目标',k:'objective',f:14,eff:'先攻基准12-16(2人16/3人14/4人12)。承诺和平：章节结束时无战利品推进先攻2格、无俘虏推进1格。扩散共情：已宣告共情时序幕每花1通灵推进先攻1格。'},
+  {id:'pacifist_act_iii_objective_demonstrate_nonviolence',en:'Pacifist - Act III Objective (Demonstrate Nonviolence)',cn:'和平主义者 - 第三幕目标（展示非暴力）',k:'objective',f:14,eff:'两个目标标记：①你没有战利品或俘虏；②你的对手们的通灵资源总量多于你。'},
+  {id:'witnesses',en:'Witnesses',cn:'证人',k:'court',f:14,eff:'F14-02 能力卡(ABILITY)。证人标记是你的忠诚棋子。你可移动你控制的证人；当你弹射移动(Catapult)舰船时，可让证人随之移动。序幕(Prelude)：你可将你在通灵星球控制的1枚证人翻到其通灵资源面并取走，并可宣告共情(Empath)。'},
+  {id:'well_of_empathy',en:'Well of Empathy',cn:'共情之泉',k:'court',f:14,eff:'F14-03 传说卡(LORE)。当你在战斗中防守时，若你获得战利品，将其退回并每退回1个战利品获得1个通灵。你可在此存放任意数量的通灵；其劫掠成本为每个2把钥匙。'},
+  {id:'psionic_liaisons',en:'Psionic Liaisons',cn:'通灵联络员',k:'court',f:14,eff:'F14-05 公会卡(GUILD)，影响成本2钥匙。当你复制(Copy)以进行影响(influence)时，可获得1个通灵。序幕(Prelude)：你可将此卡附着到一张没有密探的议会卡上以宣告共情(Empath)雄心。'},
+  {id:'itinerant_empaths',en:'Itinerant Empaths',cn:'游方共情者',k:'court',f:14,eff:'F14-06 / F14-07 帝国之声卡(VOX)，共两张相同。危机(Crisis)：势力最低的玩家获得通灵，数量上限为其空闲资源槽数，然后弃掉此卡。攫取时(When Secured)：你获得通灵，上限为你的空闲资源槽数，然后弃掉此卡。'},
+  {id:'empathy_for_all_law',en:'Empathy for All (Law)',cn:'普世共情（律法）',k:'lawbook',f:14,eff:'F14-09 律法卡(LAW)。当一名玩家在某星球伤害(harm)任何东西、且该星球类型与其持有的某种资源相匹配时，该玩家就该星球类型引发民愤(Provoke Outrage)。战斗中，在结算完造成的命中之后、劫掠之前结算此条。'},
+  {id:'empathy_for_all_reminder',en:'Empathy for All (Reminder)',cn:'普世共情（提醒）',k:'lawbook',f:14,eff:'F14-10 提醒卡(REMINDER)，普世共情律法的第二张副本。将其部分塞入地图出牌区下方作提醒。文字同律法版：玩家在与其持有资源相匹配的星球类型处造成伤害时引发该类型民愤；战斗中于造成命中后、劫掠前结算。'},
+  {id:'reconcile_with_the_outraged',en:'Reconcile with the Outraged',cn:'与愤怒者和解',k:'lawbook',f:14,eff:'F14-11 峰会卡(SUMMIT)。峰会中可进行新的谈判行动「宽恕(Forgive)」：拿走一名对手的民愤作为人情(Favor)。召集令(Call to Order)阶段，召集峰会的玩家可在未经对手同意的情况下，通过给予该对手1个通灵来宽恕对手。该对手必须能持有此通灵；召集者可立即归还此人情。若通灵垄断(Psionic Monopoly)在场，则垄断持有者必须同意才能给予该通灵。'},
+  {id:'rebuke_of_the_empaths',en:'Rebuke of the Empaths',cn:'共情者的训斥',k:'lawbook',f:14,eff:'F14-12 敕令卡(EDICT)，触发先攻值60。若已宣告共情(Empath)，每名玩家弃掉与其民愤类型相匹配的所有资源，且每名没有通灵民愤的玩家获得1个通灵。不弃掉公会卡或被冻结的资源，例如守护(Guardian)俘虏中的物资/燃料，或大亨(Magnate)的商人联盟上的资源。'},
+  {id:'witness_token',en:'Witness token',cn:'证人标记',k:'token',f:14,eff:'双面标记：一面为望远镜(spyglass)，一面为通灵资源。开局收取4枚，在每个武器型星球放1枚望远镜面。是和平主义者的忠诚棋子，可被移动；可翻面为通灵取走。'},
+  {id:'oath_of_peace',en:'Oath of Peace',cn:'和平誓约',k:'objective',f:15,eff:'第二幕开局获得的命运目标卡(编号02);第二幕失败时将其废弃。'},
+  {id:'arsenal_keepers',en:'Arsenal Keepers',cn:'军械守护者',k:'court',f:15,eff:'第二幕开局获得(编号03);第二幕失败时若仍持有,则将其加入议会牌库。'},
+  {id:'arms_interest',en:'Arms Interest',cn:'军备利益',k:'court',f:15,eff:'第二幕成功时,将2张军备利益(编号05、06)加入议会牌库。'},
+  {id:'ceasefire_token',en:'Ceasefire token',cn:'停火标记',k:'token',f:15,eff:'第三幕开局在每个星团旁放置1枚,有「和平」与「战争」两面;控制该星团内任意星系则放和平面,否则放战争面。它不算作星门或任何空间内的棋子,仅用于便于参考,永久关联对应星团,可放在玩家容易看到的任何位置;星门被Gate Wraith摧毁时停火标记不受影响。'},
+  {id:'ceasefires',en:'Ceasefires',cn:'停火',k:'lawbook',f:15,eff:'第三幕开局加入规则书的律法卡(编号08),需向所有玩家说明。'},
+  {id:'empire_balks_at_peace',en:'Empire Balks at Peace',cn:'帝国拒绝和平',k:'lawbook',f:15,eff:'第三幕开局加入规则书的律法卡(编号09),需向所有玩家说明。'},
+  {id:'peace_dividends',en:'Peace Dividends',cn:'和平红利',k:'lawbook',f:15,eff:'第三幕开局加入规则书的律法卡(编号10),需向所有玩家说明。'},
+  {id:'peace_accords',en:'Peace Accords',cn:'和平协定',k:'lawbook',f:15,eff:'第三幕开局加入规则书的律法卡(编号11),需向所有玩家说明。'},
+  {id:'claims_of_nobility',en:'Claims of Nobility',cn:'贵族宣称',k:'objective',f:16,eff:'传说(Lore)卡(02)。危机(Crisis):持有此卡的玩家必须执行『宣称采邑』行动。宣称采邑(课税)(Claim Fief (Tax)):将本卡附着到一张议会卡上;你可以在某个尚无王座的星簇中、你掌控的一座忠诚城市上方放置一个王座标记。'},
+  {id:'lord_of_the_1st_cluster',en:'Lord of the 1st Cluster',cn:'第1星簇之领主',k:'token',f:16,eff:'领主头衔卡(03)。放置了第1星簇王座标记的玩家持有此卡,成为该星簇(采邑)的领主。'},
+  {id:'lord_of_the_2nd_cluster',en:'Lord of the 2nd Cluster',cn:'第2星簇之领主',k:'token',f:16,eff:'领主头衔卡(04)。放置了第2星簇王座标记的玩家持有此卡。'},
+  {id:'lord_of_the_3rd_cluster',en:'Lord of the 3rd Cluster',cn:'第3星簇之领主',k:'token',f:16,eff:'领主头衔卡(05)。放置了第3星簇王座标记的玩家持有此卡。'},
+  {id:'lord_of_the_4th_cluster',en:'Lord of the 4th Cluster',cn:'第4星簇之领主',k:'token',f:16,eff:'领主头衔卡(06)。放置了第4星簇王座标记的玩家持有此卡。'},
+  {id:'lord_of_the_5th_cluster',en:'Lord of the 5th Cluster',cn:'第5星簇之领主',k:'token',f:16,eff:'领主头衔卡(07)。放置了第5星簇王座标记的玩家持有此卡。'},
+  {id:'lord_of_the_6th_cluster',en:'Lord of the 6th Cluster',cn:'第6星簇之领主',k:'token',f:16,eff:'领主头衔卡(08)。放置了第6星簇王座标记的玩家持有此卡。'},
+  {id:'seats_and_fiefs',en:'Seats and Fiefs',cn:'王座与采邑',k:'lawbook',f:16,eff:'律法卡(09)。玩家可用『贵族宣称』卡在城市上放置王座标记。城市带王座标记时,其玩家即为该星簇的领主,该星簇为领主的采邑(Fief),并取走对应的领主头衔卡(03-08)。在领主采邑内拥有忠诚城市或旗舰的对手,仅在该采邑内是领主的封臣(Vassal)。带王座的城市被摧毁时,归还其王座标记与对应的领主头衔卡。领主与封臣的关系由『封建律法』卡说明。'},
+  {id:'feudal_law',en:'Feudal Law',cn:'封建律法',k:'lawbook',f:16,eff:'律法卡(10)。领主可课税其采邑内任意城市,无视控制权(仍从对手封臣的城市抓取俘虏)。若领主在其采邑内伤害其封臣,或封臣在其采邑内伤害其领主,则会以该采邑的全部城市激起民愤(Outrage)(战斗中先于劫掠结算)。封臣若摧毁采邑内对手封臣的城市,不激起民愤。封建律法仅由领主与封臣在彼此共享该关系的采邑内所采取的行动触发,其他采邑不触发;第三幕中使用『守护者征募』卡不算伤害你的封臣。'},
+  {id:'warden_s_levy',en:'Warden\'s Levy',cn:'守护者征募',k:'objective',f:16,eff:'传说(Lore)卡(12)。征募(课税)(Levy (Tax)):从一名封臣的供应区放置1艘星舰到本卡;本卡每对应1个你担任其领主的采邑,可容纳1艘该封臣的星舰。战斗中进攻时,本卡上的星舰必须最先承受命中;在此被摧毁的星舰归还本卡——不作为战利品取走。'},
+  {id:'feast_day',en:'Feast Day',cn:'盛宴日',k:'court',f:16,eff:'Vox卡(13)。当本卡在议会中时,玩家之间不能在采邑内互相伤害。危机(Crisis):废弃本卡及其上的密探。被攫取时(When Secured):你可以将1座带王座标记的对手城市替换为忠诚城市;然后将本卡埋入牌堆底。'},
+  {id:'feudal_courts',en:'Feudal Courts',cn:'封建议会',k:'lawbook',f:16,eff:'律法卡(18)。当你影响议会中一张空卡(帝国议会除外)时,你可以从供应区为一个你担任领主或封臣的采邑放置该议会标记(Court token)。要影响或攫取带议会标记的卡,你必须是对应采邑的领主或封臣。若领主攫取带议会标记的卡,归还该议会标记及该卡上所有封臣密探。当玩家洗劫议会(Ransacks the Court)时,只有摧毁了对应采邑内一座城市,才能攫取带议会标记的卡。'},
+  {id:'lords_gain_power',en:'Lords Gain Power',cn:'领主获权',k:'lawbook',f:16,eff:'敕令(Edict)卡(19)。从第1星簇开始按顺时针为每个采邑依次结算:该采邑的领主获得3点权力;然后,若该采邑的议会标记在议会的某张卡上,该采邑领主可以影响或攫取那张卡。'},
+  {id:'reach_rejects_overlord',en:'Reach Rejects Overlord',cn:'远疆拒绝霸主',k:'lawbook',f:17,eff:'敕令(Edict)/规则书卡，编号F17-03(卡面编号65)。霸主根据其民愤(Outrage)数量失去权力：1点民愤失去1权力；2点民愤失去3权力；3点民愤失去6权力；4点民愤失去8权力；5点民愤失去10权力。'},
+  {id:'rule_by_fear_alone_control_by_fear_alone',en:'Rule by Fear Alone / Control by Fear Alone',cn:'仅凭恐惧统治 / 仅凭恐惧控制',k:'objective',f:17,eff:'第三幕目标卡，编号F17-01，计时器起始20。章节结束时，每持有一种与民愤相符的物资类型推进计时器1格；每控制一种与民愤相符的星球类型推进计时器2格。若你是首席摄政，就目标而言视为控制所有帝国控制的星系。章节结束时若已完成目标且至少有1点权力则获胜。'},
+  {id:'overlord_act_iii_setup',en:'Overlord - Act III Setup',cn:'霸主-第三幕 开局设置',k:'objective',f:17,eff:'第三幕开局设置卡，编号F17-01(SETUP面)。内容：可用旗舰重新安置；获得谄媚者(02)；将『远疆拒绝霸主』(03)加入规则书；若无民愤可挑起一次民愤在对应类型星球放2艘星舰(不触发谄媚者)。翻面即为目标卡。'},
+  {id:'vow_of_survival',en:'Vow of Survival',cn:'生存誓言',k:'lawbook',f:18,eff:'传说/命运卡(LORE 02)。你不能宣告(declare)暴君雄心。结算时，当你赢得任何雄心，你只获得第二名的权力。归还俘虏时，地图上你每有1个地堡，便可保留1名俘虏。(注：若幸存者是共同体成员，本卡不影响共同体雄心所得权力；若非成员而赢得共同体雄心，则共同体雄心无效，幸存者获得第二名权力且不翻倍。)'},
+  {id:'building_bunkers',en:'Building Bunkers',cn:'建造地堡',k:'regent',f:18,eff:'能力卡(ABILITY 03)，附带9个地堡标记。地堡标记是你的忠诚棋子。你可在行星上建造(build)地堡，每行星最多1个；建造1个地堡须同时从你的供应区废弃(scrap)1个密探。建造地堡时，从任意对手供应区俘获1名密探。当对手摧毁你的1个地堡时，他们废弃你持有的1名俘虏。『建筑(Building)』：地堡可像建筑一样被损害(harmed)，但不占用建筑槽、不可被劫掠(raided)。『坚固(Tough)』：地堡损害与摧毁各需2次命中。'},
+  {id:'bunkers',en:'Bunkers',cn:'地堡',k:'lawbook',f:18,eff:'律法卡(LAW 04)。幸存者可废弃其密探在行星上建造地堡，借此俘获对手密探，并在结算暴君时得以保留俘虏。当对手摧毁1个地堡时，他们废弃幸存者持有的1名俘虏。『建筑』：地堡可像建筑一样被损害，但不占用建筑槽、不可被劫掠。『坚固』：地堡损害与摧毁各需2次命中。'},
+  {id:'captive_release',en:'Captive Release',cn:'俘虏释放',k:'objective',f:18,eff:'敕令卡(EDICT 05，序号85)。按行动顺位，每位权力高于幸存者的玩家执行：若幸存者持有任何对你忠诚的俘虏，你可选择1个你控制的地堡；幸存者必须二选一——归还所有这些俘虏，或对该地堡所在行星类型激起民愤(Provoke Outrage)。'},
+  {id:'ire_of_the_keepers',en:'Ire of the Keepers',cn:'守护者之怒',k:'token',f:19,eff:'(F19 LORE 02 标记) 你不可宣告(declare)守护雄心。只有在你控制遗物星球上的忠诚城市时，你才可以对其课税。'},
+  {id:'rebuke_of_the_keepers',en:'Rebuke of the Keepers',cn:'守护者之斥责',k:'lawbook',f:19,eff:'(F19 EDICT 03 律法/敕令卡，加入规则书) 若守护被宣告而救赎者不是其领先者，救赎者损失等同于守护雄心第一名分值的威望。若守护未被宣告，则拥有最多遗物的玩家可以宣告守护(救赎者不能宣告它；若平手则跳过此项)。'},
+  {id:'setup_f20_act_iii',en:'Setup (F20 Act III)',cn:'设置卡（F20 第三幕 01）',k:'objective',f:20,eff:'第三幕开局设置卡，正面列出 6 步设置(重新安置/引发物资与燃料民愤/2人局退回雄心格资源/放置伊甸卫雄心标记/获得绿色宝库与大亨之怒/加入伊甸卫雄心律法)，背面为目标卡，提示翻面查看目标。'},
+  {id:'objective_f20_act_iii',en:'Objective (F20 Act III)',cn:'目标卡（F20 第三幕 01）',k:'objective',f:20,eff:'先攻计时阈值 15。含两半目标：「回报大地」——章节结束时若赢得暴君或暴君未被宣告，俘虏区每个物资/燃料推进先攻 1 格；「守护远疆的壮丽」——章节结束时若赢得伊甸卫或伊甸卫未被宣告，每个你控制的物资/燃料行星推进先攻 1 格。章节结束时完成目标且至少有 1 点权力即获胜。'},
+  {id:'green_vault',en:'Green Vault',cn:'绿色宝库',k:'court',f:20,eff:'传说卡(LORE 02)。当你获取物资或燃料时，可将其放入你的俘虏区(即便是为帝国信托获取也可)。俘虏区中的物资与燃料被「冻结」——它们同时计入暴君与大亨，且若暴君被计分则退回供应区。FAQ：当你不持有此卡时，俘虏区中的物资与燃料仍同时作为俘虏与资源使用，但不再冻结(可花费、可在峰会中转移；峰会转移时可选择作为资源或作为俘虏转移)。'},
+  {id:'ire_of_the_tycoons',en:'Ire of the Tycoons',cn:'大亨之怒',k:'court',f:20,eff:'传说卡(LORE 03)。你不能宣告大亨，也不能从计分大亨获得权力。你只能对你控制的物资行星与燃料行星上的忠诚城市进行课税(tax)。'},
+  {id:'edenguard_ambition',en:'Edenguard Ambition',cn:'伊甸卫雄心',k:'lawbook',f:20,eff:'律法卡(LAW 04)，加入规则书。新增雄心「伊甸卫」：控制最多的燃料行星与物资行星(就雄心而言，首席摄政控制帝国所掌控的星系)。当某玩家本应宣告大亨时，可改为宣告伊甸卫。对应价值 2 的伊甸卫雄心标记板放在大亨雄心格旁。'},
+  {id:'edenguard_ambition_tile',en:'Edenguard Ambition tile',cn:'伊甸卫雄心标记板',k:'token',f:20,eff:'价值 2 的雄心标记板(图示标注「2 EDENGUARD」)，开局放在大亨雄心格旁，用于结算伊甸卫雄心。'},
+  {id:'live_in_the_garden',en:'Live in the Garden',cn:'在花园中安居',k:'objective',f:21,eff:'第三幕目标卡(F21-01，计时器14-18：2人18/3人16/4人14)。在章节结束时，若你赢得凋敝同族雄心或其未被宣示，则你每控制1个带任意新鲜凋敝的星系推进计时器1格。卡面注解：凋敝社群让你能修理凋敝并与之共存；孢子向导帮你向地图添加凋敝。在章节结束时，若已完成目标且至少拥有1点权势，则赢得游戏。'},
+  {id:'blight_society',en:'Blight Society',cn:'凋敝社群',k:'court',f:21,eff:'传说(Lore)卡(F21-02)。你可以修理并移动你控制的凋敝(它们不能弹射，因为它们不是忠诚的)。若你伤害或摧毁一个凋敝，需从供应区废弃1个忠诚密探。在凋敝危机(Blight Crises)中，你可花费1个通灵(Psionic)以在所有有忠诚舰船的星系中阻止之。'},
+  {id:'spore_guides',en:'Spore Guides',cn:'孢子向导',k:'court',f:21,eff:'公会(Guild)卡(F21-03)。播种(Seed，建造类)：掷数字骰。每选择从议会返还1个忠诚密探，便可将掷出结果改变1点("6"环绕回"1"，反之亦然)。在掷出的星团中，于一个没有凋敝的星系放置1个受损凋敝。'},
+  {id:'blightkin_ambition',en:'Blightkin Ambition',cn:'凋敝同族雄心',k:'lawbook',f:21,eff:'律法(Law)卡(F21-04)，加入规则手册。新增一个雄心「凋敝同族(Blightkin)」：控制最多带有新鲜(fresh)凋敝的星系(首席摄政控制由帝国控制的星系)。当一名玩家本应宣示共情(Empath)时，他们可改为宣示凋敝同族。'},
+  {id:'blightkin_ambition_tile',en:'Blightkin Ambition tile',cn:'凋敝同族雄心标记板块',k:'token',f:21,eff:'编号6、标注 Blightkin 的雄心板块；放在共情雄心格旁，用于标示该新雄心的计分位。'},
+  {id:'gate_wraith_act_iii_setup',en:'Gate Wraith - Act III Setup',cn:'星门幽灵·第三幕 开局设置',k:'objective',f:22,eff:'F22-01 设置/目标卡(正面为开局7步,背面为目标『崩塌远疆诸星门』及计时18-24)。'},
+  {id:'catapult_overdrive',en:'Catapult Overdrive',cn:'弹射超载',k:'court',f:22,eff:'F22-02 传说(Lore)卡。你可以使用你控制的『敌方星港』进行弹射移动(Catapult move)。当你弹射移动进入扭曲通道时,你可以继续本次弹射移动,无视控制权与凋敝(Blight)。'},
+  {id:'breaking_gates_placing_passages',en:'Breaking Gates & Placing Passages',cn:'崩塌星门并放置通道',k:'lawbook',f:22,eff:'F22-03 能力(Ability)卡。当你从某行星弹射移动进入同一星簇的星门时:1)在你移入的星门上放置1枚通道标记;2)摧毁你用于弹射的建筑——地图上的星港,或你旗舰的滑流引擎升级与装甲;不将其作为战利品。3)将该星门上的所有舰船与标记移到扭曲通道(地图中央区域),摧毁星门上所有建筑但不作为战利品。'},
+  {id:'the_dead_live',en:'The Dead Live',cn:'亡者复生',k:'token',f:22,eff:'F22-04 提示(Reminder)卡。任何被摧毁却未被取作战利品的舰船都放到此卡上。计分(scoring)之后,把战利品与此卡上的所有舰船全部取回,以完好状态放到扭曲通道。无论『军阀(Warlord)』雄心是否被计分都照此处理。'},
+  {id:'passages_the_twisted_passage',en:'Passages & The Twisted Passage',cn:'通道与扭曲通道',k:'lawbook',f:22,eff:'F22-05 律法(Law)卡。星门幽灵可用弹射移动在星门上放置通道标记。地图中心现在成为一个名为『扭曲通道』的星门。带有通道标记的星门退出游戏——本应放到其上的棋子改放到扭曲通道。你可从与带通道标记星门相邻的系统移动到扭曲通道；也可从扭曲通道移动到其ID符号出现在事件骰上的任意行星,移动后重掷事件骰。玩家不能在扭曲通道伤害敌方(危机仍可造成伤害);扭曲通道内的城市为通灵(Psionic)。计分之后,『亡者复生』将被摧毁的舰船放到扭曲通道。'},
+  {id:'passage_storms',en:'Passage Storms',cn:'通道风暴',k:'court',f:22,eff:'F22-06 帝国之声(Vox)议会卡。抽到时:拥有先攻(initiative)的玩家将其附到议会中的一张卡上。危机(Crisis):打击扭曲通道内的每个棋子,然后将此卡放到议会牌堆顶卡之下。被攫取(secure)时:从扭曲通道进行任意次数的移动到任意行星(不要移除此卡)。'},
+  {id:'conspirator_act_iii_objective_01',en:'Conspirator - Act III Objective (01)',cn:'阴谋家·第三幕目标卡(01)',k:'objective',f:23,eff:'掌控全局(Control the Proceedings)，先攻目标 6-12(2人12/3人9/4人6)。结算雄心时，每张猜对的阴谋、每张放在未结算雄心上的阴谋，先攻各推进1。阴谋的放置/移除/结算分别依《阴谋》《挫败阴谋》《结算阴谋》卡。章节结束时若完成目标且至少有1点势力则获胜。'},
+  {id:'farseers_02',en:'Farseers (02)',cn:'先知(02)',k:'token',f:23,eff:''},
+  {id:'conspiracies_03',en:'Conspiracies (03)',cn:'阴谋(03)',k:'court',f:23,eff:'你为每个玩家颜色拥有2枚阴谋标记。当你宣布雄心时不放置雄心标记(若没有可用标记则无法宣布雄心)，而是从你的供应区把一枚阴谋正面朝下放入所宣布的雄心格。当你攫取(secure)一张卡时，你可以用手中一张公会卡补充议会，以便把一枚阴谋正面朝下放入一个没有雄心标记的雄心格。'},
+  {id:'scoring_conspiracies_04',en:'Scoring Conspiracies (04)',cn:'结算阴谋(04)',k:'lawbook',f:23,eff:'每个玩家颜色有2枚阴谋。结算雄心后，翻开所有放在已结算雄心上的阴谋：每张仍未翻开的阴谋使阴谋家先攻推进1；每张翻开后显示其雄心榜首或并列第一玩家的阴谋使先攻推进1；每张未显示榜首/并列的阴谋使阴谋家在势力轨上的目标标记后退1(远离完成)。把以上所有步骤合并为目标标记的一次移动，然后收回所有已翻开的阴谋。'},
+  {id:'foiling_conspiracies_05',en:'Foiling Conspiracies (05)',cn:'挫败阴谋(05)',k:'lawbook',f:23,eff:'阴谋家为每个玩家颜色拥有2枚阴谋。当你(对手)攫取任意法外者(Vox)卡或一张带有阴谋家密探的卡时，可以猜测某个雄心格上一枚正面朝下的阴谋。猜对则将其收回给阴谋家；猜错则阴谋家先攻推进1。(注：阴谋家本人不可为了故意猜错来推进而猜测自己的暗置阴谋。)'},
+  {id:'judge_act_iii_setup_f24_01',en:'Judge - Act III Setup (F24-01)',cn:'裁判·第三幕 开局卡 (F24-01)',k:'objective',f:24,eff:'第三幕开局指示卡(正面为SETUP)：可重新安置旗舰、获得公平之誓/仲裁者/裁判之选、把裁判定议程加入规则手册，然后翻面变为目标卡「平衡远疆」(06)。'},
+  {id:'balance_the_reach_f24_01_back_objective_06',en:'Balance the Reach (F24-01 back, Objective 06)',cn:'平衡远疆 (F24-01 背面，目标 06)',k:'objective',f:24,eff:'每章节结束时，每有一项玩家并列第一的雄心，计时器(06)前进1格。章节结束时若完成目标且至少有1点权力则获胜。2人局雄心上的资源也可造成并列；联邦雄心仅在个体玩家并列第一时推进裁判，不合并雄心值。'},
+  {id:'vow_of_fairness_f24_02_lore',en:'Vow of Fairness (F24-02, Lore)',cn:'公平之誓 (F24-02，传说卡)',k:'court',f:24,eff:'你的战利品(Trophies)和俘虏(Captives)可被偷取，其劫掠成本各为1个武器(攫取标志)。若某玩家偷取了忠于其自身的战利品或俘虏，这些棋子返回该玩家供应区。'},
+  {id:'the_arbiter_f24_03_guild',en:'The Arbiter (F24-03, Guild)',cn:'仲裁者 (F24-03，公会卡)',k:'court',f:24,eff:'计分(scoring)开始时，你可将任意数量的战利品、俘虏与资源(物资/燃料/武器/遗物/通灵)交给对手，资源数量上限为该对手的空资源槽数量(战利品与俘虏不受槽位限制)。忠于该对手的棋子返回其供应区。'},
+  {id:'judge_s_chosen_f24_04_title',en:'Judge\'s Chosen (F24-04, Title)',cn:'裁判之选 (F24-04，头衔卡)',k:'court',f:24,eff:'若你是裁判的对手(Rival)：可用裁判的忠诚舰船执行行动(其舰船不计入你的控制)；可用自己的忠诚星港(非裁判星港)弹射裁判舰船；攻击除裁判以外任何人时，可把战斗系统内裁判的忠诚舰船加入你的进攻舰船；攻击裁判时，裁判的忠诚舰船计入其防御棋子而非你的进攻。'},
+  {id:'judge_sets_agenda_f24_05_edict_15',en:'Judge Sets Agenda (F24-05, Edict 15)',cn:'裁判定议程 (F24-05，敕令 15)',k:'lawbook',f:24,eff:'加入规则手册的敕令卡：裁判可宣告任意雄心、放置任意未放置的雄心标记(无需拥有最多权力)；若如此做，则失去该雄心标记第二名的权力。然后把「裁判之选」卡交回裁判，裁判必须将其转交给任意一名对手。'},
+];
+function campCardById(id){ return CAMPAIGN_CARDS.find(c=>c.id===id); }
+/* ===== 阶段2：战役议会牌库动态增删引擎 + 幕状态机 + 幕脚本解释器 ===== */
+function campLog(msg){ if(typeof logMsg==='function' && G && G.log) logMsg(msg,'sys'); }
+// 把登记项实例化为议会区运行时卡（可被影响/攫取；逐卡 gameplay 效果按命运后续接线）
+function makeCampaignCourtCard(id){
+  const c=campCardById(id); if(!c) return null;
+  return { id:'cc_'+id, srcId:id, campaign:true, t:(c.k==='vox'?'vox':'guild'),
+    name:c.cn, en:c.en, keys:(c.keys>0?c.keys:2), eff:null, txt:c.eff||'', icon:null, agents:{} };
+}
+// 从所有议会区(议会区/牌堆/弃堆/玩家麾下)移除某战役卡，返回被移除的运行时卡或 null
+function campZoneRemove(srcId){
+  const match=c=>c&&c.campaign&&c.srcId===srcId;
+  for(const zone of [G.court, G.courtDeck, G.courtDiscard]){ const i=zone.findIndex(match); if(i>=0) return zone.splice(i,1)[0]; }
+  for(const p of G.players){ const arr=p.guildCards||[]; const i=arr.findIndex(match); if(i>=0) return arr.splice(i,1)[0]; }
+  return null;
+}
+function campCountInZones(srcId){ let n=0; const match=c=>c&&c.campaign&&c.srcId===srcId;
+  [G.court,G.courtDeck,G.courtDiscard].forEach(z=>n+=z.filter(match).length);
+  G.players.forEach(p=>n+=(p.guildCards||[]).filter(match).length); return n; }
+function campAddToCourtDeck(srcId){ const card=makeCampaignCourtCard(srcId); if(!card) return false;
+  G.courtDeck.push(card); if(typeof shuffle==='function') shuffle(G.courtDeck);
+  campLog(`战役：「${card.name}」加入议会牌堆`); return true; }
+function campScrapCard(srcId){ const c=campCardById(srcId); const r=campZoneRemove(srcId);
+  campLog(`战役：废弃「${c?c.cn:srcId}」`+(r?'':'（不在场）')); return !!r; }
+function campBuryCard(card){ if(card) G.courtDeck.unshift(card); } // 牌堆底（pop 取顶 → unshift 即底）
+function campSearchDiscardToCourt(srcId){ const i=G.courtDiscard.findIndex(c=>c&&c.campaign&&c.srcId===srcId);
+  if(i<0) return false; G.court.push(G.courtDiscard.splice(i,1)[0]); return true; }
+// 律法书（有序 Law/Edict/Title/Reminder）
+function campAddToLawbook(id){ if(!G.campaign.lawbook.includes(id)){ G.campaign.lawbook.push(id); const c=campCardById(id); campLog(`战役：律法书加入「${c?c.cn:id}」`); return true; } return false; }
+function campRemoveFromLawbook(id){ const i=G.campaign.lawbook.indexOf(id); if(i>=0){ const c=campCardById(id); G.campaign.lawbook.splice(i,1); campLog(`战役：律法书移除「${c?c.cn:id}」`); return true; } return false; }
+// 发卡给命运玩家（放入其麾下 guildCards，作为其专属战役卡）
+function campGainCard(srcId, playerIdx){ const p=G.players[playerIdx]; if(!p) return false;
+  const card=makeCampaignCourtCard(srcId); if(!card) return false;
+  (p.guildCards=p.guildCards||[]).push(card); const c=campCardById(srcId);
+  campLog(`${pname(playerIdx)} 获得战役卡「${c?c.cn:srcId}」`); return true; }
+function campSetFirstRegent(playerIdx){ G.campaign.firstRegentIdx=playerIdx;
+  if(G.players[playerIdx]) campLog(`${pname(playerIdx)} 成为首席摄政`); }
+
+// 幕脚本解释器：执行一组指令（op: addCourt/scrap/addLaw/removeLaw/gainCard/firstRegent/token/note）
+// ctx.playerIdx = 该命运所属玩家（gainCard/firstRegent 的目标）
+function runActInstrs(instrs, ctx){
+  ctx=ctx||{}; const pi=ctx.playerIdx;
+  (instrs||[]).forEach(ins=>{
+    const ids=ins.ids||(ins.id?[ins.id]:[]);
+    switch(ins.op){
+      case 'addCourt': ids.forEach(campAddToCourtDeck); break;
+      case 'scrap': ids.forEach(campScrapCard); break;
+      case 'addLaw': ids.forEach(campAddToLawbook); break;
+      case 'removeLaw': ids.forEach(campRemoveFromLawbook); break;
+      case 'gainCard': ids.forEach(id=>campGainCard(id, pi)); break;
+      case 'firstRegent': campSetFirstRegent(pi); break;
+      case 'token': campLog(`战役·标记：${ins.note||ins.id||''}`); break;
+      case 'note': campLog(`战役：${ins.note||''}`); break;
+      default: break;
+    }
+  });
+}
+// 幕脚本数据（按命运num）。阶段2：摄政官(1)为完整参考实装；其余命运在 P9 逐一编码，
+// 缺失时幕结算回退为「展示官方文字清单，由玩家手动操作」。
+const ACT_SCRIPTS = {
+  1:{ // Steward 摄政官
+    1:{ setup:[{op:'gainCard',id:'imperial_authority'},{op:'gainCard',id:'dealmakers'},{op:'firstRegent'}],
+        success:[{op:'addCourt',ids:['council_intrigue','tax_collectors','hunter_squads']},{op:'addLaw',id:'imperial_protectors'},{op:'scrap',ids:['empire_falls','lesser_regent']}],
+        fail:[{op:'scrap',ids:['council_intrigue','tax_collectors','hunter_squads','imperial_protectors']},{op:'addCourt',ids:['empire_falls','lesser_regent','dealmakers']}] },
+    2:{ setup:[{op:'addLaw',id:'imperial_quorum'}],
+        success:[{op:'addCourt',ids:['navy_reprisal','council_insiders','galactic_bards']},{op:'scrap',ids:['imperial_defectors','lesser_regent']}],
+        fail:[{op:'scrap',ids:['navy_reprisal','council_insiders','galactic_bards']},{op:'addCourt',ids:['imperial_defectors','lesser_regent']}] },
+    3:{ setup:[{op:'addLaw',id:'imperial_sponsor'},{op:'token',note:'受资助标记放到首席摄政板块'},{op:'removeLaw',id:'govern_the_imperial_reach'},{op:'addLaw',ids:['govern_with_authority_a_policy_of_war','govern_with_authority_a_policy_of_escalation','govern_with_authority_a_policy_of_peace']}],
+        success:[], fail:[] },
+  },
+};
+function fateActScript(fateNum, act){ const s=ACT_SCRIPTS[fateNum]; return s && s[act]; }
+// 运行某玩家当前幕的 setup
+function campRunActSetup(playerIdx){ const p=G.players[playerIdx]; if(!p||!p.fate) return;
+  const sc=fateActScript(p.fate, G.campaign.act); if(sc&&sc.setup) runActInstrs(sc.setup,{playerIdx}); }
+// 结算某玩家当前幕（success/fail 分支）
+function campResolveActForPlayer(playerIdx, success){ const p=G.players[playerIdx]; if(!p||!p.fate) return;
+  const act=G.campaign.act; p.fateObjMet[act-1]=!!success;
+  const sc=fateActScript(p.fate, act);
+  if(sc) runActInstrs(success?sc.success:sc.fail, {playerIdx});
+  campLog(`${pname(playerIdx)}（${(fateByNum(p.fate)||{}).cn||''}）第 ${act} 幕${success?'达成':'未达成'}`);
+}
+// 全体结算本幕后推进到下一幕（封顶第3幕）；推进后运行新幕 setup；返回新幕号
+function campAdvanceAct(){ if(G.campaign.act<3){ G.campaign.act++; G.players.forEach((p,i)=>campRunActSetup(i)); }
+  autosaveCampaign(); return G.campaign.act; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -1491,6 +1858,8 @@ function renderTop(){
   tutBtn.style.marginLeft='4px';
   tutBtn.onclick=()=>TUT.start(); t.appendChild(tutBtn);
   if(G.campaign && G.campaign.enabled){
+    const cpBtn=el('button','btn ghost sm','📜'); cpBtn.title='战役进度 / 幕结算 / 律法书'; cpBtn.style.marginLeft='4px';
+    cpBtn.onclick=()=>openCampaignPanel(); t.appendChild(cpBtn);
     const saveBtn=el('button','btn ghost sm','💾'); saveBtn.title='战役存档'; saveBtn.style.marginLeft='4px';
     saveBtn.onclick=()=>{ saveCampaignSlot('auto', G.campaign.label); openCampaignLoadMenu(); }; t.appendChild(saveBtn);
   }
@@ -3925,9 +4294,11 @@ function startCampaignSetup(np, names, setupV){
     w.style.display='none';
     const label='战役·'+names.slice(0,np).map((n,i)=>n||PCOLORS[i].name).join('/');
     newGame(np, names.slice(0,np), false, setupV, {fates:chosen.slice(0,np), label});
+    // 第一幕开局设置：逐玩家执行其命运 Act I setup（有脚本者自动执行，无脚本者待 P9 编码）
+    G.players.forEach((p,i)=>campRunActSetup(i));
     saveCampaignSlot('auto', label);
     render();
-    toast('战役已创建并自动存档（地基阶段：幕目标判定将在后续阶段启用）');
+    toast('战役已创建并自动存档（第一幕已就绪；幕结算见状态栏 📜）');
   };
   const step=(pi)=>{
     if(pi>=np){ launch(); return; }
@@ -3949,6 +4320,78 @@ function startCampaignSetup(np, names, setupV){
       mm.appendChild(rnd);
       const back=el('button','btn ghost','返回'); back.onclick=()=>{ closeModal(); showStartScreen(); };
       mm.appendChild(back);
+    });
+  };
+  step(0);
+}
+/* 战役进度面板：当前幕/首席摄政/帝国信托/律法书 + 各玩家命运三幕进度 + 幕结算向导 */
+function openCampaignPanel(){
+  if(!G.campaign || !G.campaign.enabled) return;
+  const cp=G.campaign;
+  openModal(m=>{
+    m.appendChild(el('h2',null,`📜 凋敝远疆战役 · 第 ${cp.act} 幕`));
+    // 顶部状态
+    const st=el('div','hintbox'); st.style.cssText='text-align:left';
+    let stHtml=`场次 ${cp.session} · 第 ${cp.act}/3 幕`;
+    if(cp.firstRegentIdx!=null && G.players[cp.firstRegentIdx]) stHtml+=` · 首席摄政：<b style="color:${G.players[cp.firstRegentIdx].color.css}">${G.players[cp.firstRegentIdx].name}</b>`;
+    const trust=RES_ORDER.filter(r=>cp.trust[r]>0).map(r=>`${RESOURCES[r].icon}${cp.trust[r]}`).join(' ');
+    stHtml+=`<br>帝国信托：${trust||'（空）'}`;
+    st.innerHTML=stHtml; m.appendChild(st);
+    // 律法书
+    if(cp.lawbook && cp.lawbook.length){
+      const lb=el('div','hintbox'); lb.style.cssText='text-align:left';
+      lb.innerHTML='<b style="color:#d9b25a">律法书 Lawbook</b><br>'+cp.lawbook.map((id,i)=>{ const c=campCardById(id); return `${i+1}. ${c?c.cn:id}`; }).join('<br>');
+      m.appendChild(lb);
+    }
+    // 各玩家命运三幕进度
+    const roman=['Ⅰ','Ⅱ','Ⅲ'];
+    G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
+      const card=el('div','hintbox'); card.style.cssText='text-align:left;margin:5px 0';
+      const idTag=p.identity==='outlaw'?'⚑法外':'👑摄政';
+      const objs=f.acts.map((o,ai)=>{ if(!o) return '';
+        const done=p.fateObjMet[ai]?'✓':(ai+1===cp.act?'▶':'○');
+        const col=p.fateObjMet[ai]?'#6fcf8e':(ai+1===cp.act?'#d9b25a':'#7f8ea8');
+        return `<div style="color:${col};font-size:11.5px;line-height:1.5">${done} 第${roman[ai]}幕：${o}</div>`;
+      }).join('');
+      card.innerHTML=`<b style="color:${p.color.css}">${p.name}</b> · <span style="color:#c98bd6">${f.cn}</span> <span style="opacity:.7;font-size:11px">${idTag}</span>${ACT_SCRIPTS[p.fate]?'':' <span style="opacity:.5;font-size:10px">(脚本待编码)</span>'}<br>${objs}`;
+      m.appendChild(card);
+    });
+    // 操作：结算本幕
+    if(cp.act<3){
+      const rb=el('button','btn gold',`结算第 ${cp.act} 幕并进入第 ${cp.act+1} 幕`); rb.style.cssText='width:100%;margin-top:8px';
+      rb.onclick=()=>{ closeModal(); openActResolveWizard(); };
+      m.appendChild(rb);
+    } else {
+      m.appendChild(el('div','hintbox','第 3 幕为战役终局幕，达成第三幕目标即触发终局结算（终局判定见后续阶段）。'));
+    }
+    const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+  });
+}
+/* 幕结算向导：逐玩家询问本幕目标是否达成（半自动·关键确认），自动执行对应成功/失败分支后推进 */
+function openActResolveWizard(){
+  const cp=G.campaign; const act=cp.act;
+  const fatePlayers=G.players.map((p,i)=>i).filter(i=>G.players[i].fate);
+  const step=(k)=>{
+    if(k>=fatePlayers.length){
+      const na=campAdvanceAct();
+      render();
+      openModal(m=>{ m.appendChild(el('h2',null,`已进入第 ${na} 幕`));
+        m.appendChild(el('div','hintbox','各命运的本幕开局设置已自动执行（有脚本者）。可在 📜 面板查看议会区与律法书变化。'));
+        const ok=el('button','btn gold','好'); ok.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(ok); });
+      return;
+    }
+    const pi=fatePlayers[k]; const p=G.players[pi]; const f=fateByNum(p.fate);
+    const sc=fateActScript(p.fate, act);
+    openModal(m=>{
+      m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}`));
+      m.appendChild(el('div','hintbox',`<b style="color:#c98bd6">${f?f.cn:''}</b> 第 ${act} 幕目标：<br><span style="font-size:12px;line-height:1.6">${(f&&f.acts[act-1])||'（无）'}</span>`));
+      if(!sc) m.appendChild(el('div','hintbox','此命运幕脚本尚未编码（后续阶段补齐）。可记录达成与否，暂不自动增删卡库。'));
+      const yes=el('button','btn gold','✓ 达成目标（成功）'); yes.style.cssText='display:block;width:100%;margin:6px 0';
+      yes.onclick=()=>{ campResolveActForPlayer(pi,true); closeModal(); step(k+1); };
+      const no=el('button','btn','✗ 未达成（失败）'); no.style.cssText='display:block;width:100%;margin:6px 0';
+      no.onclick=()=>{ campResolveActForPlayer(pi,false); closeModal(); step(k+1); };
+      m.appendChild(yes); m.appendChild(no);
+      const cancel=el('button','btn ghost','取消结算'); cancel.onclick=()=>closeModal(); m.appendChild(cancel);
     });
   };
   step(0);
