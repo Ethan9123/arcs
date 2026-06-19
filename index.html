@@ -2026,8 +2026,15 @@ function aiActiveSeat(state){
   if(ph==='actions') return state.actor;
   return state.turnPlayer;
 }
-// P1a 支持的行动（可干净自动结算）；move(多步)/battle(掷骰) 留待 P1b 专门接口
-const AI_SUPPORTED_ACTIONS = ['tax','build','repair','influence','secure'];
+// P1a 支持的行动（可干净自动结算）；move/battle 在 P1c 纳入
+const AI_SUPPORTED_ACTIONS = ['tax','build','repair','influence','secure','move','battle'];
+// 移动目标优先级(用于截断枚举): 含敌方→可进攻(+3/建筑+2), 行星空槽→可扩张(+1)
+function moveDestPriority(state, id, col){ const s=state.map[id]; if(!s) return -1; let pr=0;
+  for(const c in s.pieces.ships){ if(c!==col && s.pieces.ships[c]>0){ pr+=3; break; } }
+  if((s.pieces.buildings||[]).some(b=>b.owner!==col)) pr+=2;
+  if(s.kind==='planet' && (s.slots-(s.pieces.buildings||[]).length)>0) pr+=1;
+  return pr;
+}
 // 枚举当前决策点的合法 move（不修改 state；actions 阶段临时只读 swap G 调用引擎 legalTargets）
 function legalMoves(state){
   const ph=state.phase;
@@ -2062,6 +2069,21 @@ function legalMoves(state){
         for(const a of acts){
           if(a==='influence'){ if(me.supply.agents>0 && state.court.length) moves.push({type:'action',action:'influence'}); continue; }
           if(a==='secure'){ if(state.court.some(c=>majorityOn(c,col))) moves.push({type:'action',action:'secure'}); continue; }
+          if(a==='move'){ // 源系统 × 可达目标(忠诚星港→弹射可达; 否则相邻); 每源上限8(控分支因子, 利于MCTS深度)
+            legalTargets('move').forEach(src=>{ const s=state.map[src];
+              const loyalSp=(s.pieces.buildings||[]).some(b=>b.owner===col&&b.type==='starport');
+              let dl=[...(loyalSp ? catapultReach(src,col) : new Set((s.neighbors||[]).filter(nb=>state.map[nb]&&!state.map[nb].outOfPlay)))].filter(d=>d!==src);
+              dl.sort((x,y)=> moveDestPriority(state,y,col)-moveDestPriority(state,x,col)); // 优先含敌方(进攻)/可扩张
+              dl.slice(0,8).forEach(dest=> moves.push({type:'action',action:'move',src,dest}));
+            }); continue;
+          }
+          if(a==='battle'){ // 目标系统 × 各防守方(含中立 free/imperial)
+            legalTargets('battle').forEach(t=>{ const s=state.map[t]; const defs=new Set();
+              for(const c in s.pieces.ships){ if(c!==col && s.pieces.ships[c]>0) defs.add(c); }
+              (s.pieces.buildings||[]).forEach(b=>{ if(b.owner!==col) defs.add(b.owner); });
+              defs.forEach(defC=>moves.push({type:'action',action:'battle',target:t,defC}));
+            }); continue;
+          }
           legalTargets(a).forEach(t=>moves.push({type:'action',action:a,target:t}));
         }
       } finally { G=saved; }
@@ -2076,14 +2098,16 @@ function aiResolveModal(builder, move){
   const btns=[]; (function visit(n){ if(!n||typeof n!=='object') return; if(typeof n.onclick==='function') btns.push(n);
     const kids=n._children||(n.children?Array.prototype.slice.call(n.children):null)||[]; kids.forEach(visit); })(node);
   if(!btns.length) return;
-  const txt=b=>(b.textContent||'');
+  const txt=b=>(b.textContent||'').trim();
   let pick=null;
   if(move && move.type==='lead'){
     if(move.declare){ pick=btns.find(b=>txt(b).includes(AMBITIONS[move.declare].name)); }
     if(!pick) pick=btns.find(b=>/不宣告|直接行动/.test(txt(b)));
-  } else if(move && move.type==='action'){
-    pick=btns.find(b=>!/取消|放弃|停止|不宣告|跳过/.test(txt(b)));   // 选第一个“正向”选项（建造类型/影响某卡/修理某项）
   }
+  // 计数类模态(如移动舰船数, openCountModal 默认值=最大): 直接点「确定/确认」→ 采用默认(全部)
+  if(!pick) pick=btns.find(b=>/^确定$|^确认$/.test(txt(b)));
+  // 行动的正向选项(建造类型/影响某卡/修理/劫掠/洗劫某项): 第一个非取消、非加减
+  if(!pick && move && move.type==='action') pick=btns.find(b=>{ const t=txt(b); return t && !/取消|放弃|停止|不宣告|跳过/.test(t) && t!=='−' && t!=='＋' && t!=='-' && t!=='+'; });
   if(!pick) pick=btns.find(b=>/不宣告|跳过|停止|放弃|取消/.test(txt(b))) || btns[btns.length-1];
   if(pick && typeof pick.onclick==='function') pick.onclick();
 }
@@ -2095,10 +2119,22 @@ function aiDrive(move){
   if(move.type==='follow'){ followPlay(G.followQueue[0], move.i, move.mode, false); return; }
   if(move.type==='endActions'){ endActorTurn(); return; }
   if(move.type==='action'){
-    if(move.action==='influence'||move.action==='secure'){ beginAction(move.action); }
-    else { beginAction(move.action); if(G.pending) onSystemClick(move.target); }
+    if(move.action==='influence'||move.action==='secure'){ beginAction(move.action); return; }
+    if(move.action==='move'){ beginAction('move');
+      if(G.pending){ onSystemClick(move.src); if(G.pending && G.pending.step==='dest') onSystemClick(move.dest); } return; }
+    if(move.action==='battle'){ aiDoBattle(move.target, move.defC); return; }
+    beginAction(move.action); if(G.pending) onSystemClick(move.target);   // tax/build/repair
     return;
   }
+}
+// AI 发起战斗: 直接调 runBattle(绕过掷骰模态), 用平衡的掷骰分配(半突袭半强攻; 守方有建筑且可劫掠则留1劫掠骰)。
+// 劫掠/洗劫的后续模态由 aiResolveModal 自答。MCTS 通过 rollout 看到战斗后果, 自行决定值不值得打。
+function aiDoBattle(target, defC){
+  const me=G.players[G.actor]; const s=G.map[target]; if(!s) return;
+  const md=battleMaxDice(me,s).max; if(md<=0) return;
+  let assault=Math.floor(md/2), skirmish=md-assault, raid=0;
+  if(raidAllowed(defC,target) && (s.pieces.buildings||[]).some(b=>b.owner===defC)){ raid=1; if(skirmish>0) skirmish--; else if(assault>0) assault--; }
+  runBattle(target, defC, {skirmish,assault,raid});
 }
 // 静音驱动：假定 G 已指向工作态；临时静音 UI + 换移动感知模态自答 + 驱动引擎，最后还原 UI(不动 G)。
 function aiSilentDrive(move){
@@ -3249,9 +3285,26 @@ function promptActions(){
 }
 function endActorTurn(){
   G.pending=null; G.highlight=null;
+  eliminationRespawn(G.actor);   // 淘汰与让步(规则书 p22)：无星港无舰 → 回合末在星门放3新舰
   autosaveCampaign(); // 战役模式：回合末自动存档（单场模式空操作）
   if(G.actionContext==='lead'){ startFollow(); }
   else { G.followQueue.shift(); advanceFollow(); }
+}
+// 淘汰与让步(规则书 p22)：玩家在星域图上既无星际港口也无飞船时, 回合结束时在任意1个星门放置3艘全新飞船(东山再起)。
+function eliminationRespawn(seat){
+  const p=G.players[seat]; if(!p) return; const col=p.color.key;
+  let hasShip=false, hasStarport=false, myCityGate=null, anyGate=null;
+  for(const id in G.map){ const s=G.map[id]; if(s.outOfPlay) continue;
+    if((s.pieces.ships[col]||0)>0) hasShip=true;
+    if((s.pieces.buildings||[]).some(b=>b.owner===col&&b.type==='starport')) hasStarport=true;
+    if(s.kind==='gate'){ if(!anyGate) anyGate=id;
+      if(!myCityGate && (s.neighbors||[]).some(nb=>{ const ns=G.map[nb]; return ns&&(ns.pieces.buildings||[]).some(b=>b.owner===col); })) myCityGate=id; }
+  }
+  if(hasShip||hasStarport) return;                 // 未被淘汰
+  const gate=myCityGate||anyGate; if(!gate) return;
+  const n=Math.min(3, p.supply.ships); if(n<=0) return;
+  addShips(gate, p, n);
+  logMsg(`${pname(seat)} 被淘汰(星图上无星港无舰) → 东山再起：在星门 ${gate} 放置 ${n} 艘全新飞船（规则书 p22）`,'sys');
 }
 function cancelAction(){ if(G._freePrelude) abortPrelude(); G.pending=null; G.highlight=null; promptActions(); render(); }
 
