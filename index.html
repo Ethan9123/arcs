@@ -2017,6 +2017,124 @@ function isTerminal(state){ return !!state && state.phase==='end'; }
 // 每座位分数向量（权力=通用计分货币；战役终局再叠加 _campVictory 优先，见 endGameSort）
 function scoreVector(state){ return ((state&&state.players)||[]).map(p=>p.power||0); }
 
+/* ===== AI 移动接口（P1a）：legalMoves / applyMove / aiEval，供启发式 agent 与 MCTS 用 ===== */
+// 当前决策座位（纯函数）
+function aiActiveSeat(state){
+  const ph=state.phase;
+  if(ph==='lead') return state.initiative;
+  if(ph==='follow') return state.followQueue.length?state.followQueue[0]:state.turnPlayer;
+  if(ph==='actions') return state.actor;
+  return state.turnPlayer;
+}
+// P1a 支持的行动（可干净自动结算）；move(多步)/battle(掷骰) 留待 P1b 专门接口
+const AI_SUPPORTED_ACTIONS = ['tax','build','repair','influence','secure'];
+// 枚举当前决策点的合法 move（不修改 state；actions 阶段临时只读 swap G 调用引擎 legalTargets）
+function legalMoves(state){
+  const ph=state.phase;
+  if(ph==='lead'){
+    const p=state.players[state.initiative]; const moves=[{type:'leadPass'}];
+    for(let i=0;i<p.hand.length;i++){ const card=p.hand[i];
+      moves.push({type:'lead',i,declare:null});
+      if(state.markersAvailable && state.markersAvailable.length>0){
+        let ks=[]; if(card.number>=2&&card.number<=6) ks=[AMB_ORDER[card.number-2]]; else if(card.number===7) ks=AMB_ORDER.slice();
+        for(const k of ks){ if(!state.declaredThisChapter||!state.declaredThisChapter[k]) moves.push({type:'lead',i,declare:k}); }
+      }
+    }
+    return moves;
+  }
+  if(ph==='follow'){
+    const idx=state.followQueue[0]; const p=state.players[idx]; const moves=[{type:'followPass'}];
+    const lc=state.lead.card; const ln=state.lead.zero?0:lc.number;
+    for(let i=0;i<p.hand.length;i++){ const card=p.hand[i];
+      if(card.suit===lc.suit && card.number>ln) moves.push({type:'follow',i,mode:'surpass'});
+      if(card.suit!==lc.suit) moves.push({type:'follow',i,mode:'pivot'});
+      moves.push({type:'follow',i,mode:'copy'});
+    }
+    return moves;
+  }
+  if(ph==='actions'){
+    const moves=[{type:'endActions'}];
+    if(state.actionsLeft>0){
+      const acts=SUITS[state.actionSuit].actions.filter(a=>AI_SUPPORTED_ACTIONS.includes(a));
+      const me=state.players[state.actor]; const col=me.color.key;
+      const saved=G; G=state;
+      try{
+        for(const a of acts){
+          if(a==='influence'){ if(me.supply.agents>0 && state.court.length) moves.push({type:'action',action:'influence'}); continue; }
+          if(a==='secure'){ if(state.court.some(c=>majorityOn(c,col))) moves.push({type:'action',action:'secure'}); continue; }
+          legalTargets(a).forEach(t=>moves.push({type:'action',action:a,target:t}));
+        }
+      } finally { G=saved; }
+    }
+    return moves;
+  }
+  return [];
+}
+// 模态自答（移动感知）：捕获 builder 内带 onclick 的按钮并按 move 意图选择。document.createElement 在浏览器与无头桩下皆可。
+function aiResolveModal(builder, move){
+  const node=document.createElement('div'); builder(node);
+  const btns=[]; (function visit(n){ if(!n||typeof n!=='object') return; if(typeof n.onclick==='function') btns.push(n);
+    const kids=n._children||(n.children?Array.prototype.slice.call(n.children):null)||[]; kids.forEach(visit); })(node);
+  if(!btns.length) return;
+  const txt=b=>(b.textContent||'');
+  let pick=null;
+  if(move && move.type==='lead'){
+    if(move.declare){ pick=btns.find(b=>txt(b).includes(AMBITIONS[move.declare].name)); }
+    if(!pick) pick=btns.find(b=>/不宣告|直接行动/.test(txt(b)));
+  } else if(move && move.type==='action'){
+    pick=btns.find(b=>!/取消|放弃|停止|不宣告|跳过/.test(txt(b)));   // 选第一个“正向”选项（建造类型/影响某卡/修理某项）
+  }
+  if(!pick) pick=btns.find(b=>/不宣告|跳过|停止|放弃|取消/.test(txt(b))) || btns[btns.length-1];
+  if(pick && typeof pick.onclick==='function') pick.onclick();
+}
+// 执行一个 move（在 applyMove 内对克隆态调用，UI 已静音、openModal 已换成自答）
+function aiDrive(move){
+  if(move.type==='leadPass'){ leadPass(); return; }
+  if(move.type==='lead'){ leadCard(move.i); return; }
+  if(move.type==='followPass'){ followPass(); return; }
+  if(move.type==='follow'){ followPlay(G.followQueue[0], move.i, move.mode, false); return; }
+  if(move.type==='endActions'){ endActorTurn(); return; }
+  if(move.type==='action'){
+    if(move.action==='influence'||move.action==='secure'){ beginAction(move.action); }
+    else { beginAction(move.action); if(G.pending) onSystemClick(move.target); }
+    return;
+  }
+}
+// 应用 move → 返回新状态（绝不修改入参 state）。内部克隆 + 临时静音 UI/换模态自答 + 驱动引擎 + 还原。
+function applyMove(state, move){
+  const savedG=G, sRender=render, sToast=toast, sPrompt=setPrompt, sLog=logMsg, sCamp=campLog, sPromptA=promptActions, sModal=openModal;
+  G=cloneState(state);
+  const noop=function(){};
+  render=noop; toast=noop; setPrompt=noop; logMsg=noop; campLog=noop; promptActions=noop;
+  openModal=function(builder){ aiResolveModal(builder, move); };
+  try{ aiDrive(move); return G; }
+  finally{ G=savedG; render=sRender; toast=sToast; setPrompt=sPrompt; logMsg=sLog; campLog=sCamp; promptActions=sPromptA; openModal=sModal; }
+}
+// 叶子评估（启发式效用；后续 P2 的「人格」= 这里的权重向量）。纯函数, 仅读 state。
+// 关键：必须"看得到雄心结算"——ARCS 权力只在章末已宣告雄心结算时产生(scoreAmbitions)，
+// 否则近视评估永不宣告→永不得分。这里把"已宣告雄心上本座位的预估收益"计入效用。
+function aiEval(state, seat){
+  const p=state.players[seat]; if(!p) return 0;
+  const ck=p.color.key;
+  let res=0; for(const r of RES_ORDER) res+=(p.res[r]||0);
+  let blds=0, ships=0; for(const id in state.map){ const s=state.map[id];
+    blds += (s.pieces.buildings||[]).filter(b=>b.owner===ck).length;
+    ships += (s.pieces.ships&&s.pieces.ships[ck])||0; }
+  let u = (p.power||0)*1.0 + res*0.5 + blds*1.0 + ships*0.3 + ((p.guildCards||[]).length)*0.6 + (p.trophies||0)*0.4;
+  // 已宣告雄心结算预估：对每个已宣告雄心, 按本座位在该指标的名次估算可得权力(乘系数防过度乐观)
+  const saved=G; G=state;
+  try{
+    for(const k of AMB_ORDER){ const mk=state.ambitionBox[k]; if(!mk||!mk.length) continue;
+      const hi=mk.reduce((x,m)=>x+(m.f||0),0), lo=mk.reduce((x,m)=>x+(m.s||0),0);
+      const myC=AMBITIONS[k].count(p); if(myC<=0) continue;
+      let better=0; for(const q of state.players){ if(q!==p && AMBITIONS[k].count(q)>myC) better++; }
+      if(better===0) u+=hi*0.8; else if(better===1) u+=lo*0.7;     // 估计第1名得hi/第2名得lo
+      u += myC*0.25;                                                // 朝该已宣告雄心继续累积有正反馈
+    }
+  } finally { G=saved; }
+  return u;
+}
+
 /* ------------------------------ 游戏状态 -------------------------------- */
 let G = null; // 全局游戏对象
 
