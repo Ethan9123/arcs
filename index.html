@@ -1353,7 +1353,8 @@ const FATE_THRESHOLD = {
   6:{ 1:{2:12,3:11,4:10}, 2:{2:18,3:14,4:12} },      // Partisan 游击者 第一/二幕
   2:{ 1:{2:18,3:16,4:14}, 2:{2:12,3:14,4:16} },     // Founder 奠基者 第一/二幕
   3:{ 1:{2:10,3:10,4:10}, 2:{2:12,3:12,4:12} },     // Magnate 大亨 第一/二幕
-  4:{ 2:{2:12,3:12,4:12} },                         // Advocate 代言人 第二幕
+  4:{ 1:{2:18,3:18,4:18}, 2:{2:12,3:12,4:12} },     // Advocate 代言人 第一/二幕(第一幕阈值18,读卡补全)
+  7:{ 1:{2:13,3:13,4:13}, 2:{2:30,3:30,4:30} },     // Admiral 海军上将 第一/二幕(读卡补全; 第三幕为 OBJECTIVE_CHECK)
   5:{ 1:{2:18,3:18,4:18}, 2:{2:7,3:8,4:9} },        // Caretaker 看护者 第一/二幕
   8:{ 1:{2:10,3:9,4:8}, 2:{2:20,3:18,4:16} },       // Believer 信徒 第一/二幕
   9:{ 2:{2:8,3:8,4:8} },                            // Pathfinder 探路者 第二幕
@@ -1413,7 +1414,9 @@ function fateThresholdCur(playerIdx){ const p=G.players[playerIdx]; return (p&&p
 // 当前玩家本幕目标是否达成（计时型比阈值；否则用自定义判定）
 function campObjectiveMet(playerIdx){
   const p=G.players[playerIdx]; if(!p||!p.fate) return false;
-  const act=G.campaign.act; const th=fateThreshold(p.fate,act,G.numPlayers);
+  const act=G.campaign.act;
+  if(p._fateManualMet && p._fateManualMet[act]) return true;       // 玩家手动标记本幕目标达成(用于未机械化进度来源的命运, 如 F7/F4 部分来源、F13 终局)
+  const th=fateThreshold(p.fate,act,G.numPlayers);
   if(th!=null) return (p.fateProgress||0)>=th;
   const chk=FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][act];
   return chk?!!chk(p,playerIdx):false;
@@ -5710,6 +5713,17 @@ function openCampaignPanel(){
       }
       const vic=p._campVictory?' <span style="color:#ffd700">🏆战役胜利</span>':'';
       card.innerHTML=`<b style="color:${p.color.css}">${p.name}</b> · <span style="color:#c98bd6">${f.cn}</span> <span style="opacity:.7;font-size:11px">${idTag}</span>${vic}${ACT_SCRIPTS[p.fate]?'':' <span style="opacity:.5;font-size:10px">(脚本待编码)</span>'}<br>${objs}${prog}`;
+      // 手动命运进度调整(供未机械化的进度来源人工裁定: 如 F7海军/F4代言人部分来源、F13终局)
+      const ctrl=el('div'); ctrl.style.cssText='margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center';
+      if(th!=null){
+        ctrl.appendChild(el('span',null,'手动进度:'));
+        [['−1',-1],['+1',1]].forEach(([lab,dv])=>{ const b=el('button','btn ghost sm',lab); b.style.cssText='padding:1px 8px';
+          b.onclick=()=>{ p.fateProgress=Math.max(0,(p.fateProgress||0)+dv); reopen(); }; ctrl.appendChild(b); });
+      }
+      const mm=!!(p._fateManualMet&&p._fateManualMet[cp.act]);
+      const mb=el('button','btn ghost sm',(mm?'☑':'☐')+' 标记本幕达成'); mb.title='当本幕目标由桌面规则人工裁定达成时勾选(影响章末战役胜利判定)';
+      mb.onclick=()=>{ (p._fateManualMet=p._fateManualMet||{})[cp.act]=!mm; reopen(); }; ctrl.appendChild(mb);
+      card.appendChild(ctrl);
       m.appendChild(card);
     });
     // 操作：结算本幕
