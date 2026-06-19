@@ -2122,22 +2122,34 @@ function applyMoveInPlace(state, move){
   finally{ G=savedG; }
 }
 /* ===== P2 九宫格人格：9 套评估权重(善-恶轴=偏好雄心+记仇; 守序-混乱轴=经济稳健 vs 机会主义+探索) ===== */
-const DEFAULT_PERSONA={wPower:1,wRes:0.5,wBld:1,wShip:0.3,wCard:0.6,wTroph:0.4,wCapt:0,ambBias:{},spite:0,mctsC:1.4};
-// 善—中—恶：偏好雄心(善=守护/共情, 恶=暴君/军阀)、记仇/相对(spite, 善低恶高)、战利品/俘虏权重
-const _GE={ G:{t:'善良',ambBias:{keeper:1.6,empath:1.6,tycoon:1.0,warlord:0.6,tyrant:0.4},spite:0.1,wTroph:0.3,wCapt:0.0},
-            N:{t:'中立',ambBias:{tycoon:1.4,keeper:1.0,empath:1.0,warlord:1.0,tyrant:1.0},spite:0.4,wTroph:0.4,wCapt:0.3},
-            E:{t:'邪恶',ambBias:{tyrant:1.7,warlord:1.6,tycoon:1.0,keeper:0.5,empath:0.5},spite:0.8,wTroph:0.6,wCapt:0.6} };
-// 守序—中—混乱：经济/城建稳健 vs 机会主义抓议会卡、MCTS 探索系数(守序低/混乱高)
-const _LC={ L:{t:'守序',wBld:1.4,wRes:1.2,wCard:0.7,wShip:0.4,mctsC:1.0},
-            N:{t:'中立',wBld:1.0,wRes:1.0,wCard:1.0,wShip:0.3,mctsC:1.4},
-            C:{t:'混乱',wBld:0.7,wRes:0.9,wCard:1.4,wShip:0.3,mctsC:2.0} };
+const DEFAULT_PERSONA={wPower:1,wRes:0.5,wBld:1,wShip:0.3,wCard:0.6,wTroph:0.4,wCapt:0,ambBias:{},spite:0,mctsC:1.4,alpha:0,leaderThresh:99};
+// 善—中—恶：偏好雄心(善=守护/共情, 恶=暴君/军阀)、记仇spite(善低恶高)、战利品/俘虏权重、
+//   领先者定向 alpha(恶高善低=合谋打压第一名的强度) + leaderThresh(善阈值高=只针对明显领跑者更"公道")
+const _GE={ G:{t:'善良',ambBias:{keeper:1.6,empath:1.6,tycoon:1.0,warlord:0.6,tyrant:0.4},spite:0.1,wTroph:0.3,wCapt:0.0,alpha:0.30,leaderThresh:6},
+            N:{t:'中立',ambBias:{tycoon:1.4,keeper:1.0,empath:1.0,warlord:1.0,tyrant:1.0},spite:0.4,wTroph:0.4,wCapt:0.3,alpha:0.55,leaderThresh:4},
+            E:{t:'邪恶',ambBias:{tyrant:1.7,warlord:1.6,tycoon:1.0,keeper:0.5,empath:0.5},spite:0.8,wTroph:0.6,wCapt:0.6,alpha:0.95,leaderThresh:3} };
+// 守序—中—混乱：经济/城建稳健 vs 机会主义抓议会卡、MCTS 探索系数(守序低/混乱高)、定向激进度 alphaMul(守序克制/混乱激进)
+const _LC={ L:{t:'守序',wBld:1.4,wRes:1.2,wCard:0.7,wShip:0.4,mctsC:1.0,alphaMul:0.8},
+            N:{t:'中立',wBld:1.0,wRes:1.0,wCard:1.0,wShip:0.3,mctsC:1.4,alphaMul:1.0},
+            C:{t:'混乱',wBld:0.7,wRes:0.9,wCard:1.4,wShip:0.3,mctsC:2.0,alphaMul:1.3} };
 const PERSONAS={};
 ['L','N','C'].forEach(lc=>['G','N','E'].forEach(ge=>{ const a=_GE[ge], b=_LC[lc]; const key=lc+ge;
   PERSONAS[key]={ key, name:(lc==='N'&&ge==='N')?'绝对中立':(b.t+a.t),
     wPower:1.0, wRes:b.wRes, wBld:b.wBld, wShip:b.wShip, wCard:b.wCard, wTroph:a.wTroph, wCapt:a.wCapt,
-    ambBias:a.ambBias, spite:a.spite, mctsC:b.mctsC }; }));
+    ambBias:a.ambBias, spite:a.spite, mctsC:b.mctsC, alpha:a.alpha*b.alphaMul, leaderThresh:a.leaderThresh }; }));
 const PERSONA_KEYS=Object.keys(PERSONAS);   // LG,LN,LE,NG,NN,NE,CG,CN,CE
 function personaFor(state, seat){ const k=state&&state.aiPersona&&state.aiPersona[seat]; return (k&&PERSONAS[k])||DEFAULT_PERSONA; }
+// 中性"领先程度"估计(领先者定向用; 不含人格/社交, 避免递归): 权力 + 已宣告雄心中本玩家领先项的预估收益
+function aiStanding(state, j){
+  const p=state.players[j]; if(!p) return 0;
+  let s=(p.power||0); const saved=G; G=state;
+  try{ for(const k of AMB_ORDER){ const mk=state.ambitionBox[k]; if(!mk||!mk.length) continue;
+    const myC=AMBITIONS[k].count(p); if(myC<=0) continue;
+    let better=0; for(const q of state.players){ if(q!==p && AMBITIONS[k].count(q)>myC) better++; }
+    if(better===0){ const hi=mk.reduce((x,m)=>x+(m.f||0),0); s+=hi*0.6; } } }
+  finally{ G=saved; }
+  return s;
+}
 
 // 叶子评估（启发式效用; 纯函数, 仅读 state）。persona 缺省=DEFAULT_PERSONA(复刻原行为, 保证既有测试不变)。
 // 关键：必须"看得到雄心结算"——ARCS 权力只在章末已宣告雄心结算时产生(scoreAmbitions), 近视评估永不宣告→永不得分。
@@ -2164,6 +2176,13 @@ function aiEval(state, seat, persona){
   } finally { G=saved; }
   if(persona.spite){ let tot=0,c=0; for(let j=0;j<state.players.length;j++){ if(j!==seat){ tot+=(state.players[j].power||0); c++; } }
     u += persona.spite*((p.power||0)-(c?tot/c:0)); }   // 相对/记仇：善良低(几乎不在意压制别人), 邪恶高
+  // P3 社交·领先者定向：给"最强对手相对我的领先量"加负权 → 倾向压制/不喂第一名(多个非领先AI同时如此=涌现联盟; 领跑者变则目标转移=动态结盟/隐性背叛)。
+  // kingmaker 防内耗：仅当领跑者领先我达 leaderThresh 才触发; 我自己领跑则无对象→0。
+  if(persona.alpha>0){
+    const myS=aiStanding(state,seat); let bv=-Infinity;
+    for(let j=0;j<state.players.length;j++){ if(j!==seat){ const v=aiStanding(state,j); if(v>bv) bv=v; } }
+    if(bv>-Infinity && (bv-myS)>=(persona.leaderThresh||99)) u -= persona.alpha*(bv-myS);
+  }
   return u;
 }
 
