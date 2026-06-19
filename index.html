@@ -1104,6 +1104,44 @@ function campResolveActForPlayer(playerIdx, success){ const p=G.players[playerId
 function campAdvanceAct(){ if(G.campaign.act<3){ G.campaign.act++; G.players.forEach((p,i)=>campRunActSetup(i)); }
   autosaveCampaign(); return G.campaign.act; }
 
+/* ===== 阶段10：中场休息(Intermission) A–F 串联（官方战役辅助卡）===== */
+// 在各玩家本幕成败已判定(fateObjMet)后调用。执行 A–F 步骤并推进到下一幕。返回结算摘要。
+function campIntermission(){
+  if(!G.campaign||!G.campaign.enabled) return null;
+  const act=G.campaign.act; const summary=[];
+  // A. 结算命运：未达成本幕目标者，失去等于其目标计时器位置(此处取已推进进度，封顶当前权力)的权力
+  G.players.forEach((p,i)=>{ if(!p.fate) return;
+    if(!p.fateObjMet[act-1]){ const loss=Math.min(p.power, p.fateProgress||0);
+      if(loss>0){ p.power-=loss; summary.push(`A·${pname(i)} 第${act}幕失败 → 失去 ${loss} 权力`); campLog(`中场A：${pname(i)} 第${act}幕失败，失去 ${loss} 权力`); } } });
+  // B. 清理议会：除帝国议会外全部回牌堆、清空议会区密探、销毁弃牌堆，重洗并补满
+  const keepCouncil=G.court.filter(c=>c&&c.council); const back=G.court.filter(c=>!(c&&c.council));
+  back.forEach(c=>{ if(c.agents) c.agents={}; G.courtDeck.push(c); });
+  G.courtDiscard=[]; G.court=keepCouncil.slice(); if(typeof shuffle==='function') shuffle(G.courtDeck);
+  const courtN=(G.numPlayers===2)?3:4; while(G.court.filter(c=>!(c&&c.council)).length<courtN && G.courtDeck.length) G.court.push(G.courtDeck.pop());
+  if(keepCouncil.length){ G.campaign.council='session'; G.campaign.councilHolder=null; }
+  summary.push('B·议会区已清理重置');
+  // C. 清理棋子：战利品/俘虏清零、帝国信托清空(冻结资源)
+  G.players.forEach(p=>{ p.trophies=0; p.captives=0; }); const freed=campEmptyTrust();
+  summary.push(`C·清零战利品/俘虏，清空帝国信托(${freed})`);
+  // D. 修复与销毁：修复全部受损凋敝；销毁全部受损舰船/建筑；销毁有凋敝且无舰系统的建筑
+  campIntermissionBlight(); let dShips=0,dBld=0;
+  for(const id in G.map){ const s=G.map[id];
+    for(const col in (s.pieces.dmg||{})){ const d=s.pieces.dmg[col]||0; if(d>0){ s.pieces.ships[col]=(s.pieces.ships[col]||0)-d; if(s.pieces.ships[col]<=0) delete s.pieces.ships[col]; const o=G.players.find(p=>p.color.key===col); if(o) o.supply.ships+=d; dShips+=d; } }
+    s.pieces.dmg={};
+    s.pieces.buildings=s.pieces.buildings.filter(b=>{ if(b.damaged){ const o=G.players.find(p=>p.color.key===b.owner); if(o){ if(b.type==='city')o.supply.cities++; else o.supply.starports++; } dBld++; return false; } return true; });
+  }
+  summary.push(`D·修复凋敝；销毁 ${dShips} 受损舰 / ${dBld} 受损建筑`);
+  // E. 转移先攻与权力：先攻给权力最高者；权力>1 者失去一半(向下取整失去)
+  let mx=-1,mi=0; G.players.forEach((p,i)=>{ if(p.power>mx){ mx=p.power; mi=i; } }); G.initiative=mi;
+  G.players.forEach(p=>{ if(p.power>1) p.power=Math.ceil(p.power/2); });
+  summary.push(`E·先攻→${pname(mi)}；各玩家权力减半(取多保留)`);
+  // F. 选命运由向导处理（completed 抽1 / failed 抽2选1）。此处重置进度并推进幕号（幕 setup 在选命运后由向导统一执行）。
+  G.players.forEach(p=>{ p.fateProgress=0; });
+  if(G.campaign.act<3) G.campaign.act++; G.campaign.session=(G.campaign.session||1)+1;
+  summary.push(`F·进入第 ${G.campaign.act} 幕（第 ${G.campaign.session} 场）；选命运后运行幕开局设置`);
+  autosaveCampaign(); return summary;
+}
+
 /* ===== 阶段3：命运目标判定引擎（事件总线 + 进度规则 + 阈值/章末判定 + 终局胜利） ===== */
 // 雄心 → 计分资源（用于「资源未民愤则推进」类规则）
 const AMB_SCORE_RES = { tycoon:['material','fuel'], warlord:['weapon'], keeper:['relic'], empath:['psionic'], tyrant:[] };
@@ -5197,11 +5235,17 @@ function openActResolveWizard(){
   const fatePlayers=G.players.map((p,i)=>i).filter(i=>G.players[i].fate);
   const step=(k)=>{
     if(k>=fatePlayers.length){
-      const na=campAdvanceAct();
+      // 全员判定完毕 → 执行中场休息 A–F，再展示摘要与「选命运」(F)
+      const summary=campIntermission();
       render();
-      openModal(m=>{ m.appendChild(el('h2',null,`已进入第 ${na} 幕`));
-        m.appendChild(el('div','hintbox','各命运的本幕开局设置已自动执行（有脚本者）。可在 📜 面板查看议会区与律法书变化。'));
-        const ok=el('button','btn gold','好'); ok.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(ok); });
+      openModal(m=>{ m.appendChild(el('h2',null,`🔄 中场休息 · 已进入第 ${G.campaign.act} 幕`));
+        const box=el('div','hintbox'); box.style.cssText='text-align:left;font-size:12px;line-height:1.7';
+        box.innerHTML=(summary||[]).join('<br>'); m.appendChild(box);
+        m.appendChild(el('div','hintbox','F·选命运：达成者抽1张、失败者抽2张选1（数字版可在下方为玩家改选命运，或保留当前命运）。'));
+        const fb=el('button','btn','🎴 重选命运（F）'); fb.style.cssText='width:100%;margin:4px 0';
+        fb.onclick=()=>{ closeModal(); openFateReChoose(); }; m.appendChild(fb);
+        const ok=el('button','btn gold','保留当前命运，继续'); ok.style.cssText='width:100%';
+        ok.onclick=()=>{ closeModal(); G.players.forEach((p,i)=>campRunActSetup(i)); render(); openCampaignPanel(); }; m.appendChild(ok); });
       return;
     }
     const pi=fatePlayers[k]; const p=G.players[pi]; const f=fateByNum(p.fate);
@@ -5311,6 +5355,34 @@ function openFlagshipSetup(){
       m.appendChild(b); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(cc);
   });
+}
+/* 中场休息 F·选命运：逐玩家保留或改选命运，最后统一运行新幕开局设置 */
+function openFateReChoose(){
+  const order=G.players.map((p,i)=>i).filter(i=>G.players[i].fate!=null);
+  const finish=()=>{ G.players.forEach((p,i)=>campRunActSetup(i)); render();
+    openModal(m=>{ m.appendChild(el('h2',null,`第 ${G.campaign.act} 幕开局设置已执行`));
+      m.appendChild(el('div','hintbox','各命运的本幕开局已自动执行（有脚本者）。可在 📜 面板查看议会区/律法书/标记变化。'));
+      const ok=el('button','btn gold','好'); ok.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(ok); }); };
+  const step=(k)=>{
+    if(k>=order.length){ finish(); return; }
+    const i=order[k]; const p=G.players[i]; const cur=fateByNum(p.fate);
+    const completedLast = p.fateObjMet[Math.max(0,G.campaign.act-2)]; // 上一幕是否达成（act 已+1）
+    openModal(m=>{ m.appendChild(el('h2',null,`选命运 · ${pname(i)}`));
+      m.appendChild(el('div','hintbox',`当前命运：<b style="color:#c98bd6">${cur?cur.cn:'?'}</b>。${completedLast?'上一幕达成（抽1张，可保留）。':'上一幕失败（抽2张选1）。'}`));
+      const keep=el('button','btn gold',`保留 ${cur?cur.cn:''}`); keep.style.cssText='display:block;width:100%;margin:4px 0';
+      keep.onclick=()=>{ closeModal(); step(k+1); }; m.appendChild(keep);
+      const chg=el('button','btn',`改选命运`); chg.style.cssText='display:block;width:100%;margin:4px 0';
+      chg.onclick=()=>{ closeModal();
+        const pool=CAMPAIGN_FATES.map(f=>f.num).filter(n=>!G.players.some(q=>q.fate===n)||n===p.fate);
+        pickFromList(`${pname(i)} 改选哪个命运`, pool.map(n=>{ const f=fateByNum(n); return {label:`${f.cn} ${fateStars(f.cx)}`,val:n}; }), n=>{
+          p.fate=n; p.fateObjMet=[false,false,false]; p.fateProgress=0;
+          // 换命运：归还好感（规则）
+          G.players.forEach(q=>{ if(q!==p){ const f=campFavorsOf(p); if(f[q.color.key]){ q.supply.agents+=f[q.color.key]; delete f[q.color.key]; } } });
+          campLog(`${pname(i)} 改选命运为 ${fateByNum(n).cn}`); step(k+1); }); };
+      m.appendChild(chg);
+    });
+  };
+  step(0);
 }
 /* 命运标记放置/移除：选类型(按在场命运)→选玩家→选系统 */
 function openMarkPlace(){
