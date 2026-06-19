@@ -1996,6 +1996,27 @@ function colorLabelHTML(c){
   return `<span style="color:#9aa3b2;font-weight:700">${c}</span>`;
 }
 
+/* ===== AI 前向模型封装（P0）：决策时搜索/自对弈用；纯函数，浏览器与无头测试通用 ===== */
+// 深拷贝游戏状态：保留 Set/Map、保留共享引用与循环引用(memo)、丢弃函数(回调不可克隆)。
+// 用于 MCTS「克隆→模拟→丢弃」，绝不污染真实棋局。注意 G.pending.legal / _abil._taxed 等是 Set。
+function cloneState(obj, memo){
+  memo = memo || new Map();
+  if(obj===null || typeof obj!=='object') return obj;
+  if(memo.has(obj)) return memo.get(obj);                                   // 共享引用/循环引用：复用同一克隆，保持对象身份
+  if(obj instanceof Set){ const s=new Set(); memo.set(obj,s); obj.forEach(v=>s.add(cloneState(v,memo))); return s; }
+  if(obj instanceof Map){ const m=new Map(); memo.set(obj,m); obj.forEach((v,k)=>m.set(cloneState(k,memo),cloneState(v,memo))); return m; }
+  if(Array.isArray(obj)){ const a=[]; memo.set(obj,a); for(let i=0;i<obj.length;i++) a[i]=cloneState(obj[i],memo); return a; }
+  const o={}; memo.set(obj,o);
+  for(const k in obj){ if(!Object.prototype.hasOwnProperty.call(obj,k)) continue;
+    const v=obj[k]; if(typeof v==='function') continue;                     // 丢弃函数(如 pending 的回调)——克隆出的状态用于搜索, 不需要回调
+    o[k]=cloneState(v,memo); }
+  return o;
+}
+// 终局判定
+function isTerminal(state){ return !!state && state.phase==='end'; }
+// 每座位分数向量（权力=通用计分货币；战役终局再叠加 _campVictory 优先，见 endGameSort）
+function scoreVector(state){ return ((state&&state.players)||[]).map(p=>p.power||0); }
+
 /* ------------------------------ 游戏状态 -------------------------------- */
 let G = null; // 全局游戏对象
 
