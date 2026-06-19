@@ -2158,12 +2158,12 @@ function applyMoveInPlace(state, move){
   finally{ G=savedG; }
 }
 /* ===== P2 九宫格人格：9 套评估权重(善-恶轴=偏好雄心+记仇; 守序-混乱轴=经济稳健 vs 机会主义+探索) ===== */
-const DEFAULT_PERSONA={wPower:1,wRes:0.5,wBld:1,wShip:0.3,wCard:0.6,wTroph:0.4,wCapt:0,ambBias:{},spite:0,mctsC:1.4,alpha:0,leaderThresh:99};
+const DEFAULT_PERSONA={wPower:1,wRes:0.5,wBld:1,wShip:0.3,wCard:0.6,wTroph:0.4,wCapt:0,ambBias:{},spite:0,mctsC:1.4,alpha:0,leaderThresh:99,vengeance:0};
 // 善—中—恶：偏好雄心(善=守护/共情, 恶=暴君/军阀)、记仇spite(善低恶高)、战利品/俘虏权重、
 //   领先者定向 alpha(恶高善低=合谋打压第一名的强度) + leaderThresh(善阈值高=只针对明显领跑者更"公道")
-const _GE={ G:{t:'善良',ambBias:{keeper:1.6,empath:1.6,tycoon:1.0,warlord:0.6,tyrant:0.4},spite:0.1,wTroph:0.3,wCapt:0.0,alpha:0.30,leaderThresh:6},
-            N:{t:'中立',ambBias:{tycoon:1.4,keeper:1.0,empath:1.0,warlord:1.0,tyrant:1.0},spite:0.4,wTroph:0.4,wCapt:0.3,alpha:0.55,leaderThresh:4},
-            E:{t:'邪恶',ambBias:{tyrant:1.7,warlord:1.6,tycoon:1.0,keeper:0.5,empath:0.5},spite:0.8,wTroph:0.6,wCapt:0.6,alpha:0.95,leaderThresh:3} };
+const _GE={ G:{t:'善良',ambBias:{keeper:1.6,empath:1.6,tycoon:1.0,warlord:0.6,tyrant:0.4},spite:0.1,wTroph:0.3,wCapt:0.0,alpha:0.30,leaderThresh:6,vengeance:0.10},
+            N:{t:'中立',ambBias:{tycoon:1.4,keeper:1.0,empath:1.0,warlord:1.0,tyrant:1.0},spite:0.4,wTroph:0.4,wCapt:0.3,alpha:0.55,leaderThresh:4,vengeance:0.30},
+            E:{t:'邪恶',ambBias:{tyrant:1.7,warlord:1.6,tycoon:1.0,keeper:0.5,empath:0.5},spite:0.8,wTroph:0.6,wCapt:0.6,alpha:0.95,leaderThresh:3,vengeance:0.60} };
 // 守序—中—混乱：经济/城建稳健 vs 机会主义抓议会卡、MCTS 探索系数(守序低/混乱高)、定向激进度 alphaMul(守序克制/混乱激进)
 const _LC={ L:{t:'守序',wBld:1.4,wRes:1.2,wCard:0.7,wShip:0.4,mctsC:1.0,alphaMul:0.8},
             N:{t:'中立',wBld:1.0,wRes:1.0,wCard:1.0,wShip:0.3,mctsC:1.4,alphaMul:1.0},
@@ -2172,7 +2172,7 @@ const PERSONAS={};
 ['L','N','C'].forEach(lc=>['G','N','E'].forEach(ge=>{ const a=_GE[ge], b=_LC[lc]; const key=lc+ge;
   PERSONAS[key]={ key, name:(lc==='N'&&ge==='N')?'绝对中立':(b.t+a.t),
     wPower:1.0, wRes:b.wRes, wBld:b.wBld, wShip:b.wShip, wCard:b.wCard, wTroph:a.wTroph, wCapt:a.wCapt,
-    ambBias:a.ambBias, spite:a.spite, mctsC:b.mctsC, alpha:a.alpha*b.alphaMul, leaderThresh:a.leaderThresh }; }));
+    ambBias:a.ambBias, spite:a.spite, mctsC:b.mctsC, alpha:a.alpha*b.alphaMul, leaderThresh:a.leaderThresh, vengeance:a.vengeance }; }));
 const PERSONA_KEYS=Object.keys(PERSONAS);   // LG,LN,LE,NG,NN,NE,CG,CN,CE
 function personaFor(state, seat){ const k=state&&state.aiPersona&&state.aiPersona[seat]; return (k&&PERSONAS[k])||DEFAULT_PERSONA; }
 // 中性"领先程度"估计(领先者定向用; 不含人格/社交, 避免递归): 权力 + 已宣告雄心中本玩家领先项的预估收益
@@ -2185,6 +2185,12 @@ function aiStanding(state, j){
     if(better===0){ const hi=mk.reduce((x,m)=>x+(m.f||0),0); s+=hi*0.6; } } }
   finally{ G=saved; }
   return s;
+}
+/* ===== P3b 恩怨账本：记住谁打过我(grievance) → 复仇/世仇。G.rel[victim][offender]≥0, 受害方持仇。===== */
+function relMatrix(){ if(!G.rel||G.rel.length!==G.players.length) G.rel=G.players.map(()=>G.players.map(()=>0)); return G.rel; }
+function aiGrieve(victimSeat, offenderSeat, amt){ // 攻击/劫掠/课税伤害对方 → 对方记仇(上限20)
+  if(victimSeat==null||offenderSeat==null||victimSeat<0||offenderSeat<0||victimSeat===offenderSeat) return;
+  const R=relMatrix(); R[victimSeat][offenderSeat]=Math.min(20,(R[victimSeat][offenderSeat]||0)+amt);
 }
 
 // 叶子评估（启发式效用; 纯函数, 仅读 state）。persona 缺省=DEFAULT_PERSONA(复刻原行为, 保证既有测试不变)。
@@ -2218,6 +2224,11 @@ function aiEval(state, seat, persona){
     const myS=aiStanding(state,seat); let bv=-Infinity;
     for(let j=0;j<state.players.length;j++){ if(j!==seat){ const v=aiStanding(state,j); if(v>bv) bv=v; } }
     if(bv>-Infinity && (bv-myS)>=(persona.leaderThresh||99)) u -= persona.alpha*(bv-myS);
+  }
+  // P3b 复仇/世仇：对曾伤害本座位的对手(grievance>0)倾向落井下石——其越强本座位效用越低(无视其是否领跑→形成私人恩怨)。
+  if(persona.vengeance>0 && state.rel && state.rel[seat]){
+    let v=0; for(let j=0;j<state.players.length;j++){ if(j!==seat){ const g=state.rel[seat][j]||0; if(g>0) v += g*aiStanding(state,j); } }
+    u -= persona.vengeance * v * 0.01;
   }
   return u;
 }
@@ -3985,7 +3996,7 @@ function doTax(id){
   if(gainResource(me,s.resource)) msg+=`，获得 ${RESOURCES[s.resource].name}`; else msg+='（资源供给已空，未获得）';
   if(target.owner!==col && !bondTax){ // 你控制的敌方城市 → 俘获该敌方 1 个密探（Empath's Bond 不抓俘虏）
     const rival=G.players.find(p=>p.color.key===target.owner);
-    if(rival&&rival.supply.agents>0){ rival.supply.agents--; me.captives++; msg+=`，俘获 ${pname(G.players.indexOf(rival))} 1 密探`; }
+    if(rival&&rival.supply.agents>0){ rival.supply.agents--; me.captives++; aiGrieve(G.players.indexOf(rival), G.actor, 1); msg+=`，俘获 ${pname(G.players.indexOf(rival))} 1 密探`; } // P3b: 被课税俘获方记仇
     else msg+='（对方密探补给已空，未俘获）';
   }
   // 领袖课税加成（扩展）：本次行动来自 Copy/Pivot 时，按领袖额外获得 1 个资源
@@ -4586,6 +4597,7 @@ function loreRepairDrones(p, sysId){
 function runBattle(id,defC,alloc,preResult){
   const r=preResult||resolveBattle(id,defC,alloc); const defIdx=G.players.findIndex(p=>p.color.key===defC);
   const s=G.map[id];
+  if(defIdx>=0 && defIdx!==G.actor) aiGrieve(defIdx, G.actor, 2+(r.defKilled||0)+(r.bldgDestroyed||0)); // P3b: 被攻击方记仇(损失越大仇越深)
   let html=`${pname(G.actor)} 于 <b>${id}</b> 攻击 ${colorLabelHTML(defC)}　骰面[命中${r.res.hit||0}/自伤${r.res.self||0}/拦截${r.res.intercept||0}/建筑${r.res.bldg||0}/钥匙${r.res.key||0}]`;
   html+=`<br>→ 我方 受损 ${r.atkDmg} / 被毁 ${r.atkLost} 舰；敌方 受损 ${r.defDmg} / 被毁 ${r.defKilled} 舰(+${r.defKilled+r.bldgDestroyed} 战利品)；摧毁建筑 ${r.bldgDestroyed}${r.res.key>0?' · 钥匙待劫掠':''}`;
   if(r.interLoss>0) html+=`<br><i>遭守方拦截：按其 ${r.interLoss} 艘新鲜舰各 1 次反伤</i>`;
