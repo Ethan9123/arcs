@@ -2121,28 +2121,49 @@ function applyMoveInPlace(state, move){
   try{ aiSilentDrive(move); return G; }
   finally{ G=savedG; }
 }
-// 叶子评估（启发式效用；后续 P2 的「人格」= 这里的权重向量）。纯函数, 仅读 state。
-// 关键：必须"看得到雄心结算"——ARCS 权力只在章末已宣告雄心结算时产生(scoreAmbitions)，
-// 否则近视评估永不宣告→永不得分。这里把"已宣告雄心上本座位的预估收益"计入效用。
-function aiEval(state, seat){
+/* ===== P2 九宫格人格：9 套评估权重(善-恶轴=偏好雄心+记仇; 守序-混乱轴=经济稳健 vs 机会主义+探索) ===== */
+const DEFAULT_PERSONA={wPower:1,wRes:0.5,wBld:1,wShip:0.3,wCard:0.6,wTroph:0.4,wCapt:0,ambBias:{},spite:0,mctsC:1.4};
+// 善—中—恶：偏好雄心(善=守护/共情, 恶=暴君/军阀)、记仇/相对(spite, 善低恶高)、战利品/俘虏权重
+const _GE={ G:{t:'善良',ambBias:{keeper:1.6,empath:1.6,tycoon:1.0,warlord:0.6,tyrant:0.4},spite:0.1,wTroph:0.3,wCapt:0.0},
+            N:{t:'中立',ambBias:{tycoon:1.4,keeper:1.0,empath:1.0,warlord:1.0,tyrant:1.0},spite:0.4,wTroph:0.4,wCapt:0.3},
+            E:{t:'邪恶',ambBias:{tyrant:1.7,warlord:1.6,tycoon:1.0,keeper:0.5,empath:0.5},spite:0.8,wTroph:0.6,wCapt:0.6} };
+// 守序—中—混乱：经济/城建稳健 vs 机会主义抓议会卡、MCTS 探索系数(守序低/混乱高)
+const _LC={ L:{t:'守序',wBld:1.4,wRes:1.2,wCard:0.7,wShip:0.4,mctsC:1.0},
+            N:{t:'中立',wBld:1.0,wRes:1.0,wCard:1.0,wShip:0.3,mctsC:1.4},
+            C:{t:'混乱',wBld:0.7,wRes:0.9,wCard:1.4,wShip:0.3,mctsC:2.0} };
+const PERSONAS={};
+['L','N','C'].forEach(lc=>['G','N','E'].forEach(ge=>{ const a=_GE[ge], b=_LC[lc]; const key=lc+ge;
+  PERSONAS[key]={ key, name:(lc==='N'&&ge==='N')?'绝对中立':(b.t+a.t),
+    wPower:1.0, wRes:b.wRes, wBld:b.wBld, wShip:b.wShip, wCard:b.wCard, wTroph:a.wTroph, wCapt:a.wCapt,
+    ambBias:a.ambBias, spite:a.spite, mctsC:b.mctsC }; }));
+const PERSONA_KEYS=Object.keys(PERSONAS);   // LG,LN,LE,NG,NN,NE,CG,CN,CE
+function personaFor(state, seat){ const k=state&&state.aiPersona&&state.aiPersona[seat]; return (k&&PERSONAS[k])||DEFAULT_PERSONA; }
+
+// 叶子评估（启发式效用; 纯函数, 仅读 state）。persona 缺省=DEFAULT_PERSONA(复刻原行为, 保证既有测试不变)。
+// 关键：必须"看得到雄心结算"——ARCS 权力只在章末已宣告雄心结算时产生(scoreAmbitions), 近视评估永不宣告→永不得分。
+function aiEval(state, seat, persona){
+  persona = persona || DEFAULT_PERSONA;
   const p=state.players[seat]; if(!p) return 0;
   const ck=p.color.key;
   let res=0; for(const r of RES_ORDER) res+=(p.res[r]||0);
   let blds=0, ships=0; for(const id in state.map){ const s=state.map[id];
     blds += (s.pieces.buildings||[]).filter(b=>b.owner===ck).length;
     ships += (s.pieces.ships&&s.pieces.ships[ck])||0; }
-  let u = (p.power||0)*1.0 + res*0.5 + blds*1.0 + ships*0.3 + ((p.guildCards||[]).length)*0.6 + (p.trophies||0)*0.4;
-  // 已宣告雄心结算预估：对每个已宣告雄心, 按本座位在该指标的名次估算可得权力(乘系数防过度乐观)
+  let u = (p.power||0)*persona.wPower + res*persona.wRes + blds*persona.wBld + ships*persona.wShip
+        + ((p.guildCards||[]).length)*persona.wCard + (p.trophies||0)*persona.wTroph + (p.captives||0)*persona.wCapt;
   const saved=G; G=state;
   try{
     for(const k of AMB_ORDER){ const mk=state.ambitionBox[k]; if(!mk||!mk.length) continue;
       const hi=mk.reduce((x,m)=>x+(m.f||0),0), lo=mk.reduce((x,m)=>x+(m.s||0),0);
       const myC=AMBITIONS[k].count(p); if(myC<=0) continue;
+      const bias=(persona.ambBias&&persona.ambBias[k])||1;   // 人格对该雄心的偏好
       let better=0; for(const q of state.players){ if(q!==p && AMBITIONS[k].count(q)>myC) better++; }
-      if(better===0) u+=hi*0.8; else if(better===1) u+=lo*0.7;     // 估计第1名得hi/第2名得lo
-      u += myC*0.25;                                                // 朝该已宣告雄心继续累积有正反馈
+      if(better===0) u+=hi*0.8*bias; else if(better===1) u+=lo*0.7*bias;
+      u += myC*0.25*bias;
     }
   } finally { G=saved; }
+  if(persona.spite){ let tot=0,c=0; for(let j=0;j<state.players.length;j++){ if(j!==seat){ tot+=(state.players[j].power||0); c++; } }
+    u += persona.spite*((p.power||0)-(c?tot/c:0)); }   // 相对/记仇：善良低(几乎不在意压制别人), 邪恶高
   return u;
 }
 
@@ -2156,8 +2177,8 @@ function determinize(state, seat){
   for(let i=0;i<c.players.length;i++){ if(i===seat) continue; c.players[i].hand=pool.splice(0,counts[i]); }
   return c;
 }
-// 价值向量：终局用真实权力；否则用 aiEval(含已宣告雄心结算预估)。
-function scoreVectorEval(s){ const term=isTerminal(s); return s.players.map((p,i)=> term?(p.power||0):aiEval(s,i)); }
+// 价值向量：终局用真实权力；否则每座位用"各自人格"的 aiEval(MaxN 中对手也按其人格建模)。
+function scoreVectorEval(s){ const term=isTerminal(s); return s.players.map((p,i)=> term?(p.power||0):aiEval(s,i,personaFor(s,i))); }
 // rollout：随机走子到 章末(一次雄心结算)/深度上限/终局, 返回价值向量。原地推进(先克隆一次)。
 function aiRollout(state, depthCap){
   let s=cloneState(state); const ch0=s.chapter; let d=0;
@@ -2192,8 +2213,9 @@ function mctsTree(rootState, iters, C, depthCap){
 }
 // 顶层选步：K 个决定化世界各跑一棵树, 聚合 root 子节点, 选 searcher 自身平均价值最高的 move。
 function mctsChooseMove(state, opts){
-  opts=opts||{}; const K=opts.K||3, iters=opts.iters||40, C=(opts.C!=null?opts.C:1.4), depthCap=opts.depthCap||40;
+  opts=opts||{}; const K=opts.K||3, iters=opts.iters||40, depthCap=opts.depthCap||40;
   const seat=aiActiveSeat(state); const agg={};
+  const C=(opts.C!=null?opts.C:(personaFor(state,seat).mctsC||1.4));   // 搜索探索系数随人格(守序低/混乱高)
   for(let k=0;k<K;k++){
     const root=mctsTree(determinize(state,seat), iters, C, depthCap);
     for(const mk in root.kids){ const ch=root.kids[mk];
@@ -2612,7 +2634,7 @@ function aiMaybeSchedule(){
   if(typeof window==='undefined' || !G || G._aiThinking || G.phase==='end') return;
   const seat=aiSeatActiveNow(); if(seat<0) return;
   G._aiThinking=true;
-  try{ setPrompt(`🤖 ${pname(seat)} 思考中…`); }catch(e){}
+  try{ setPrompt(`🤖 ${pname(seat)}·${personaFor(G,seat).name} 思考中…`); }catch(e){}
   setTimeout(function(){
     let mv=null;
     try{ mv=mctsChooseMove(G, AI_LIVE_OPTS); if(mv) aiApplyMoveLive(mv); }
@@ -5279,6 +5301,7 @@ function showStartScreen(){
   const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
   let np=4; let names=['','','','']; let useExp=false;
   let aiSeats=[false,false,false,false]; // 各座位是否 AI 对手(MCTS)
+  let aiPersona=['NN','CE','LG','NE'];   // 各 AI 座位人格(9宫格); 默认给点变化
   let setupV='4_frontiers'; // 当前选中的布局方案
   let mode='single';        // 'single'(单场) | 'campaign'(凋敝远疆战役)
   function draw(){
@@ -5334,11 +5357,18 @@ function showStartScreen(){
         const aiBtn=el('button','btn ghost sm', aiSeats[i]?'🤖 AI':'👤 人类');
         aiBtn.style.cssText='min-width:74px'; aiBtn.onclick=()=>{ aiSeats[i]=!aiSeats[i]; draw(); };
         r.appendChild(aiBtn);
+        if(aiSeats[i]){ // AI 人格(9宫格)循环选择
+          const pk=aiPersona[i]||'NN';
+          const pBtn=el('button','btn ghost sm', '🎭 '+PERSONAS[pk].name);
+          pBtn.style.cssText='min-width:96px'; pBtn.title='点击切换 AI 人格(守序/中立/混乱 × 善良/中立/邪恶)';
+          pBtn.onclick=()=>{ const idx=PERSONA_KEYS.indexOf(aiPersona[i]); aiPersona[i]=PERSONA_KEYS[(idx+1)%PERSONA_KEYS.length]; draw(); };
+          r.appendChild(pBtn);
+        }
       }
       m.appendChild(r);
     }
     if(mode==='single' && aiSeats.slice(0,np).some(Boolean))
-      m.appendChild(el('div','hintbox','🤖 AI 对手用蒙特卡洛树搜索(MaxN-MCTS)实时决策；轮到其回合会自动行动。基础游戏体验最佳。'));
+      m.appendChild(el('div','hintbox','🤖 AI 用蒙特卡洛树搜索(MaxN-MCTS)实时决策、自动行动。🎭 点人格按钮切换 9 宫格阵营(守序/中立/混乱 × 善良/中立/邪恶)，不同人格偏好不同雄心与打法。基础单场体验最佳。'));
     // 扩展开关：勾选后 newGame 时 G.useExpansion=true，开局进行领袖抽选（战役模式下隐藏：战役有自身 setup）
     if(mode==='single'){
       const expRow=el('div','row'); expRow.style.marginTop='8px';
@@ -5352,7 +5382,7 @@ function showStartScreen(){
     const start=el('button','btn gold', mode==='campaign'?'选择命运并开始战役':'开始游戏');
     start.onclick=()=>{
       if(mode==='campaign'){ startCampaignSetup(np, names.slice(0,np), setupV); }
-      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); G.aiSeats=aiSeats.slice(0,np); render(); }
+      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); G.aiSeats=aiSeats.slice(0,np); G.aiPersona=aiPersona.slice(0,np); render(); }
     };
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
