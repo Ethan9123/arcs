@@ -1987,6 +1987,14 @@ function cardRank(c){ return SUIT_ORDER.indexOf(c.suit)*10 + c.number; }
 function sortHand(p){ p.hand.sort((a,b)=>cardRank(a)-cardRank(b)); }
 const ACTION_NAMES={tax:'课税',build:'建造',move:'移动',repair:'修理',influence:'影响',secure:'收纳',battle:'战斗'};
 function pname(i){ const p=G.players[i]; return `<span style="color:${p.color.css};font-weight:700">${p.name}</span>`; }
+// 战斗/显示用：把颜色键映射为带色 HTML 名；支持中立 'free'(自由城市) / 'imperial'(帝国星舰)
+function colorLabelHTML(c){
+  const p=G.players.find(x=>x.color.key===c);
+  if(p) return `<span style="color:${p.color.css};font-weight:700">${p.name}</span>`;
+  if(c==='free') return `<span style="color:#9aa3b2;font-weight:700">自由城市</span>`;
+  if(c==='imperial') return `<span style="color:#d9b25a;font-weight:700">帝国星舰</span>`;
+  return `<span style="color:#9aa3b2;font-weight:700">${c}</span>`;
+}
 
 /* ------------------------------ 游戏状态 -------------------------------- */
 let G = null; // 全局游戏对象
@@ -3952,8 +3960,11 @@ function doBattlePick(id){
   };
   if(list.length===1) goFight(list[0]);
   else openModal(m=>{ m.appendChild(el('h2',null,'选择攻击对象'));
-    list.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c); const b=el('button','btn',pl.name);
-      b.style.background=pl.color.css; b.style.display='block'; b.style.margin='6px 0';
+    list.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c);
+      const nm=pl?pl.name:(c==='free'?'🏙 自由城市':c==='imperial'?'🛰 帝国星舰':c);
+      const css=pl?pl.color.css:(c==='imperial'?'#7a6a33':'#5b6470');
+      const b=el('button','btn',nm);
+      b.style.background=css; b.style.display='block'; b.style.margin='6px 0';
       b.onclick=()=>{closeModal(); goFight(c);}; m.appendChild(b); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{closeModal(); cancelAction();}; m.appendChild(cc); });
 }
@@ -4154,9 +4165,25 @@ function openAncientHoldingsModal(p, pi){
     const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
   });
 }
-function openRaidModal(atkIdx, defC, keysLeft, done){
+function openRaidModal(atkIdx, defC, keysLeft, done, sysId){
   if(keysLeft<=0){ done(); return; }
-  const atk=G.players[atkIdx]; const def=G.players.find(p=>p.color.key===defC);
+  const atk=G.players[atkIdx];
+  // 自由城市劫掠（奠基者命运）：花 1 🔑 从供应偷取 1 份该行星类型资源，每战每城限一次
+  if(defC==='free'){
+    const s=sysId?G.map[sysId]:null; const rt=s&&s.resource;
+    if(!rt || (G.resSupply[rt]||0)<=0){ done(); return; }
+    openModal(m=>{
+      m.appendChild(el('h2',null,`劫掠自由城市 · 剩余 ${keysLeft} 🔑`));
+      m.appendChild(el('div','hintbox',`花 1 🔑 从供应偷取 1 份 ${RESOURCES[rt].name}（该行星类型）。每战每城限一次。`));
+      const b=el('button','btn',`${RESOURCES[rt].icon} 偷取 1 ${RESOURCES[rt].name} (1 🔑)`); b.style.cssText='display:block;width:100%;margin:6px 0';
+      b.onclick=()=>{ closeModal(); SFX.key(); if(gainResource(atk,rt)) logMsg(`${pname(atkIdx)} 劫掠自由城市 ${sysId||''}：获得 1 ${RESOURCES[rt].name}（1🔑）`,'bat'); done(); };
+      m.appendChild(b);
+      const stop=el('button','btn ghost','停止劫掠'); stop.onclick=()=>{ closeModal(); done(); }; m.appendChild(stop);
+    });
+    return;
+  }
+  const def=G.players.find(p=>p.color.key===defC);
+  if(!def){ done(); return; }   // 其它无主目标(如帝国星舰)安全降级，不崩溃
   const guardianPresent=ownsEff(def,'guardian');
   const items=[];
   if(guardianPresent){
@@ -4198,7 +4225,7 @@ function openRaidModal(atkIdx, defC, keysLeft, done){
             logMsg(`${pname(atkIdx)} 劫掠：偷取公会卡「${card.name}」`,'bat');
           }
         }
-        openRaidModal(atkIdx, defC, keysLeft-item.cost, done);
+        openRaidModal(atkIdx, defC, keysLeft-item.cost, done, sysId);
       };
       m.appendChild(b);
     });
@@ -4227,7 +4254,7 @@ function loreRepairDrones(p, sysId){
 function runBattle(id,defC,alloc,preResult){
   const r=preResult||resolveBattle(id,defC,alloc); const defIdx=G.players.findIndex(p=>p.color.key===defC);
   const s=G.map[id];
-  let html=`${pname(G.actor)} 于 <b>${id}</b> 攻击 ${pname(defIdx)}　骰面[命中${r.res.hit||0}/自伤${r.res.self||0}/拦截${r.res.intercept||0}/建筑${r.res.bldg||0}/钥匙${r.res.key||0}]`;
+  let html=`${pname(G.actor)} 于 <b>${id}</b> 攻击 ${colorLabelHTML(defC)}　骰面[命中${r.res.hit||0}/自伤${r.res.self||0}/拦截${r.res.intercept||0}/建筑${r.res.bldg||0}/钥匙${r.res.key||0}]`;
   html+=`<br>→ 我方 受损 ${r.atkDmg} / 被毁 ${r.atkLost} 舰；敌方 受损 ${r.defDmg} / 被毁 ${r.defKilled} 舰(+${r.defKilled+r.bldgDestroyed} 战利品)；摧毁建筑 ${r.bldgDestroyed}${r.res.key>0?' · 钥匙待劫掠':''}`;
   if(r.interLoss>0) html+=`<br><i>遭守方拦截：按其 ${r.interLoss} 艘新鲜舰各 1 次反伤</i>`;
   if(r.res._rerolled>0) html+=`<br><i>「游击部队」重掷了 ${r.res._rerolled} 颗空白游击骰</i>`;
@@ -4263,7 +4290,7 @@ function runBattle(id,defC,alloc,preResult){
   const ransackBlocked=(G.useExpansion && def && leaderHas(def,'beloved'));
   const canRaid=r.res.key>0 && (s.pieces.ships[G.players[G.actor].color.key]||0)>0;
   const finalizeBattle=()=>{ if(G._tacticalAfterMove){ G._tacticalAfterMove=false; openFreeMoveModal('领袖·战术（战后移动）',()=>consumeAction(null)); } else consumeAction(null); };
-  const afterRaid=()=>{ if(canRaid) openRaidModal(G.actor, defC, r.res.key, finalizeBattle); else finalizeBattle(); };
+  const afterRaid=()=>{ if(canRaid) openRaidModal(G.actor, defC, r.res.key, finalizeBattle, id); else finalizeBattle(); };
   if(ransackBlocked){ if((r.outrages||[]).length) logMsg(`${pname(defIdx)} 领袖·受爱戴：对手不能洗劫你的议会`,'bat'); afterRaid(); return; }
   maybeRansack((r.outrages||[]).length, defC, afterRaid); // 洗劫议会（规则书 p.16 步骤2）：每摧毁1座城市可收纳1张含守方密探的议会卡
 }
@@ -4384,10 +4411,10 @@ function damageBuildings(sysId,color,n,destroyer){
     if(fresh){ fresh.damaged=true; continue; }
     const di=s.pieces.buildings.findIndex(b=>b.owner===color&&b.damaged);
     if(di>=0){ const b=s.pieces.buildings.splice(di,1)[0]; const o=G.players.find(p=>p.color.key===color);
-      if(b.type==='city'){ o.supply.cities++;
+      if(b.type==='city'){ if(o) o.supply.cities++;  // 自由城市(owner='free')无玩家供应可归还，跳过(防 undefined 崩溃)
         if(destroyer){ const rtypes=b._gateStation?(b._gsTypes||[]):(s.resource?[s.resource]:[]);
           for(const r of rtypes) outrages.push({rtype:r, msg:provokeOutrage(destroyer,r)}); } }
-      else o.supply.starports++;
+      else { if(o) o.supply.starports++; }
       destroyed++; if(destroyer) destroyer.trophies++; } else break;
   }
   return {destroyed, outrages};
