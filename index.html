@@ -2590,6 +2590,35 @@ function catapultReach(src, col){
 function render(){
   renderBoard(); renderPlayers(); renderAmbitions(); renderTop(); renderHand(); renderActionBar(); renderCourt();
   renderTurnBanner();
+  aiMaybeSchedule();   // AI 对手：轮到 AI 决策时异步调度(浏览器内; 测试中 render 被静音故不触发)
+}
+/* ===== AI 对战集成（P1 浏览器集成）：标记为 AI 的座位自动用 MCTS 在真实棋局上行动 ===== */
+var AI_LIVE_OPTS = {K:2, iters:24, depthCap:28};   // 浏览器实时强度/响应折中(每决策约0.3-0.6s)
+// 当前是否轮到一个 AI 座位做决策(仅 lead/follow/actions 三个本接口支持的阶段)
+function aiSeatActiveNow(){
+  if(!G || !G.aiSeats) return -1;
+  if(!(G.phase==='lead'||G.phase==='follow'||G.phase==='actions')) return -1;
+  const seat=aiActiveSeat(G);
+  return (seat!=null && G.aiSeats[seat]) ? seat : -1;
+}
+// 在真实棋局上执行一个 AI move：仅临时把 openModal 换成移动感知自答(AI 不弹真模态), render 照常显示。
+function aiApplyMoveLive(move){
+  const sModal=openModal;
+  openModal=function(builder){ aiResolveModal(builder, move); };
+  try{ aiDrive(move); } finally{ openModal=sModal; }
+}
+// 渲染后调度：若轮到 AI, 显示"思考中"并在下一 tick 计算+落子, 落子后 render 再次触发本函数 → 连续走完 AI 回合。
+function aiMaybeSchedule(){
+  if(typeof window==='undefined' || !G || G._aiThinking || G.phase==='end') return;
+  const seat=aiSeatActiveNow(); if(seat<0) return;
+  G._aiThinking=true;
+  try{ setPrompt(`🤖 ${pname(seat)} 思考中…`); }catch(e){}
+  setTimeout(function(){
+    let mv=null;
+    try{ mv=mctsChooseMove(G, AI_LIVE_OPTS); if(mv) aiApplyMoveLive(mv); }
+    catch(e){ console.error('AI 出错:', e); }
+    finally{ G._aiThinking=false; render(); }
+  }, 80);
 }
 // 方向三：当前回合/阶段横幅 —— 用当前玩家颜色点缀，插在操作提示上方
 function renderTurnBanner(){
@@ -5249,6 +5278,7 @@ function showLoreCards(p){
 function showStartScreen(){
   const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
   let np=4; let names=['','','','']; let useExp=false;
+  let aiSeats=[false,false,false,false]; // 各座位是否 AI 对手(MCTS)
   let setupV='4_frontiers'; // 当前选中的布局方案
   let mode='single';        // 'single'(单场) | 'campaign'(凋敝远疆战役)
   function draw(){
@@ -5300,8 +5330,15 @@ function showStartScreen(){
       r.appendChild(dot);
       const inp=el('input');inp.type='text';inp.placeholder=PCOLORS[i].name+'方 · 玩家'+(i+1);inp.value=names[i];
       inp.oninput=e=>names[i]=e.target.value; r.appendChild(inp);
+      if(mode==='single'){ // AI 对手开关(基础单场)；战役暂不支持 AI
+        const aiBtn=el('button','btn ghost sm', aiSeats[i]?'🤖 AI':'👤 人类');
+        aiBtn.style.cssText='min-width:74px'; aiBtn.onclick=()=>{ aiSeats[i]=!aiSeats[i]; draw(); };
+        r.appendChild(aiBtn);
+      }
       m.appendChild(r);
     }
+    if(mode==='single' && aiSeats.slice(0,np).some(Boolean))
+      m.appendChild(el('div','hintbox','🤖 AI 对手用蒙特卡洛树搜索(MaxN-MCTS)实时决策；轮到其回合会自动行动。基础游戏体验最佳。'));
     // 扩展开关：勾选后 newGame 时 G.useExpansion=true，开局进行领袖抽选（战役模式下隐藏：战役有自身 setup）
     if(mode==='single'){
       const expRow=el('div','row'); expRow.style.marginTop='8px';
@@ -5315,7 +5352,7 @@ function showStartScreen(){
     const start=el('button','btn gold', mode==='campaign'?'选择命运并开始战役':'开始游戏');
     start.onclick=()=>{
       if(mode==='campaign'){ startCampaignSetup(np, names.slice(0,np), setupV); }
-      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); render(); }
+      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); G.aiSeats=aiSeats.slice(0,np); render(); }
     };
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
