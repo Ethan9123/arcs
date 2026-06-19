@@ -1174,6 +1174,27 @@ const FATE_PROGRESS = {
   9:{ // Pathfinder 探路者：第二幕 对勾线索+1 / 发现传送门+8
     2:(ev,d,p,i)=>{ if(ev==='pathfinderCheck' && d.playerIdx===i) return 1; if(ev==='pathfinderPortal' && d.playerIdx===i) return 8; return 0; },
   },
+  5:{ // Caretaker 看护者：第一幕 赢雄心+2×傀儡/任意玩家序幕花傀儡+2；第二幕 章末+遗珍超过的对手数
+    1:(ev,d,p,i)=>{ if(ev==='ambitionWon' && d.playerIdx===i) return 2*campGolems(i); if(ev==='golemSpend') return 2; return 0; },
+    2:(ev,d,p,i)=>{ if(ev==='secureLore' && d.playerIdx===i) return 2; if(ev==='chapterEnd') return campRivalsExceededInLore(i); return 0; },
+  },
+  8:{ // Believer 信徒：第一幕 赢雄心+信徒顶牌点数；第二幕 赢「带理念雄心」+所获战力
+    1:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campFaithfulTopPip(i) : 0; },
+    2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i && campIdeals().includes(d.ambition)) ? (d.power||0) : 0; },
+  },
+  11:{ // Planet Breaker 碎星者：第二幕 取碎片+1 / 砸碎世界+6
+    2:(ev,d,p,i)=>{ if(ev==='hammerFragment' && d.playerIdx===i) return 1; if(ev==='brokenWorld' && d.playerIdx===i) return 6; return 0; },
+  },
+  15:{ // Peacekeeper 维和者：第二幕 章末+持有武器数+控制武器行星数
+    2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campWeaponsHeld(i)+campPlanetsControlledByRes(i,'weapon')) : 0; },
+  },
+  22:{ // Gate Wraith 门魅：第三幕 赢雄心+通道数；章末(控制扭曲通道)+通道数
+    3:(ev,d,p,i)=>{ if(ev==='ambitionWon' && d.playerIdx===i) return campPassages();
+        if(ev==='chapterEnd' && campControlsTwisted(i)) return campPassages(); return 0; },
+  },
+  23:{ // Conspirator 阴谋家：第三幕 计分阴谋(由面板结算，可正可负)
+    3:(ev,d,p,i)=>{ return (ev==='conspiracyScore' && d.playerIdx===i) ? (d.delta||0) : 0; },
+  },
   13:{ // Blight Speaker 凋敝代言者：第二幕——赢得雄心时，按你控制且有忠诚舰系统中的凋敝数推进
     2:(ev,d,p,i)=>{ return (ev==='ambitionWon' && d.playerIdx===i) ? campBlightInControlledShipped(i) : 0; },
   },
@@ -1192,9 +1213,15 @@ const FATE_THRESHOLD = {
   2:{ 1:{2:18,3:16,4:14}, 2:{2:12,3:14,4:16} },     // Founder 奠基者 第一/二幕
   3:{ 1:{2:10,3:10,4:10}, 2:{2:12,3:12,4:12} },     // Magnate 大亨 第一/二幕
   4:{ 2:{2:12,3:12,4:12} },                         // Advocate 代言人 第二幕
+  5:{ 1:{2:18,3:18,4:18}, 2:{2:7,3:8,4:9} },        // Caretaker 看护者 第一/二幕
+  8:{ 1:{2:10,3:9,4:8}, 2:{2:20,3:18,4:16} },       // Believer 信徒 第一/二幕
   9:{ 2:{2:8,3:8,4:8} },                            // Pathfinder 探路者 第二幕
+  11:{ 2:{2:12,3:12,4:12} },                        // Planet Breaker 碎星者 第二幕
   12:{ 2:{2:24,3:21,4:18} },                        // Pirate 海盗 第二幕
   14:{ 2:{2:16,3:14,4:12} },                        // Pacifist 和平主义者 第二幕
+  15:{ 2:{2:18,3:16,4:14} },                        // Peacekeeper 维和者 第二幕
+  22:{ 3:{2:24,3:21,4:18} },                        // Gate Wraith 门魅 第三幕
+  23:{ 3:{2:12,3:9,4:6} },                          // Conspirator 阴谋家 第三幕
   10:{ 2:{2:14,3:14,4:14} },                        // Hegemon 霸主(旗帜) 第二幕
   13:{ 2:{2:18,3:16,4:14} },                        // Blight Speaker 凋敝代言者 第二幕
   16:{ 2:{2:22,3:22,4:22} },                        // Warden 守护者(领主) 第二幕
@@ -1219,6 +1246,10 @@ const FATE_OBJECTIVE_CHECK = {
   14:{ 3:(p,i)=> p.trophies===0 && p.captives===0 && campRivalsPsionicSum(i)>(p.res.psionic||0) }, // 和平主义者终局：无战利品俘虏 且 对手通灵总和>你
   12:{ 3:(p,i)=> campHoardTotal(i)>=2 }, // 海盗终局前置门槛：藏宝≥2资源（据点猜测±10威能在幕末单独结算）
   9:{ 3:(p,i)=> !!p._portalFound && (p._pilgrimsHome||0)>G.chapter }, // 探路者终局：控制传送门 且 送达朝圣者>章节
+  5:{ 3:(p,i)=> campGolems(i)>=1 }, // 看护者终局：至少1傀儡（每章可销毁1遗珍+1傀儡，由面板执行）
+  8:{ 3:(p,i)=> campAmbMarkersOnIdeals()>=2 }, // 信徒终局：≥2个雄心标记位于带理念的雄心上（3个为完整）
+  11:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && campEveryPlayerHasOutrage() && (campBrokenWorlds()>G.chapter || campBuildingsOnMap()===0) }, // 碎星者终局：无对手赢军阀 且 全员民愤 且 破碎世界>章节(或地图无建筑)
+  15:{ 3:(p,i)=> campPeaceClusters()>=2 }, // 维和者终局：≥2星簇和平（≥5为完整）
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
@@ -1230,7 +1261,7 @@ function campFire(ev, data){
   G.players.forEach((p,i)=>{ if(!p.fate) return;
     const rules=FATE_PROGRESS[p.fate]; const fn=rules&&rules[G.campaign.act]; if(!fn) return;
     const delta=fn(ev,data,p,i)||0;
-    if(delta>0){ p.fateProgress=(p.fateProgress||0)+delta; campLog(`${pname(i)} 命运进度 +${delta} → ${p.fateProgress}（${campEvLabel(ev)}）`); }
+    if(delta!==0){ p.fateProgress=Math.max(0,(p.fateProgress||0)+delta); campLog(`${pname(i)} 命运进度 ${delta>0?'+':''}${delta} → ${p.fateProgress}（${campEvLabel(ev)}）`); }
   });
 }
 function campWonAmbition(playerIdx, amb){ const p=G.players[playerIdx]; return !!(p&&p._ambWon&&p._ambWon[amb]); }
@@ -1606,6 +1637,7 @@ const MARK_KINDS = {
   banner:{cn:'旗帜', glyph:'⚑', kw:['building','noRaid','loyal']},        // Hegemon 霸主
   seat:  {cn:'王座', glyph:'♛', kw:['loyal','token']},                    // Warden 守护者(领主)
   bunker:{cn:'地堡', glyph:'⌂', kw:['building','tough','noRaid','loyal']}, // Survivalist 幸存者
+  passage:{cn:'通道', glyph:'◈', kw:['token']},                          // Gate Wraith 门魅（置于星门）
 };
 function campMarks(){ return (G.campaign.marks||(G.campaign.marks=[])); }
 function campPlaceMark(type, playerIdx, sysId){ const p=G.players[playerIdx]; const s=G.map[sysId]; if(!p||!s||s.outOfPlay||!MARK_KINDS[type]) return false;
@@ -1659,6 +1691,30 @@ function campPathCheck(playerIdx, flagSys){ const p=G.players[playerIdx]; if(!p.
   if(flagSys===p._portal){ p._portalFound=true; campLog(`${pname(playerIdx)} 旗舰停在正确行星 → 发现传送门！`); campFire('pathfinderPortal',{playerIdx}); return 'portal'; }
   if(s1.cluster===s2.cluster || s1.idsym===s2.idsym){ p._checks=(p._checks||0)+1; campLog(`${pname(playerIdx)} 线索：✓对勾（线索数 ${p._checks}）`); campFire('pathfinderCheck',{playerIdx}); return 'check'; }
   campLog(`${pname(playerIdx)} 线索：✗叉`); return 'x'; }
+// 看护者(5)：傀儡计数 + 遗珍(遗物/通灵公会卡)收藏
+function campGolems(playerIdx){ return G.players[playerIdx]._golems||0; }
+function campSetGolems(playerIdx,n){ G.players[playerIdx]._golems=Math.max(0,n); }
+function campLoreCount(playerIdx){ return (G.players[playerIdx].guildCards||[]).filter(c=>c.icon==='relic'||c.icon==='psionic').length + (G.players[playerIdx]._lore||0); }
+function campRivalsExceededInLore(playerIdx){ const mine=campLoreCount(playerIdx); return G.players.filter((q,j)=>j!==playerIdx && mine>campLoreCount(j)).length; }
+// 信徒(8)：信徒行动牌顶牌点数 + 理念(Ideal)标记（置于雄心格）
+function campFaithfulTopPip(playerIdx){ const v=G.players[playerIdx]._faithfulTop; return (v==null||v<=0)?10:v; } // 空牌堆→10
+function campIdeals(){ return G.campaign.ideals||(G.campaign.ideals=[]); }
+function campAmbMarkersOnIdeals(){ return campIdeals().reduce((n,k)=>n+((G.ambitionBox[k]||[]).length),0); }
+// 碎星者(11)：碎片/破碎世界计数 + 全员民愤
+function campHammerFragments(playerIdx){ return G.players[playerIdx]._hammerFrag||0; }
+function campBrokenWorlds(){ return G.campaign.brokenWorlds||0; }
+function campEveryPlayerHasOutrage(){ return G.players.every(p=>RES_ORDER.some(r=>p.outraged[r])); }
+function campBuildingsOnMap(){ let n=0; for(const id in G.map) n+=G.map[id].pieces.buildings.length; return n; }
+// 维和者(15)：停火标记（每星簇 peace/war）
+function campCeasefires(){ return G.campaign.ceasefires||(G.campaign.ceasefires={}); }
+function campSetCeasefire(cluster,state){ campCeasefires()[cluster]=state; campLog(`星簇 ${cluster} 停火 → ${state==='peace'?'和平':'战争'}`); }
+function campPeaceClusters(){ const cf=campCeasefires(); return Object.keys(cf).filter(c=>cf[c]==='peace').length; }
+function campWeaponsHeld(playerIdx){ return G.players[playerIdx].res.weapon||0; }
+// 门魅(22)：通道标记（passage）+ 控制扭曲通道
+function campPassages(){ return campTotalMarks('passage'); }
+function campControlsTwisted(playerIdx){ return G.campaign.twistedCtrl===playerIdx; }
+// 阴谋家(23)：阴谋令牌（预测）—简化为计数器，结算由面板驱动正确/错误推进
+function campConspiracies(playerIdx){ return G.players[playerIdx]._conspiracies||0; }
 function fateByNum(num){ return CAMPAIGN_FATES.find(f=>f.num===num); }
 function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 
@@ -5061,6 +5117,45 @@ function openCampaignPanel(){
       const pil=el('button','btn ghost sm','送达朝圣者+1'); pil.onclick=()=>{ p._pilgrimsHome=(p._pilgrimsHome||0)+1; render(); closeModal(); openCampaignPanel(); }; pr.appendChild(pil);
       m.appendChild(pr);
     });
+    const reopen=()=>{ render(); closeModal(); openCampaignPanel(); };
+    // 看护者(5)：傀儡 + 遗珍
+    G.players.forEach((p,i)=>{ if(p.fate!==5) return; const row=el('div','row'); row.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`🗿${pname(i)} 傀儡×${campGolems(i)}·遗珍${campLoreCount(i)}：`));
+      const g1=el('button','btn ghost sm','傀儡+1'); g1.onclick=()=>{ campSetGolems(i,campGolems(i)+1); reopen(); }; row.appendChild(g1);
+      const g0=el('button','btn ghost sm','傀儡-1'); g0.onclick=()=>{ campSetGolems(i,campGolems(i)-1); reopen(); }; row.appendChild(g0);
+      const sp=el('button','btn ghost sm','花傀儡(序幕)+2'); sp.onclick=()=>{ campFire('golemSpend',{playerIdx:i}); reopen(); }; row.appendChild(sp);
+      const sl=el('button','btn ghost sm','收纳遗珍+2'); sl.onclick=()=>{ p._lore=(p._lore||0)+1; campFire('secureLore',{playerIdx:i}); reopen(); }; row.appendChild(sl);
+      m.appendChild(row); });
+    // 信徒(8)：信徒顶牌点数 + 理念
+    G.players.forEach((p,i)=>{ if(p.fate!==8) return; const row=el('div','row'); row.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`✝${pname(i)} 顶牌点数${campFaithfulTopPip(i)}·理念[${campIdeals().join(',')||'—'}]：`));
+      [1,2,3,4].forEach(v=>{ const b=el('button','btn ghost sm','顶牌'+v); b.onclick=()=>{ p._faithfulTop=v; reopen(); }; row.appendChild(b); });
+      AMB_ORDER.forEach(k=>{ const on=campIdeals().includes(k); const b=el('button',on?'btn sm on':'btn ghost sm',AMBITIONS[k].name);
+        b.onclick=()=>{ const ids=campIdeals(); const j=ids.indexOf(k); if(j>=0)ids.splice(j,1); else ids.push(k); reopen(); }; row.appendChild(b); });
+      m.appendChild(row); });
+    // 碎星者(11)：碎片 + 破碎世界
+    G.players.forEach((p,i)=>{ if(p.fate!==11) return; const row=el('div','row'); row.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`🔨${pname(i)} 碎片${campHammerFragments(i)}·破碎世界${campBrokenWorlds()}：`));
+      const hf=el('button','btn ghost sm','取碎片+1'); hf.onclick=()=>{ p._hammerFrag=(p._hammerFrag||0)+1; campFire('hammerFragment',{playerIdx:i}); reopen(); }; row.appendChild(hf);
+      const bw=el('button','btn ghost sm','砸碎世界+6'); bw.onclick=()=>{ G.campaign.brokenWorlds=(G.campaign.brokenWorlds||0)+1; campFire('brokenWorld',{playerIdx:i}); reopen(); }; row.appendChild(bw);
+      m.appendChild(row); });
+    // 维和者(15)：停火标记
+    if(G.players.some(p=>p.fate===15)){ const row=el('div','row'); row.style.cssText='gap:4px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`🕊停火(和平${campPeaceClusters()})：`));
+      for(let cl=1;cl<=6;cl++){ const st=campCeasefires()[cl]||'war'; const b=el('button',st==='peace'?'btn sm on':'btn ghost sm',`簇${cl}${st==='peace'?'和':'战'}`);
+        b.onclick=(function(c){return ()=>{ campSetCeasefire(c, campCeasefires()[c]==='peace'?'war':'peace'); reopen(); };})(cl); row.appendChild(b); }
+      m.appendChild(row); }
+    // 门魅(22)：通道 + 扭曲通道控制
+    G.players.forEach((p,i)=>{ if(p.fate!==22) return; const row=el('div','row'); row.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`◈${pname(i)} 通道×${campPassages()}·扭曲通道${campControlsTwisted(i)?'你控':'否'}：`));
+      const ap=el('button','btn ghost sm','星门放通道'); ap.onclick=()=>{ closeModal(); pickFromList('哪个星门放通道',[1,2,3,4,5,6].map(c=>({label:'G'+c,val:'G'+c})),id=>{ campPlaceMark('passage',i,id); openCampaignPanel(); }); }; row.appendChild(ap);
+      const tc=el('button','btn ghost sm','切换扭曲通道控制'); tc.onclick=()=>{ G.campaign.twistedCtrl=campControlsTwisted(i)?null:i; reopen(); }; row.appendChild(tc);
+      m.appendChild(row); });
+    // 阴谋家(23)：阴谋结算(可正可负)
+    G.players.forEach((p,i)=>{ if(p.fate!==23) return; const row=el('div','row'); row.style.cssText='gap:5px;flex-wrap:wrap;align-items:center';
+      row.appendChild(el('span',null,`🕵${pname(i)} 计时${p.fateProgress||0}：`));
+      [['猜中+1',1],['猜错-1',-1]].forEach(([lab,dv])=>{ const b=el('button','btn ghost sm',lab); b.onclick=()=>{ campFire('conspiracyScore',{playerIdx:i,delta:dv}); reopen(); }; row.appendChild(b); });
+      m.appendChild(row); });
     // 各玩家命运三幕进度
     const roman=['Ⅰ','Ⅱ','Ⅲ'];
     G.players.forEach((p,i)=>{ if(!p.fate) return; const f=fateByNum(p.fate); if(!f) return;
