@@ -1011,7 +1011,105 @@ const CAMPAIGN_CARDS=[
   {id:'the_arbiter_f24_03_guild',en:'The Arbiter (F24-03, Guild)',cn:'仲裁者 (F24-03，公会卡)',k:'court',f:24,eff:'计分(scoring)开始时，你可将任意数量的战利品、俘虏与资源(物资/燃料/武器/遗物/通灵)交给对手，资源数量上限为该对手的空资源槽数量(战利品与俘虏不受槽位限制)。忠于该对手的棋子返回其供应区。'},
   {id:'judge_s_chosen_f24_04_title',en:'Judge\'s Chosen (F24-04, Title)',cn:'裁判之选 (F24-04，头衔卡)',k:'court',f:24,eff:'若你是裁判的对手(Rival)：可用裁判的忠诚舰船执行行动(其舰船不计入你的控制)；可用自己的忠诚星港(非裁判星港)弹射裁判舰船；攻击除裁判以外任何人时，可把战斗系统内裁判的忠诚舰船加入你的进攻舰船；攻击裁判时，裁判的忠诚舰船计入其防御棋子而非你的进攻。'},
   {id:'judge_sets_agenda_f24_05_edict_15',en:'Judge Sets Agenda (F24-05, Edict 15)',cn:'裁判定议程 (F24-05，敕令 15)',k:'lawbook',f:24,eff:'加入规则手册的敕令卡：裁判可宣告任意雄心、放置任意未放置的雄心标记(无需拥有最多权力)；若如此做，则失去该雄心标记第二名的权力。然后把「裁判之选」卡交回裁判，裁判必须将其转交给任意一名对手。'},
+{id:'guild_investigators',en:'Guild Investigators',cn:'行会调查员',k:'guild',keys:2,icon:'psionic',eff:'战役公会卡（钥匙2·图标psionic）'},
+  {id:'guild_overseers',en:'Guild Overseers',cn:'行会监督者',k:'guild',keys:2,icon:'relic',eff:'战役公会卡（钥匙2·图标relic）'},
+  {id:'material_liaisons',en:'Material Liaisons',cn:'物资联络员',k:'guild',keys:2,icon:'material',eff:'战役公会卡（钥匙2·图标material）'},
+  {id:'fuel_liaisons',en:'Fuel Liaisons',cn:'燃料联络员',k:'guild',keys:2,icon:'fuel',eff:'战役公会卡（钥匙2·图标fuel）'},
+  {id:'weapons_liaisons',en:'Weapons Liaisons',cn:'武器联络员',k:'guild',keys:2,icon:'weapon',eff:'战役公会卡（钥匙2·图标weapon）'},
+  {id:'relic_liaisons',en:'Relic Liaisons',cn:'遗物联络员',k:'guild',keys:2,icon:'relic',eff:'战役公会卡（钥匙2·图标relic）'},
+  {id:'material_guildmasters',en:'Material Guildmasters',cn:'物资行会大师',k:'guild',keys:3,icon:'material',eff:'战役公会卡（钥匙3·图标material）'},
+  {id:'fuel_guildmasters',en:'Fuel Guildmasters',cn:'燃料行会大师',k:'guild',keys:3,icon:'fuel',eff:'战役公会卡（钥匙3·图标fuel）'},
+  {id:'weapons_guildmasters',en:'Weapons Guildmasters',cn:'武器行会大师',k:'guild',keys:3,icon:'weapon',eff:'战役公会卡（钥匙3·图标weapon）'},
+  {id:'relic_guildmasters',en:'Relic Guildmasters',cn:'遗物行会大师',k:'guild',keys:3,icon:'relic',eff:'战役公会卡（钥匙3·图标relic）'},
+  {id:'psionic_guildmasters',en:'Psionic Guildmasters',cn:'通灵行会大师',k:'guild',keys:3,icon:'psionic',eff:'战役公会卡（钥匙3·图标psionic）'},
+  {id:'librarians',en:'Librarians',cn:'书库管理员',k:'guild',keys:2,icon:'relic',eff:'战役公会卡（钥匙2·图标relic）'},
+  {id:'stone_speakers',en:'Stone-Speakers',cn:'石语者',k:'guild',keys:2,icon:'material',eff:'战役公会卡（钥匙2·图标material）'},
+  {id:'portal_seekers',en:'Portal Seekers',cn:'传送门追寻者',k:'guild',keys:2,icon:'psionic',eff:'战役公会卡（钥匙2·图标psionic）'},
+  {id:'happy_hosts',en:'Happy Hosts',cn:'欢乐东道主',k:'guild',keys:2,icon:'fuel',eff:'战役公会卡（钥匙2·图标fuel）'},
+  {id:'mind_managers',en:'Mind Managers',cn:'心智管理者',k:'guild',keys:2,icon:'psionic',eff:'战役公会卡（钥匙2·图标psionic）'},
+  {id:'farseers',en:'Farseers',cn:'先知教团',k:'guild',keys:2,icon:'psionic',eff:'战役公会卡（钥匙2·图标psionic）'},
+  {id:'the_arbiter',en:'The Arbiter',cn:'仲裁者',k:'guild',keys:2,icon:'relic',eff:'战役公会卡（钥匙2·图标relic）'},
 ];
+/* 战役公会卡 钥匙数(劫掠成本)+资源图标(计入大亨/守护/共情)——读卡面符号工作流提取，共 77 张 */
+const CAMPAIGN_CARD_KI={
+  admin_union:[2,'material'],
+  arms_interest:[2,'weapon'],
+  arms_union:[2,'weapon'],
+  arsenal_keepers:[2,'weapon'],
+  blazeworld_refugees:[2,'fuel'],
+  blight_hunters:[2,'weapon'],
+  blight_reapers:[2,'material'],
+  construction_union:[2,'material'],
+  council_insiders:[2,'psionic'],
+  court_enforcers:[2,'weapon'],
+  deadworld_refugees:[2,'weapon'],
+  dealmakers:[2,'psionic'],
+  elder_broker:[2,'relic'],
+  faithful_disciples:[2,'relic'],
+  farseers:[2,'psionic'],
+  forgeworld_refugees:[2,'material'],
+  freedom_fighters:[2,'weapon'],
+  fuel_cartel:[2,'fuel'],
+  fuel_guildmasters:[3,'fuel'],
+  fuel_liaisons:[2,'fuel'],
+  galactic_bards:[1,'relic'],
+  gatekeepers:[2,'fuel'],
+  guild_investigators:[2,'psionic'],
+  guild_overseers:[2,'relic'],
+  happy_hosts:[2,'fuel'],
+  heartworld_refugees:[2,'psionic'],
+  honor_guard:[2,'weapon'],
+  hunter_squads:[3,'weapon'],
+  imperial_officers:[2,'weapon'],
+  informants:[2,'psionic'],
+  lattice_spies:[2,'psionic'],
+  lesser_regent:[2,'psionic'],
+  librarians:[2,'relic'],
+  lostworld_refugees:[2,'relic'],
+  loyal_empaths:[3,'psionic'],
+  loyal_engineers:[3,'material'],
+  loyal_keepers:[3,'psionic'],
+  loyal_marines:[3,'weapon'],
+  loyal_pilots:[3,'fuel'],
+  material_cartel:[2,'material'],
+  material_guildmasters:[3,'material'],
+  material_liaisons:[2,'material'],
+  merchant_league:[2,'fuel'],
+  mind_managers:[2,'psionic'],
+  mining_interest:[2,'material'],
+  parade_fleets:[2,'fuel'],
+  pirate_fleet:[2,'weapon'],
+  pirate_smugglers:[2,'weapon'],
+  portal_seekers:[2,'psionic'],
+  prison_wardens:[2,'fuel'],
+  prospectors:[2,'material'],
+  psionic_cartel:[2,'psionic'],
+  psionic_guildmasters:[3,'psionic'],
+  psionic_liaisons:[2,'psionic'],
+  relic_cartel:[2,'relic'],
+  relic_fence:[2,'relic'],
+  relic_guildmasters:[3,'relic'],
+  relic_liaisons:[2,'relic'],
+  rogue_admirals:[2,'weapon'],
+  secret_order:[2,'psionic'],
+  shipping_interest:[2,'fuel'],
+  silver_tongues:[2,'psionic'],
+  skirmishers:[2,'weapon'],
+  spacing_union:[2,'fuel'],
+  spore_guides:[2,'psionic'],
+  spore_ships:[2,'psionic'],
+  stone_speakers:[2,'material'],
+  sworn_guardians:[1,'relic'],
+  sycophants:[1,'weapon'],
+  tax_collectors:[3,'relic'],
+  the_arbiter:[2,'relic'],
+  the_prodigal_one:[1,'psionic'],
+  the_prophet:[2,'psionic'],
+  the_young_light:[3,'psionic'],
+  weapon_cartel:[2,'weapon'],
+  weapons_guildmasters:[3,'weapon'],
+  weapons_liaisons:[2,'weapon']
+};
 function campCardById(id){ return CAMPAIGN_CARDS.find(c=>c.id===id); }
 /* ===== 阶段2：战役议会牌库动态增删引擎 + 幕状态机 + 幕脚本解释器 ===== */
 function campLog(msg){ if(typeof logMsg==='function' && G && G.log) logMsg(msg,'sys'); }
@@ -1024,8 +1122,10 @@ const CAMPAIGN_GUILD_ICON = {
 // 把登记项实例化为议会区运行时卡（可被影响/攫取；逐卡 gameplay 效果按命运后续接线）
 function makeCampaignCourtCard(id){
   const c=campCardById(id); if(!c) return null;
+  const ki=CAMPAIGN_CARD_KI[id]; // [钥匙数, 资源图标]——读卡面符号提取，覆盖默认
+  const keys=ki?ki[0]:(c.keys>0?c.keys:2); const icon=ki?ki[1]:(CAMPAIGN_GUILD_ICON[id]||c.icon||null);
   return { id:'cc_'+id, srcId:id, campaign:true, t:(c.k==='vox'?'vox':'guild'),
-    name:c.cn, en:c.en, keys:(c.keys>0?c.keys:2), eff:null, txt:c.eff||'', icon:CAMPAIGN_GUILD_ICON[id]||null, agents:{} };
+    name:c.cn, en:c.en, keys, eff:null, txt:c.eff||'', icon, agents:{} };
 }
 // 从所有议会区(议会区/牌堆/弃堆/玩家麾下)移除某战役卡，返回被移除的运行时卡或 null
 function campZoneRemove(srcId){
@@ -1109,10 +1209,13 @@ function campAdvanceAct(){ if(G.campaign.act<3){ G.campaign.act++; G.players.for
 function campIntermission(){
   if(!G.campaign||!G.campaign.enabled) return null;
   const act=G.campaign.act; const summary=[];
-  // A. 结算命运：未达成本幕目标者，失去等于其目标计时器位置(此处取已推进进度，封顶当前权力)的权力
+  // A. 结算命运：未达成本幕目标者，按「目标标记距0的剩余值」失去权力。
+  //    官方目标标记是「倒数到0」模型(规则书 p28：例 标记在5格→失去5、权力2→-3)。本实现 fateProgress 向上计数到阈值，
+  //    故剩余值 = 阈值 - 已推进进度。权力可为负(规则书 p28 用「-」格表示)，不再用 Math.min 钳制。
   G.players.forEach((p,i)=>{ if(!p.fate) return;
-    if(!p.fateObjMet[act-1]){ const loss=Math.min(p.power, p.fateProgress||0);
-      if(loss>0){ p.power-=loss; summary.push(`A·${pname(i)} 第${act}幕失败 → 失去 ${loss} 权力`); campLog(`中场A：${pname(i)} 第${act}幕失败，失去 ${loss} 权力`); } } });
+    if(!p.fateObjMet[act-1]){ const th=fateThreshold(p.fate,act,G.numPlayers);
+      const loss=(th!=null)?Math.max(0,th-(p.fateProgress||0)):0;
+      if(loss>0){ p.power-=loss; summary.push(`A·${pname(i)} 第${act}幕失败 → 失去 ${loss} 权力（目标标记距0剩余${loss}格）`); campLog(`中场A：${pname(i)} 第${act}幕失败，目标标记距0剩余 ${loss} → 失去 ${loss} 权力（当前 ${p.power}）`); } } });
   // B. 清理议会：除帝国议会外全部回牌堆、清空议会区密探、销毁弃牌堆，重洗并补满
   const keepCouncil=G.court.filter(c=>c&&c.council); const back=G.court.filter(c=>!(c&&c.council));
   back.forEach(c=>{ if(c.agents) c.agents={}; G.courtDeck.push(c); });
@@ -1132,7 +1235,7 @@ function campIntermission(){
   }
   summary.push(`D·修复凋敝；销毁 ${dShips} 受损舰 / ${dBld} 受损建筑`);
   // E. 转移先攻与权力：先攻给权力最高者；权力>1 者失去一半(向下取整失去)
-  let mx=-1,mi=0; G.players.forEach((p,i)=>{ if(p.power>mx){ mx=p.power; mi=i; } }); G.initiative=mi;
+  let mx=-Infinity,mi=0; G.players.forEach((p,i)=>{ if(p.power>mx){ mx=p.power; mi=i; } }); G.initiative=mi;
   G.players.forEach(p=>{ if(p.power>1) p.power=Math.ceil(p.power/2); });
   summary.push(`E·先攻→${pname(mi)}；各玩家权力减半(取多保留)`);
   // F. 选命运由向导处理（completed 抽1 / failed 抽2选1）。此处重置进度并推进幕号（幕 setup 在选命运后由向导统一执行）。
@@ -3115,16 +3218,20 @@ function applyCartelDiscards(){
 }
 // 终局平分判定：官方规则——平分时「行动顺位最靠前者」获胜（从先攻者起顺时针）。顺位是全序，可彻底打破任何平分。
 function turnOrderRank(p){ const n=G.numPlayers; const idx=G.players.indexOf(p); return (idx - G.initiative + n) % n; }
+// 终局排序：战役模式下「达成第三幕最终命运目标」者(_campVictory)最高优先；其次权力；再次行动顺位。
+//   基础局 _campVictory 恒为 undefined → (0-0) 为假，自动回退到「权力→顺位」，对非战役无影响。
+function endGameSort(){ return [...G.players].sort((a,b)=>
+  ((b._campVictory?1:0)-(a._campVictory?1:0)) || (b.power-a.power) || (turnOrderRank(a)-turnOrderRank(b))); }
 function endGame(){
   G.phase='end';
   SFX.victory();
-  const sorted=[...G.players].sort((a,b)=> b.power-a.power || turnOrderRank(a)-turnOrderRank(b));
+  const sorted=endGameSort();
   const w=sorted[0]; logMsg(`🏆 游戏结束！胜者 ${pname(G.players.indexOf(w))}（${w.power}分）`,'score'); render();
   showVictoryScreen(sorted);
 }
 // 华丽终局画面：金色冠军高亮 + 排名表 + 再来一局（SFX.victory 已在 endGame 播放）
 function showVictoryScreen(sorted){
-  sorted = sorted || [...G.players].sort((a,b)=> b.power-a.power || turnOrderRank(a)-turnOrderRank(b));
+  sorted = sorted || endGameSort();
   const w=sorted[0];
   openModal(m=>{
     $('#modal').classList.add('victory');
