@@ -1306,8 +1306,11 @@ const FATE_PROGRESS = {
         return 0; },
     2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? campFounderFreeCities() : 0; },
   },
-  14:{ // Pacifist 和平主义者：第二幕章末 无战利品+2/无俘虏+1
-    2:(ev,d,p,i)=>{ if(ev!=='chapterEnd') return 0; let n=0; if(p.trophies===0) n+=2; if(p.captives===0) n+=1; return n; },
+  14:{ // Pacifist 和平主义者：第二幕——①致力和平(章末 无战利品+2/无俘虏+1)；②扩散共情(已宣告共情时序幕每花1灵能+1)
+    2:(ev,d,p,i)=>{
+        if(ev==='preludePsionicSpent' && d.playerIdx===i && ambitionDeclared('empath')) return 1; // ②扩散共情
+        if(ev==='chapterEnd'){ let n=0; if(p.trophies===0) n+=2; if(p.captives===0) n+=1; return n; } // ①致力和平
+        return 0; },
   },
   12:{ // Pirate 海盗：第二幕章末 +藏宝资源数 +稀缺类型×2
     2:(ev,d,p,i)=>{ return ev==='chapterEnd' ? (campHoardTotal(i)+campHoardScarceTypes(i)*2) : 0; },
@@ -3888,7 +3891,8 @@ function doTyrantEgoSecure(me,c){
   (me.guildCards=me.guildCards||[]).push(c);
   logMsg(base,'act'); openTyrantEgo(me);
 }
-function preludePay(me, pr){ me.res[pr]=(me.res[pr]||0)-1; if(me.res[pr]<0) me.res[pr]=0; G.resSupply[pr]=(G.resSupply[pr]||0)+1; G._preludePaid=pr; }
+function preludePay(me, pr){ me.res[pr]=(me.res[pr]||0)-1; if(me.res[pr]<0) me.res[pr]=0; G.resSupply[pr]=(G.resSupply[pr]||0)+1; G._preludePaid=pr;
+  if(pr==='psionic') campFire('preludePsionicSpent',{playerIdx:G.actor}); }   // F14 和平主义者「扩散共情」：序幕花灵能
 function abortPrelude(){ // 序幕免点数行动被放弃/取消：退还已花资源并清除标记
   if(!G._freePrelude) return;
   if(G._preludePaid){ const me=G.players[G.actor]; me.res[G._preludePaid]=(me.res[G._preludePaid]||0)+1; G.resSupply[G._preludePaid]=Math.max(0,(G.resSupply[G._preludePaid]||0)-1);
