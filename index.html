@@ -2182,6 +2182,21 @@ const PERSONAS={};
 const PERSONA_KEYS=Object.keys(PERSONAS);   // LG,LN,LE,NG,NN,NE,CG,CN,CE
 function personaFor(state, seat){ const k=state&&state.aiPersona&&state.aiPersona[seat]; return (k&&PERSONAS[k])||DEFAULT_PERSONA; }
 // 中性"领先程度"估计(领先者定向用; 不含人格/社交, 避免递归): 权力 + 已宣告雄心中本玩家领先项的预估收益
+// 战役·命运目标价值(power-like 单位)：本幕进度归一化×里程碑 + 达成本幕目标里程碑 + 第三幕终局胜利。
+//   非战役/无命运 → 0（基础单场恒 0，对既有单场 AI 零影响）。aiEval(叶子效用) 与 aiStanding(谁在赢) 共用。
+function campFateValue(state, seat, wFate){
+  if(!(state.campaign && state.campaign.enabled)) return 0;
+  const p=state.players[seat]; if(!p || !p.fate) return 0;
+  const act=state.campaign.act||1;
+  const th=fateThreshold(p.fate, act, state.numPlayers);   // 计时型命运本幕阈值(无则 null)
+  const wF=(wFate!=null)?wFate:1;
+  const milestone=(act>=3?12:6)*wF;                       // 第三幕目标=战役胜利, 权重更高
+  let v=0;
+  if(th && th>0) v += milestone * Math.min(p.fateProgress||0, th)/th;  // 归一化进度
+  if(p.fateObjMet && p.fateObjMet[act-1]) v += milestone;             // 已达本幕命运目标
+  if(p._campVictory) v += 40*wF;                                      // 第三幕终局胜利
+  return v;
+}
 function aiStanding(state, j){
   const p=state.players[j]; if(!p) return 0;
   let s=(p.power||0); const saved=G; G=state;
@@ -2190,6 +2205,7 @@ function aiStanding(state, j){
     let better=0; for(const q of state.players){ if(q!==p && AMBITIONS[k].count(q)>myC) better++; }
     if(better===0){ const hi=mk.reduce((x,m)=>x+(m.f||0),0); s+=hi*0.6; } } }
   finally{ G=saved; }
+  s += campFateValue(state, j, 1);  // 战役下"谁在赢"也含命运进度→领先者定向/复仇瞄准真正的战役领跑者
   return s;
 }
 /* ===== P3b 恩怨账本：记住谁打过我(grievance) → 复仇/世仇。G.rel[victim][offender]≥0, 受害方持仇。===== */
@@ -2236,6 +2252,9 @@ function aiEval(state, seat, persona){
     let v=0; for(let j=0;j<state.players.length;j++){ if(j!==seat){ const g=state.rel[seat][j]||0; if(g>0) v += g*aiStanding(state,j); } }
     u -= persona.vengeance * v * 0.01;
   }
+  // (c) 战役·命运目标感知：让 MCTS 不止盯原始权力, 还为「本幕命运目标」下棋。
+  //   仅战役局生效(campFateValue 内 gate); 基础单场恒返 0, 对既有单场AI/测试零影响。人格可用 wFate 调命运专注度。
+  u += campFateValue(state, seat, persona.wFate);
   return u;
 }
 
@@ -2685,9 +2704,24 @@ function render(){
   renderBoard(); renderPlayers(); renderAmbitions(); renderTop(); renderHand(); renderActionBar(); renderCourt();
   renderTurnBanner();
   aiMaybeSchedule();   // AI 对手：轮到 AI 决策时异步调度(浏览器内; 测试中 render 被静音故不触发)
+  if(typeof TUT!=='undefined' && TUT.game) TUT.tick();   // 交互式教学：渲染后观察状态→满足条件自动进入下一步
 }
 /* ===== AI 对战集成（P1 浏览器集成）：标记为 AI 的座位自动用 MCTS 在真实棋局上行动 ===== */
-var AI_LIVE_OPTS = {K:2, iters:24, depthCap:28};   // 浏览器实时强度/响应折中(每决策约0.3-0.6s)
+var AI_LIVE_OPTS = {K:2, iters:24, depthCap:28};   // 浏览器实时强度/响应折中(每决策约0.3-0.6s) —— 兼容旧引用/缺省=普通
+// AI 难度档：映射 MCTS 算力(K=决定化世界数, iters=每树迭代, depthCap=最大展开深度)。
+//   越高=看得越深越准但每步越慢。普通=原 AI_LIVE_OPTS，确保向后兼容。
+var AI_DIFFICULTY_PRESETS = {
+  easy:   {K:1, iters:8,  depthCap:20},   // 休闲：响应快、近视，留给玩家空间
+  normal: {K:2, iters:24, depthCap:28},   // 普通：原浏览器强度
+  hard:   {K:3, iters:40, depthCap:34},   // 困难：多世界深搜，更稳的章末预判与压制
+};
+var AI_DIFFICULTY_KEYS = ['easy','normal','hard'];
+var AI_DIFFICULTY_LABEL = {easy:'😌 休闲', normal:'⚔ 普通', hard:'🔥 困难'};
+// 取当前棋局应使用的 MCTS 参数：按 G.aiDifficulty 选预设，未知/未设则回退普通(AI_LIVE_OPTS)。
+function aiOptsFor(state){
+  const d = state && state.aiDifficulty;
+  return AI_DIFFICULTY_PRESETS[d] || AI_LIVE_OPTS;
+}
 // 当前是否轮到一个 AI 座位做决策(仅 lead/follow/actions 三个本接口支持的阶段)
 function aiSeatActiveNow(){
   if(!G || !G.aiSeats) return -1;
@@ -2696,9 +2730,16 @@ function aiSeatActiveNow(){
   return (seat!=null && G.aiSeats[seat]) ? seat : -1;
 }
 // 在真实棋局上执行一个 AI move：仅临时把 openModal 换成移动感知自答(AI 不弹真模态), render 照常显示。
+// AI 落子期间临时接管 openModal：AI 自答自己触发的模态。
+//   例外：若本步令游戏终局(G.phase==='end')——典型是 AI 打出制胜一张牌→endGame→showVictoryScreen——
+//   则把胜利屏交回真实 openModal 展示给玩家，否则会被 aiResolveModal 自动点掉「再来一局」→ 玩家看不到胜利屏。
+function aiLiveOpenModal(realOpenModal, builder, move){
+  if(G && G.phase==='end'){ realOpenModal(builder); return; }
+  aiResolveModal(builder, move);
+}
 function aiApplyMoveLive(move){
   const sModal=openModal;
-  openModal=function(builder){ aiResolveModal(builder, move); };
+  openModal=function(builder){ aiLiveOpenModal(sModal, builder, move); };
   try{ aiDrive(move); } finally{ openModal=sModal; }
 }
 // 渲染后调度：若轮到 AI, 显示"思考中"并在下一 tick 计算+落子, 落子后 render 再次触发本函数 → 连续走完 AI 回合。
@@ -2709,7 +2750,7 @@ function aiMaybeSchedule(){
   try{ setPrompt(`🤖 ${pname(seat)}·${personaFor(G,seat).name} 思考中…`); }catch(e){}
   setTimeout(function(){
     let mv=null;
-    try{ mv=mctsChooseMove(G, AI_LIVE_OPTS); if(mv) aiApplyMoveLive(mv); }
+    try{ mv=mctsChooseMove(G, aiOptsFor(G)); if(mv) aiApplyMoveLive(mv); }
     catch(e){ console.error('AI 出错:', e); }
     finally{ G._aiThinking=false; render(); }
   }, 80);
@@ -3131,6 +3172,7 @@ function renderActionBar(){
 
 /* ============================== 出牌引擎 =============================== */
 function onCardClick(owner,i){
+  if(typeof TUT!=='undefined' && TUT.game && !TUT.allowCard(owner,i)) return;   // 交互式教学：本步只放行指定手牌
   if(G.phase==='lead' && owner===G.initiative){
     SFX.card();
     const cards=$$('.card'); if(cards[i]){ cards[i].classList.add('playing'); }
@@ -3301,6 +3343,7 @@ function promptActions(){
   setPrompt(`${pname(G.actor)} 执行 <b style="color:${SUITS[G.actionSuit].color}">${SUITS[G.actionSuit].name}</b> · 剩余 <b>${G.actionsLeft}</b> 次。<br>可用：${acts}。`);
 }
 function endActorTurn(){
+  if(typeof TUT!=='undefined' && TUT.game && !TUT.allowEnd()) return;   // 交互式教学：本步先完成指定操作，暂不结束回合
   G.pending=null; G.highlight=null;
   eliminationRespawn(G.actor);   // 淘汰与让步(规则书 p22)：无星港无舰 → 回合末在星门放3新舰
   autosaveCampaign(); // 战役模式：回合末自动存档（单场模式空操作）
@@ -3616,6 +3659,7 @@ function showVictoryScreen(sorted){
 /* ============================== 行动实现 =============================== */
 function onSystemClick(id){
   if(!G||!G.pending) return;
+  if(typeof TUT!=='undefined' && TUT.game && !TUT.allowSystem(id)) return;   // 交互式教学：本步只放行指定系统
   const t=G.pending.type;
   if(t==='tax') doTax(id);
   else if(t==='build') doBuild(id);
@@ -3630,6 +3674,7 @@ function emptySlots(sys){ const s=G.map[sys]; return s.kind==='planet'?(s.slots-
 function gateClusterResources(gateId){ const c=parseInt(gateId),l=PLANET_LAYOUT[c]||{}; return [...new Set(Object.values(l))]; }
 function hasRival(s,col){ for(const c in s.pieces.ships){ if(c!==col&&s.pieces.ships[c]>0) return true; } return s.pieces.buildings.some(b=>b.owner!==col); }
 function beginAction(type){
+  if(typeof TUT!=='undefined' && TUT.game && !TUT.allowAction(type)) return;   // 交互式教学：本步只放行指定行动
   if(G.actionsLeft<=0||G.pending) return;
   if(type==='influence'){ openInfluence(); return; }
   if(type==='secure'){ openSecure(); return; }
@@ -5393,6 +5438,7 @@ function showStartScreen(){
   let np=4; let names=['','','','']; let useExp=false;
   let aiSeats=[false,false,false,false]; // 各座位是否 AI 对手(MCTS)
   let aiPersona=['NN','CE','LG','NE'];   // 各 AI 座位人格(9宫格); 默认给点变化
+  let aiDifficulty='normal';             // 全局 AI 难度档(休闲/普通/困难) → MCTS 算力
   let setupV='4_frontiers'; // 当前选中的布局方案
   let mode='single';        // 'single'(单场) | 'campaign'(凋敝远疆战役)
   function draw(){
@@ -5444,7 +5490,7 @@ function showStartScreen(){
       r.appendChild(dot);
       const inp=el('input');inp.type='text';inp.placeholder=PCOLORS[i].name+'方 · 玩家'+(i+1);inp.value=names[i];
       inp.oninput=e=>names[i]=e.target.value; r.appendChild(inp);
-      if(mode==='single'){ // AI 对手开关(基础单场)；战役暂不支持 AI
+      { // AI 对手开关（单场与战役均支持；战役座位的命运在开始后随机分配）
         const aiBtn=el('button','btn ghost sm', aiSeats[i]?'🤖 AI':'👤 人类');
         aiBtn.style.cssText='min-width:74px'; aiBtn.onclick=()=>{ aiSeats[i]=!aiSeats[i]; draw(); };
         r.appendChild(aiBtn);
@@ -5458,8 +5504,19 @@ function showStartScreen(){
       }
       m.appendChild(r);
     }
-    if(mode==='single' && aiSeats.slice(0,np).some(Boolean))
-      m.appendChild(el('div','hintbox','🤖 AI 用蒙特卡洛树搜索(MaxN-MCTS)实时决策、自动行动。🎭 点人格按钮切换 9 宫格阵营(守序/中立/混乱 × 善良/中立/邪恶)，不同人格偏好不同雄心与打法。基础单场体验最佳。'));
+    if(aiSeats.slice(0,np).some(Boolean)){
+      // 全局 AI 难度档：一键循环 休闲/普通/困难，决定所有 AI 的 MCTS 算力
+      const difRow=el('div','row'); difRow.style.marginTop='6px';
+      const difBtn=el('button','btn ghost sm','难度：'+AI_DIFFICULTY_LABEL[aiDifficulty]);
+      difBtn.style.cssText='width:100%;text-align:left';
+      difBtn.title='点击切换 AI 难度：休闲(看得浅、留空间) → 普通 → 困难(多世界深搜、压制更强)';
+      difBtn.onclick=()=>{ const idx=AI_DIFFICULTY_KEYS.indexOf(aiDifficulty); aiDifficulty=AI_DIFFICULTY_KEYS[(idx+1)%AI_DIFFICULTY_KEYS.length]; draw(); };
+      difRow.appendChild(difBtn); m.appendChild(difRow);
+      const tip = (mode==='campaign')
+        ? '🤖 战役 AI：每幕内用 MaxN-MCTS 实时打牌行动，并已能为「本幕命运目标」下棋。AI 座位的命运在开始后随机分配；幕间结算/选命运等元层步骤仍由你在 📜 面板推进。'
+        : '🤖 AI 用蒙特卡洛树搜索(MaxN-MCTS)实时决策、自动行动。🎭 点人格按钮切换 9 宫格阵营(守序/中立/混乱 × 善良/中立/邪恶)，不同人格偏好不同雄心与打法。难度越高 AI 看得越深、走得越慢。';
+      m.appendChild(el('div','hintbox',tip));
+    }
     // 扩展开关：勾选后 newGame 时 G.useExpansion=true，开局进行领袖抽选（战役模式下隐藏：战役有自身 setup）
     if(mode==='single'){
       const expRow=el('div','row'); expRow.style.marginTop='8px';
@@ -5472,8 +5529,8 @@ function showStartScreen(){
     const ctl=el('div','row');ctl.style.marginTop='14px';
     const start=el('button','btn gold', mode==='campaign'?'选择命运并开始战役':'开始游戏');
     start.onclick=()=>{
-      if(mode==='campaign'){ startCampaignSetup(np, names.slice(0,np), setupV); }
-      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); G.aiSeats=aiSeats.slice(0,np); G.aiPersona=aiPersona.slice(0,np); render(); }
+      if(mode==='campaign'){ startCampaignSetup(np, names.slice(0,np), setupV, {seats:aiSeats.slice(0,np), persona:aiPersona.slice(0,np), difficulty:aiDifficulty}); }
+      else { w.style.display='none'; newGame(np, names.slice(0,np), useExp, setupV); G.aiSeats=aiSeats.slice(0,np); G.aiPersona=aiPersona.slice(0,np); G.aiDifficulty=aiDifficulty; render(); }
     };
     ctl.appendChild(start);
     const rules=el('button','btn ghost','规则速查');
@@ -5487,7 +5544,8 @@ function showStartScreen(){
   draw();
 }
 /* 战役开局：逐玩家选命运 → 创建战役 G + 自动存档。地基阶段不启用幕流程，命运与持久化先就绪。 */
-function startCampaignSetup(np, names, setupV){
+function startCampaignSetup(np, names, setupV, ai){
+  ai = ai || {seats:[], persona:[], difficulty:'normal'};
   const m=$('#modal'); const w=$('#modalWrap'); w.style.display='flex';
   const pool = CAMPAIGN_FATES.map(f=>f.num);
   const chosen = [];
@@ -5495,6 +5553,8 @@ function startCampaignSetup(np, names, setupV){
     w.style.display='none';
     const label='战役·'+names.slice(0,np).map((n,i)=>n||PCOLORS[i].name).join('/');
     newGame(np, names.slice(0,np), false, setupV, {fates:chosen.slice(0,np), label});
+    // 战役 AI：座位/人格/难度挂到 G（与单场一致），令 aiMaybeSchedule 在战役幕内自动行动
+    G.aiSeats=(ai.seats||[]).slice(0,np); G.aiPersona=(ai.persona||[]).slice(0,np); G.aiDifficulty=ai.difficulty||'normal';
     campSetupImperialCouncil(); // 战役：帝国议会入宫廷
     // 第一幕开局设置：逐玩家执行其命运 Act I setup（有脚本者自动执行，无脚本者待 P9 编码）
     G.players.forEach((p,i)=>campRunActSetup(i));
@@ -5504,6 +5564,8 @@ function startCampaignSetup(np, names, setupV){
   };
   const step=(pi)=>{
     if(pi>=np){ launch(); return; }
+    // AI 座位的命运随机分配（跳过人工选卡弹窗）
+    if(ai.seats && ai.seats[pi] && pool.length){ const k=Math.floor(Math.random()*pool.length); chosen.push(pool.splice(k,1)[0]); step(pi+1); return; }
     openModal(mm=>{
       mm.appendChild(el('h2',null,`命运选择 · ${names[pi]||PCOLORS[pi].name+'方'}（${pi+1}/${np}）`));
       mm.appendChild(el('div','hintbox','选择你的命运（Fate）。复杂度 ●○○~●●● 表示机制深度。点卡名旁「图」可看卡面。'));
@@ -5986,20 +6048,35 @@ function showRules(){
 }
 
 /* ====================== 新手教学系统 ====================== */
-function tutInitDemo(){
-  // 用2人演示局渲染真实游戏背景
-  newGame(2, ['你（红方）','演示·蓝方']);
-  // 给玩家0加一些资源，方便展示
-  G.players[0].res.fuel=2; G.players[0].res.material=1; G.players[0].res.weapon=1;
-  G.players[1].res.relic=1; G.players[1].res.fuel=1;
-  G.players[0].trophies=2; G.players[0].captives=1; G.players[0].power=3;
-  G.players[1].power=1;
+function tutBuildScenario(){
+  // 交互式教学：固定既定牌局 —— 2 人「你(红) vs 休闲AI(蓝)」，先攻=你，发好牌让你边学边赢。
+  newGame(2, ['你 · 红方','教练 · 蓝方']);
+  const me=G.players[0], ai=G.players[1];
+  const C=(suit,number)=>({suit,number,pips:PIPS_BY_NUMBER[number]});   // 2 人局用 2-6 号牌
+  me.hand=[ C('adm',2), C('con',3), C('agg',4), C('mob',5), C('adm',6), C('con',2) ];
+  ai.hand=[ C('agg',2), C('mob',3), C('con',4), C('adm',5), C('agg',6), C('mob',4) ];
+  sortHand(me); sortHand(ai);
+  // 给你明显的起步优势，确保跟着教程打就能赢下「大亨(燃料+物资 最多)」
+  me.res.fuel=(me.res.fuel||0)+2; me.res.material=(me.res.material||0)+2;
+  ai.res.fuel=0; ai.res.material=0;   // 对手大亨资源清零，保证你领先
+  // 确保你的城市产「燃料」——课税它就能直接推进大亨目标
+  for(const id in G.map){ const s=G.map[id];
+    if(s.kind==='planet' && (s.pieces.buildings||[]).some(b=>b.owner===me.color.key && b.type==='city')){ s.resource='fuel'; }
+  }
+  G.resSupply.fuel = Math.max(G.resSupply.fuel||0, 6);
+  // 对手 = 座位 1 · 休闲难度 · 中立人格
+  G.aiSeats=[false,true]; G.aiPersona=['NN','NN']; G.aiDifficulty='easy';
+  G.tutMode=true;
+  // 先攻 = 你，重置到「你主导出牌」
+  G.initiative=0; G.turnPlayer=0; G.passedInARow=0;
+  beginRound();
 }
 
 const TUT={
   on:false, step:0,
 
-  STEPS:[
+  // 旧版「被动幻灯片」步骤——已被下方交互式 SEQ 取代，保留为文案参考(未被引用)。
+  _legacySlides:[
     { title:'👋 欢迎来到 ARCS 暗星悬弧！',
       body:`这是一款 <b>2-4 人热座太空征服桌游</b>，每局约 60 分钟。<br><br>
             <b>🎯 目标</b>：游戏共 3 章，每章末进行「雄心计分」——<br>
@@ -6115,26 +6192,95 @@ const TUT={
       sel:null },
   ],
 
+  // ===== 交互式教学：固定牌局上「边做边学」，做对自动进入下一步 =====
+  game:false,
+  _mf(){ return (G&&G.players&&G.players[0]) ? (G.players[0].res.fuel||0)+(G.players[0].res.material||0) : 0; },
+  SEQ:[
+    {kind:'info', title:'👋 欢迎！我们直接开一局', sel:null,
+     body:`这是一局<b>真实对战</b>：你是 <b style="color:#e23b3b">红方</b>，对手是<b>休闲 AI（蓝方）</b>。<br><br>我会一步步带你打，出现新东西就解释。跟着<b style="color:#d9b25a">金色高亮</b>操作即可。`},
+    {kind:'info', title:'🎯 怎么赢', sel:'#ambitions', pos:'left',
+     body:`游戏分几章。<b>每章末「雄心计分」</b>：你<b>宣告</b>过的雄心，谁在那类资源上数量最多，谁拿<b>权力分</b>。<br><br>右上角这排是<b>雄心标记盒</b>。最终<b>权力最高者获胜</b>。`},
+    {kind:'info', title:'🃏 你的手牌', sel:'#hand', pos:'top',
+     body:`下面是你的 <b>6 张手牌</b>，每张有<b>花色(颜色)</b>和<b>数字</b>。<br>数字越小 → <b>行动次数越多</b>。<br><br>现在轮到你<b>「主导」</b>（先出牌）。`},
+    {kind:'do', title:'👆 打出「行政·2」', sel:'#hand', pos:'top',
+     body:`点击你手牌里的 <b style="color:var(--adm)">行政 · 2</b> 打出。<br>它能让你<b>宣告雄心</b>，并给你 <b>4 次行动</b>。`,
+     gate:{card:(o,i,c)=> o===0 && c && c.suit==='adm' && c.number===2},
+     done:()=> !!(G.lead && G.lead.card)},
+    {kind:'do', title:'💰 宣告「大亨」', sel:'#modal', pos:null,
+     body:`弹出了<b>宣告雄心</b>。点 <b>宣告 💰 大亨</b>。<br><br><b>大亨</b> = 谁的 <b>燃料 + 物资</b> 最多就得分 —— 这就是我们这局的赚分目标。`,
+     done:()=> (G.lead && G.lead.ambition==='tycoon') || G.phase==='actions'},
+    {kind:'do', title:'💧 课税赚资源', sel:'#actionBar', pos:'left',
+     body:`你有 <b>4 次行动</b>。要赢大亨就得攒<b>燃料/物资</b>。<br><br>点 <b>课税</b> → 再点高亮的<b>金色城市</b>，收 1 个资源。<br><span style="opacity:.8">(每座城市每回合只能课税 1 次)</span>`,
+     enter:()=>{ TUT._taxBase=TUT._mf(); },
+     gate:{action:(t)=> t==='tax', end:()=> TUT._mf() >= (TUT._taxBase+1)},
+     done:()=> TUT._mf() >= (TUT._taxBase+1)},
+    {kind:'do', title:'👥 影响议会（放密探）', sel:'#actionBar', pos:'left',
+     body:`再学一招：<b>影响</b>。点 <b>影响</b>，再在弹出的<b>议会卡</b>上点一张，放下你的<b>密探</b>。<br><br>密探多了能<b>收纳</b>议会卡拿能力，有些雄心也靠它。`,
+     enter:()=>{ TUT._actBase=(G&&typeof G.actionsLeft==='number')?G.actionsLeft:0; },
+     gate:{action:(t)=> t==='influence', end:()=> G.actionsLeft < TUT._actBase},
+     done:()=> G.actionsLeft < TUT._actBase},
+    {kind:'do', title:'✅ 结束你的回合', sel:'#actionBar', pos:'left',
+     body:`这一回合学得够多啦！点 <b>结束行动</b> 结束你的回合，看对手怎么走。<br><span style="opacity:.8">(剩下的行动以后想用再用)</span>`,
+     done:()=> G.phase!=='actions' || G.actor!==0},
+    {kind:'wait', title:'🤖 对手回合', sel:null,
+     body:`轮到<b>休闲 AI（蓝方）</b>了，稍候——<br>看右侧<b>行动日志</b>它在做什么。`,
+     done:()=> G.phase==='end' || (G.phase==='lead' && G.turnPlayer===0)},
+    {kind:'info', title:'🎉 你已经会打了！', sel:'#ambitions', pos:'left',
+     body:`你走完一个完整回合：<b>主导 → 宣告大亨 → 课税攒资源 → 结束</b>。<br><br>右上角能看到你的<b>大亨标记</b>。章末就会按你的<b>燃料+物资</b>给你<b>权力分</b>。`},
+    {kind:'info', final:true, title:'🚀 接管，去赢下这局！', sel:null,
+     body:`接下来交给你。<b>制胜节奏</b>：<br>① 每章先<b>宣告大亨</b>（出 行政2 等小牌）<br>② 多<b>课税</b>攒燃料+物资<br>③ 有空就<b>建造</b>城市/星港（加权力）<br><br>对手是<b>休闲</b>难度，照这个打你<b>能赢它</b>！祝好运 ⭐`},
+  ],
+
   start(){
-    this.on=true; this.step=0;
-    tutInitDemo();
+    this.on=true; this.game=false; this.step=0;
+    tutBuildScenario();
+    this.game=true;
     render();
-    $('#tut-blocker').style.display='block';
     this._show(0);
+    // 轮询完成判定：不少状态变化(开模态/课税等)不触发 render，靠定时 tick 保证「做对就前进」。
+    if(this._poll) clearInterval(this._poll);
+    this._poll=setInterval(()=>{ try{ TUT.tick(); }catch(e){} }, 250);
   },
+  _cur(){ return this.SEQ[this.step]; },
 
   _show(i){
-    if(i<0||i>=this.STEPS.length){ this._end(); return; }
+    if(i<0||i>=this.SEQ.length){ this._finish(); return; }
     this.step=i;
-    const s=this.STEPS[i];
+    const s=this.SEQ[i];
     $('#tut-title').textContent=s.title;
     $('#tut-body').innerHTML=s.body;
-    $('#tut-progress').textContent=`${i+1} / ${this.STEPS.length}`;
-    $('#tut-prev').disabled=(i===0);
-    $('#tut-next').textContent=(i===this.STEPS.length-1)?'开始游戏！🎮':'明白了 →';
+    $('#tut-progress').textContent=`${i+1} / ${this.SEQ.length}`;
+    const interactive=(s.kind==='do');   // do 步：关闭全屏拦截层 → 玩家可点棋盘/手牌（聚光层 pointer-events:none 可穿透）
+    $('#tut-blocker').style.display = interactive ? 'none' : 'block';
+    const prev=$('#tut-prev'), next=$('#tut-next');
+    prev.style.display=(s.kind==='info' && i>0)?'':'none'; prev.disabled=(i===0);
+    if(s.kind==='info'){ next.style.display=''; next.textContent=s.final?'接管，开始游戏！🎮':'明白了 →'; }
+    else { next.style.display=''; next.textContent='跳过这步 ↷'; }   // 兜底：允许跳过，避免卡死
     $('#tut-box').style.display='block';
+    if(s.enter){ try{ s.enter(); }catch(e){} }
     this._spotlight(s.sel, s.pos||'right');
   },
+
+  // 渲染后被调用：满足完成条件→自动进入下一步；并让聚光随棋盘变化重定位
+  tick(){
+    if(!this.on || !this.game) return;
+    const s=this._cur(); if(!s) return;
+    if((s.kind==='do'||s.kind==='wait') && s.done){
+      let ok=false; try{ ok=!!s.done(); }catch(e){ ok=false; }
+      if(ok && !this._advancing){ this._advancing=true; const self=this; setTimeout(function(){ self._advancing=false; self.next(); },350); return; }
+    }
+    if(!this._advancing) this._spotlight(s.sel, s.pos||'right');
+  },
+
+  // 软门禁：当前步只放行指定操作，其余轻提示并拦下
+  allowCard(o,i){ const s=this._cur(); if(!s||!s.gate||!s.gate.card) return true;
+    const c=G.players[o]&&G.players[o].hand[i]; if(s.gate.card(o,i,c)) return true; this._nudge(); return false; },
+  allowAction(t){ const s=this._cur(); if(!s||!s.gate||!s.gate.action) return true;
+    if(s.gate.action(t)) return true; this._nudge(); return false; },
+  allowSystem(id){ const s=this._cur(); if(!s||!s.gate||!s.gate.system) return true;
+    if(s.gate.system(id)) return true; this._nudge(); return false; },
+  allowEnd(){ const s=this._cur(); if(!s||!s.gate||!s.gate.end) return true; return !!s.gate.end(); },
+  _nudge(){ try{ toast('跟着金色提示操作哦～'); }catch(e){} },
 
   _spotlight(sel, pos){
     $$('.tut-spot').forEach(e=>e.remove());
@@ -6161,16 +6307,19 @@ const TUT={
     box.style.left=bx+'px'; box.style.top=by+'px';
   },
 
-  next(){ if(this.step===this.STEPS.length-1) this._end(); else this._show(this.step+1); },
+  next(){ if(this.step>=this.SEQ.length-1) this._finish(); else this._show(this.step+1); },
   prev(){ if(this.step>0) this._show(this.step-1); },
 
-  _end(){
-    this.on=false;
+  _clear(){
+    this.on=false; this.game=false; this._advancing=false;
+    if(this._poll){ clearInterval(this._poll); this._poll=null; }
     $('#tut-box').style.display='none';
     $('#tut-blocker').style.display='none';
     $$('.tut-spot').forEach(e=>e.remove());
-    showStartScreen();
-  }
+  },
+  _end(){ this._clear(); showStartScreen(); },              // 退出教学（exit 按钮）→ 回开局界面
+  _finish(){ this._clear(); try{ if(G) G.tutMode=false; render(); }catch(e){}
+    try{ toast('教程完成！接管这局，去赢下它 ⭐',2600); }catch(e){} },  // 完成 → 保留这局，交给玩家自由打
 };
 
 // 方向一：移动端侧栏抽屉开关
