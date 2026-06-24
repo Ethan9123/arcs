@@ -68,6 +68,8 @@
     background:#0c1322;border:1px solid var(--line);border-radius:7px;padding:2px 0;font-size:12px;position:relative}
   .pl-bank .rcell b{color:var(--ink);font-weight:800}
   .pl-bank .rcell.out{opacity:.5;background:#180f12}
+  .pl-bank .rcell.zero:not(.out){opacity:.4}        /* 持有数为 0 的资源暗化，凸显实际持有 */
+  .pl-sup .pg.zero{opacity:.42}                      /* 供应/战利品/俘虏为 0 时暗化 */
   .pl-bank .rcell .ow{position:absolute;top:-6px;right:-2px;font-size:9px;font-style:normal;color:var(--bad)}
   .pl-sup{display:flex;align-items:center;gap:9px;margin-top:6px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
   .pl-sup .pg{display:inline-flex;align-items:center;gap:2px}
@@ -4261,20 +4263,21 @@ function renderPlayers(){
     d.appendChild(wb);
     // —— 资源银行：5 槽（图标+数量，民愤标⚑并暗化）——
     const bank=el('div','pl-bank');
-    bank.innerHTML = RES_ORDER.map(r=>{ const o=p.outraged&&p.outraged[r];
-      return `<span class="rcell${o?' out':''}" title="${RESOURCES[r].name}${o?'（民愤：不可用于序幕行动，仍可课税/计雄心）':''}">${resTokenHTML(r,17)}<b>${p.res[r]}</b>${o?'<i class="ow">⚑</i>':''}</span>`;
+    bank.innerHTML = RES_ORDER.map(r=>{ const o=p.outraged&&p.outraged[r]; const z=(p.res[r]||0)===0;
+      return `<span class="rcell${o?' out':''}${z?' zero':''}" title="${RESOURCES[r].name}${o?'（民愤：不可用于序幕行动，仍可课税/计雄心）':''}">${resTokenHTML(r,17)}<b>${p.res[r]}</b>${o?'<i class="ow">⚑</i>':''}</span>`;
     }).join('');
     d.appendChild(bank);
     // —— 供应 + 战利品/俘虏/手牌 ——
     const hex=p.color.hex; const sup=el('div','pl-sup');
-    sup.innerHTML = `<span class="pg" title="城市供应（剩余可建）">${plPieceGlyph('city',hex,15)}<b>${p.supply.cities}</b></span>`
-      +`<span class="pg" title="星港供应（剩余可建）">${plPieceGlyph('starport',hex,15)}<b>${p.supply.starports}</b></span>`
-      +`<span class="pg" title="舰船供应（剩余可造）">${plPieceGlyph('ship',hex,15)}<b>${p.supply.ships}</b></span>`
-      +`<span class="pg" title="密探供应（影响议会用）">${agentGlyph(p.color.key,15)}<b>${p.supply.agents}</b></span>`
-      +`<span class="sep"></span>`
-      +`<span class="pg" title="战利品（军阀计分）">⚔<b>${p.trophies}</b></span>`
-      +`<span class="pg" title="俘虏（暴君计分）">⛓<b>${p.captives}</b></span>`
-      +`<span class="pg" title="手牌数">🂠<b>${p.hand.length}</b></span>`;
+    const pg=(glyph,n,title)=>`<span class="pg${(n||0)===0?' zero':''}" title="${title}">${glyph}<b>${n}</b></span>`;  // 数量为 0 自动暗化，凸显实际持有
+    sup.innerHTML = pg(plPieceGlyph('city',hex,15), p.supply.cities, '城市供应（剩余可建）')
+      + pg(plPieceGlyph('starport',hex,15), p.supply.starports, '星港供应（剩余可建）')
+      + pg(plPieceGlyph('ship',hex,15), p.supply.ships, '舰船供应（剩余可造）')
+      + pg(agentGlyph(p.color.key,15), p.supply.agents, '密探供应（影响议会用）')
+      + `<span class="sep"></span>`
+      + pg('⚔', p.trophies, '战利品（军阀计分）')
+      + pg('⛓', p.captives, '俘虏（暴君计分）')
+      + pg('🂠', p.hand.length, '手牌数');
     d.appendChild(sup);
     box.appendChild(d);
   });
