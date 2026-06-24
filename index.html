@@ -68,6 +68,12 @@
     background:#0c1322;border:1px solid var(--line);border-radius:7px;padding:2px 0;font-size:12px;position:relative}
   .pl-bank .rcell b{color:var(--ink);font-weight:800}
   .pl-bank .rcell.out{opacity:.5;background:#180f12}
+  .pl-amb{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:wrap;font-size:10.5px;position:relative;z-index:1}
+  .pl-amb-lbl{color:var(--muted);font-size:9px;letter-spacing:.5px}
+  .pl-amb-b{background:#0c1322;border:1px solid var(--line);border-radius:9px;padding:0 5px;line-height:16px}
+  .pl-amb-b b{color:var(--muted);font-weight:800;margin-left:1px}
+  .pl-amb-b.first{border-color:var(--gold);background:#1c1605}
+  .pl-amb-b.first b{color:var(--gold)}
   .pl-bank .rcell.zero:not(.out){opacity:.4}        /* 持有数为 0 的资源暗化，凸显实际持有 */
   .pl-sup .pg.zero{opacity:.42}                      /* 供应/战利品/俘虏为 0 时暗化 */
   .pl-bank .rcell .ow{position:absolute;top:-6px;right:-2px;font-size:9px;font-style:normal;color:var(--bad)}
@@ -4261,6 +4267,17 @@ function renderPlayers(){
     wb.innerHTML=`<span class="plw-bar"><i class="plw-cur" style="width:${wp.curPct.toFixed(1)}%"></i><i class="plw-proj" style="width:${wp.projPct.toFixed(1)}%"></i></span>`
       +`<span class="plw-txt">${p.power}${gain>0?`<span class="plw-g">+${gain}</span>`:''}/${winNeed}${wp.willWin?' 🏆':''}</span>`;
     d.appendChild(wb);
+    // —— 雄心来源：本玩家在哪些已宣告雄心中会得分（若此刻结算），+分从何而来（与权力条总分呼应）——
+    const ambHits=AMB_ORDER.filter(k=>((proj.perAmb[k]||[])[i]||0)>0);
+    if(ambHits.length){
+      const ar=el('div','pl-amb');
+      ar.innerHTML='<span class="pl-amb-lbl">雄心</span>'+ambHits.map(k=>{ const pts=proj.perAmb[k][i];
+        const counts=G.players.map(pp=>AMBITIONS[k].count(pp)); const mx=Math.max(...counts);
+        const lead=mx>0 && counts[i]===mx && counts.filter(c=>c===mx).length===1;  // 唯一首位
+        return `<span class="pl-amb-b${lead?' first':''}" title="${AMBITIONS[k].name}：若此刻结算 +${pts}${lead?'（首位）':'（次位/并列）'}">${AMBITIONS[k].icon}<b>+${pts}</b></span>`;
+      }).join('');
+      d.appendChild(ar);
+    }
     // —— 资源银行：5 槽（图标+数量，民愤标⚑并暗化）——
     const bank=el('div','pl-bank');
     bank.innerHTML = RES_ORDER.map(r=>{ const o=p.outraged&&p.outraged[r]; const z=(p.res[r]||0)===0;
