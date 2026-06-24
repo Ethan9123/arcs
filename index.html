@@ -45,6 +45,9 @@
   .pl.cur .pl-wm{opacity:.18}
   .pl-hd,.pl-bank,.pl-sup,.pl-win{position:relative;z-index:1}
   .pl-hd{display:flex;align-items:center;gap:7px}
+  .pl-caret{flex:none;cursor:pointer;color:var(--muted);font-size:10px;width:12px;text-align:center;user-select:none;transition:color .12s}
+  .pl-caret:hover{color:var(--gold)}
+  .pl.collapsed{padding-bottom:6px;opacity:.92}
   .pl .dot{width:13px;height:13px;border-radius:50%;flex:none;border:1px solid #0006;box-shadow:0 0 6px #0006}
   .pl .nm{font-weight:800;font-size:13px;letter-spacing:.3px;flex:none;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .pl-tags{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0}
@@ -4212,21 +4215,27 @@ function winProgress(power, gain, need){
   const projPct=Math.min(Math.max(0,100-curPct), g/need*100);
   return { curPct, projPct, willWin:(cur+g)>=need, remain:Math.max(0,need-cur) };
 }
+var PL_COLLAPSE={};  // 玩家面板折叠态（仅 UI，非游戏状态，不入 cloneState）：座位→bool
 function renderPlayers(){
   const box=$('#players'); box.innerHTML='';
   const active = (typeof handOwnerIdx==='function') ? handOwnerIdx() : G.turnPlayer;  // 当前行动者(主导/跟随/执行)
   const winNeed=POWER_TO_WIN[G.numPlayers]||27;
   const proj=projectAmbitionScores();   // 若此刻结算章末的预估加分（纯只读）
   G.players.forEach((p,i)=>{
-    const d=el('div','pl'+(i===active?' cur':''));
+    const collapsed = !!PL_COLLAPSE[i] && i!==active;   // 当前行动者强制展开
+    const d=el('div','pl'+(i===active?' cur':'')+(collapsed?' collapsed':''));
     d.style.borderLeftColor=p.color.css;
     d.style.background=`linear-gradient(135deg, ${p.color.hex}22, var(--panel2) 62%)`;  // 阵营色微染
     // 面板水印：该玩家阵营色的真实舰船图（有素材才显示，缺则无）——让不同玩家的面板更具辨识度/主题感
     const _wmSrc=(typeof pieceArtSrc==='function')?pieceArtSrc('ship',p.color.key):null;
     if(_wmSrc){ const wm=el('img','pl-wm'); wm.src=_wmSrc; wm.alt=''; d.appendChild(wm); }
     if(i===active) d.style.boxShadow=`0 0 0 2px ${p.color.css}, 0 0 16px -3px ${p.color.css}, 0 6px 18px #0007`; // 阵营色发光=轮到谁
-    // —— 表头：阵营点 + 名称 + 先攻奖章 + 标签 + 权力分 ——
+    // —— 表头：折叠键 + 阵营点 + 名称 + 先攻奖章 + 标签 + 权力分 ——
     const hd=el('div','pl-hd');
+    const car=el('span','pl-caret'); car.textContent=collapsed?'▸':'▾';
+    car.title=collapsed?'展开此玩家面板':'折叠此玩家面板';
+    car.onclick=(e)=>{ e.stopPropagation(); PL_COLLAPSE[i]=!PL_COLLAPSE[i]; render(); };
+    hd.appendChild(car);
     const dot=el('span','dot'); dot.style.background=p.color.css; hd.appendChild(dot);
     hd.appendChild(el('span','nm',p.name));
     if(i===G.initiative){ const med=el('span','init-medal'); med.title='先攻（可主导出牌并宣告雄心）';
@@ -4267,6 +4276,7 @@ function renderPlayers(){
     wb.innerHTML=`<span class="plw-bar"><i class="plw-cur" style="width:${wp.curPct.toFixed(1)}%"></i><i class="plw-proj" style="width:${wp.projPct.toFixed(1)}%"></i></span>`
       +`<span class="plw-txt">${p.power}${gain>0?`<span class="plw-g">+${gain}</span>`:''}/${winNeed}${wp.willWin?' 🏆':''}</span>`;
     d.appendChild(wb);
+    if(collapsed){ box.appendChild(d); return; }   // 折叠：只显示表头 + 胜利进度条
     // —— 雄心来源：本玩家在哪些已宣告雄心中会得分（若此刻结算），+分从何而来（与权力条总分呼应）——
     const ambHits=AMB_ORDER.filter(k=>((proj.perAmb[k]||[])[i]||0)>0);
     if(ambHits.length){
