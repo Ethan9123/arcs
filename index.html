@@ -4011,7 +4011,7 @@ function pieceArtSrc(type,colorKey){ const k=type+'_'+colorKey; if(PIECE_ART[k])
 function resArtSrc(r){ const p=ASSET_RES_DIR+r+'.png'; return ASSET_OK[p]?p:null; }
 function probeAssets(){ if(_assetsProbed||typeof Image==='undefined') return; _assetsProbed=true;
   const cands=[]; const cols=PCOLORS.map(c=>c.key).concat(['imperial','free']);
-  ['ship','city','starport','agent','flagship'].forEach(t=>cols.forEach(c=>cands.push(ASSET_PIECES_DIR+t+'_'+c+'.png')));
+  ['ship','city','starport','agent','flagship','initiative'].forEach(t=>cols.forEach(c=>cands.push(ASSET_PIECES_DIR+t+'_'+c+'.png')));
   (typeof RES_ORDER!=='undefined'?RES_ORDER:[]).forEach(r=>cands.push(ASSET_RES_DIR+r+'.png'));
   let pending=cands.length, any=false; if(!pending) return;
   cands.forEach(src=>{ const im=new Image();
@@ -4215,7 +4215,11 @@ function renderPlayers(){
     const hd=el('div','pl-hd');
     const dot=el('span','dot'); dot.style.background=p.color.css; hd.appendChild(dot);
     hd.appendChild(el('span','nm',p.name));
-    if(i===G.initiative){ const med=el('span','init-medal'); med.title='先攻（可主导出牌并宣告雄心）'; med.textContent='🏁'; hd.appendChild(med); }
+    if(i===G.initiative){ const med=el('span','init-medal'); med.title='先攻（可主导出牌并宣告雄心）';
+      const initArt=(typeof pieceArtSrc==='function')?pieceArtSrc('initiative',p.color.key):null;
+      if(initArt) med.innerHTML=`<img src="${initArt}" width="13" height="17" alt="先攻" style="vertical-align:middle">`;  // 真实先攻标记(TTS 3D模型渲出)
+      else med.textContent='🏁';
+      hd.appendChild(med); }
     const tags=el('span','pl-tags');
     if(G.campaign && G.campaign.enabled && p.fate){ const f=fateByNum(p.fate);
       const fb=el('span','res'); fb.style.color='#c98bd6';
