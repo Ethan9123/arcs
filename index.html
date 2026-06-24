@@ -332,6 +332,13 @@
   #turnBanner .tb-who{font-weight:800}
   #turnBanner .tb-ph{margin-left:auto;font-size:11px;color:var(--muted);
     background:#0c1322;border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+  /* 回合阶段步进条 */
+  #turnBanner .tb-steps{margin-left:auto;display:inline-flex;align-items:center;gap:2px}
+  #turnBanner .tb-step{font-size:11px;padding:2px 8px;border-radius:20px;color:var(--muted);background:#0c1322;border:1px solid var(--line)}
+  #turnBanner .tb-step.done{color:#6f7d96;border-color:transparent;background:transparent;opacity:.8}
+  #turnBanner .tb-step.cur{color:#221a07;background:var(--gold);border-color:var(--gold);font-weight:800}
+  #turnBanner .tb-step.todo{opacity:.45}
+  #turnBanner .tb-arrow{color:var(--muted);font-size:11px;opacity:.6}
   /* P0-2 出牌轨 */
   #trickRow{margin-bottom:8px}
   #trickRow .trick-h{font-size:11px;color:var(--gold);letter-spacing:1px;margin-bottom:5px;font-weight:700}
@@ -3800,9 +3807,19 @@ function renderTurnBanner(){
   const who=G.players[handOwnerIdx()]||G.players[G.turnPlayer];
   const col=who?who.color.css:'var(--accent)';
   bn.style.borderLeftColor=col;
+  // 回合阶段步进条：主导 › 跟随 › 行动（当前高亮、已过打勾、未到淡显）——直击 ARCS 出牌→行动流程
+  const FLOW=[['lead','主导'],['follow','跟随'],['actions','行动']];
+  let curIdx=FLOW.findIndex(f=>f[0]===G.phase);
+  if(G.phase==='battle') curIdx=2;   // 战斗是行动的子状态
+  let phaseHTML;
+  if(curIdx<0){ phaseHTML=`<span class="tb-ph">${phaseName(G.phase)}</span>`; }   // setup/score 等非主流程 → 单标签
+  else { phaseHTML='<span class="tb-steps">'+FLOW.map((f,idx)=>{
+      const st=idx<curIdx?'done':(idx===curIdx?'cur':'todo');
+      return `<span class="tb-step ${st}">${st==='done'?'✓':''}${f[1]}</span>`;
+    }).join('<span class="tb-arrow">›</span>')+'</span>'; }
   bn.innerHTML=`<span class="tb-dot" style="background:${col}"></span>`
     +`<span>轮到 <span class="tb-who" style="color:${who?pcolTxt(who):'var(--accent)'}">${who?who.name:'—'}</span></span>`
-    +`<span class="tb-ph">${phaseName(G.phase)}</span>`;
+    +phaseHTML;
 }
 // P0-2 出牌区：把本轮 G.played[] 画成"出牌轨"，每张标 主导/超越/复制/转向 + 夺先攻/宣告，直击 lead/follow 追踪
 function renderTrick(){
