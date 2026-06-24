@@ -36,10 +36,14 @@
   .pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700}
   /* 玩家条 */
   /* —— 玩家板（仿 TTS 玩家垫：阵营色边 + 资源银行 + 棋子供应 + 战利品/俘虏）—— */
-  .pl{display:block;padding:7px 9px;border-radius:10px;margin-bottom:7px;
+  .pl{display:block;padding:7px 9px;border-radius:10px;margin-bottom:7px;position:relative;overflow:hidden;
     background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--line);
     box-shadow:0 2px 8px #0004;transition:box-shadow .15s,transform .1s}
   .pl.cur{box-shadow:0 0 0 2px var(--gold),0 6px 18px #0007}
+  /* 玩家面板水印：该玩家阵营色的真实舰船（TTS 3D 模型渲出），淡置于右下角，让每个玩家面板更有辨识度与主题感 */
+  .pl-wm{position:absolute;right:-12px;bottom:-16px;width:108px;height:auto;opacity:.12;pointer-events:none;z-index:0;transform:rotate(-7deg);filter:saturate(1.25)}
+  .pl.cur .pl-wm{opacity:.18}
+  .pl-hd,.pl-bank,.pl-sup,.pl-win{position:relative;z-index:1}
   .pl-hd{display:flex;align-items:center;gap:7px}
   .pl .dot{width:13px;height:13px;border-radius:50%;flex:none;border:1px solid #0006;box-shadow:0 0 6px #0006}
   .pl .nm{font-weight:800;font-size:13px;letter-spacing:.3px;flex:none;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -4188,6 +4192,9 @@ function renderPlayers(){
     const d=el('div','pl'+(i===active?' cur':''));
     d.style.borderLeftColor=p.color.css;
     d.style.background=`linear-gradient(135deg, ${p.color.hex}22, var(--panel2) 62%)`;  // 阵营色微染
+    // 面板水印：该玩家阵营色的真实舰船图（有素材才显示，缺则无）——让不同玩家的面板更具辨识度/主题感
+    const _wmSrc=(typeof pieceArtSrc==='function')?pieceArtSrc('ship',p.color.key):null;
+    if(_wmSrc){ const wm=el('img','pl-wm'); wm.src=_wmSrc; wm.alt=''; d.appendChild(wm); }
     if(i===active) d.style.boxShadow=`0 0 0 2px ${p.color.css}, 0 0 16px -3px ${p.color.css}, 0 6px 18px #0007`; // 阵营色发光=轮到谁
     // —— 表头：阵营点 + 名称 + 先攻奖章 + 标签 + 权力分 ——
     const hd=el('div','pl-hd');
