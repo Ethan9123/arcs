@@ -120,8 +120,14 @@
   .btn:disabled{opacity:.4;cursor:not-allowed}
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
   .btn.gold{background:var(--gold);color:#221a07}
+  .btn.danger{background:transparent;border:1px solid var(--bad);color:var(--bad)}
+  .btn.danger:hover{background:var(--bad);color:#fff}
   .btn.sm{padding:4px 9px;font-size:12px}
-  #actionBar{display:flex;gap:6px;flex-wrap:wrap}
+  #actionBar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  /* 行动点点阵：实心金=剩余可用，空心=已用 */
+  .pip-track{display:inline-flex;gap:3px;align-items:center;padding:0 4px}
+  .apip{width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 4px -1px var(--gold)}
+  .apip.used{background:transparent;border:1.5px solid #4a5575;box-shadow:none}
   /* 弹窗 */
   #modalWrap{position:fixed;inset:0;background:#000a;display:none;align-items:center;justify-content:center;z-index:50}
   #modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:560px;width:92%;
@@ -4409,6 +4415,11 @@ function renderActionBar(){
   if(G.phase==='lead'){
     const b=el('button','btn ghost sm','跳过 · 传递先攻'); b.onclick=leadPass; bar.appendChild(b);
   } else if(G.phase==='actions'){
+    // 行动点点阵：实心=剩余可用，空心=已用（一眼可见还剩几次行动）
+    const tot=G.actionsTotal||G.actionsLeft, left=Math.max(0,G.actionsLeft);
+    if(tot>0){ const pt=el('span','pip-track'); pt.title=`本回合行动：剩 ${left} / 共 ${tot}`;
+      for(let i=0;i<tot;i++){ const p=el('span','apip'+(i<left?'':' used')); pt.appendChild(p); }
+      bar.appendChild(pt); }
     const baseActs=SUITS[G.actionSuit].actions; const acts=baseActs.slice();
     if(G.weaponBattle && !acts.includes('battle')) acts.push('battle'); // 序幕·武器：本回合可用本牌点数发动战斗
     acts.forEach(a=>{
@@ -4420,7 +4431,7 @@ function renderActionBar(){
     if(canUndoTurn()){ const u=el('button','btn ghost sm','↩ 重开本回合'); u.title='恢复到本回合开始（误操作可挽回；已掷骰则不可）'; u.onclick=undoTurn; bar.appendChild(u); }
     if(hasGuildAbilities(G.players[G.actor])){ const ab=el('button','btn sm','议会卡能力'); ab.disabled=!!G.pending; ab.onclick=openGuildAbilities; bar.appendChild(ab); }
     if(hasExpActions(G.players[G.actor])){ const xb=el('button','btn sm','✨扩展行动'); xb.disabled=!!G.pending||G.actionsLeft<=0; xb.onclick=openExpActions; bar.appendChild(xb); }
-    if(G.pending){ const c=el('button','btn ghost sm','取消当前'); c.onclick=cancelAction; bar.appendChild(c); }
+    if(G.pending){ const c=el('button','btn danger sm','取消当前'); c.onclick=cancelAction; bar.appendChild(c); }
   } else if(G.phase==='follow'){
     const b=el('button','btn ghost sm','跳过本回合（不出牌）'); b.onclick=followPass; bar.appendChild(b);
   }
@@ -4592,7 +4603,7 @@ function undoTurn(){
 }
 function canUndoTurn(){ return !!UNDO.snap && !G._undoBlocked && G.phase==='actions' && !(G.aiSeats&&G.aiSeats[G.actor]) && !G.demoMode; }
 function startActions(pIdx,context,suit,count){
-  G.actionContext=context; G.actor=pIdx; G.actionSuit=suit; G.actionsLeft=count;
+  G.actionContext=context; G.actor=pIdx; G.actionSuit=suit; G.actionsLeft=count; G.actionsTotal=count;  // total 供行动点点阵显示
   // 记录本次行动的跟随方式（copy/pivot/surpass/lead）供课税加成等领袖能力判断；主导回合清空
   G.actionFollowMode=(context==='follow')?(G._followMode||null):null;
   G.pending=null; G.highlight=null; G.phase='actions'; G.turnPlayer=pIdx;
