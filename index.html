@@ -69,7 +69,7 @@
   .pl-bank .rcell b{color:var(--ink);font-weight:800}
   .pl-bank .rcell.out{opacity:.5;background:#180f12}
   .pl-bank .rcell .ow{position:absolute;top:-6px;right:-2px;font-size:9px;font-style:normal;color:var(--bad)}
-  .pl-sup{display:flex;align-items:center;gap:10px;margin-top:6px;font-size:11.5px;color:var(--muted)}
+  .pl-sup{display:flex;align-items:center;gap:9px;margin-top:6px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
   .pl-sup .pg{display:inline-flex;align-items:center;gap:2px}
   .pl-sup b{color:var(--ink);font-weight:800;margin-left:1px}
   .pl-sup .sep{flex:1}
@@ -194,6 +194,8 @@
   .ccard .keys{font-size:8px;color:#c79b5a;font-weight:700}
   .ccard .ag{display:flex;gap:3px;flex-wrap:wrap}
   .ccard .ag span{width:12px;height:12px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;color:#000;font-weight:800}
+  .ccard .ag span.agpawn{width:15px;height:18px;border-radius:0;background-size:contain;background-repeat:no-repeat;background-position:center;
+    color:#fff;font-size:9px;align-items:flex-end;text-shadow:0 0 2px #000,0 1px 1px #000}
   .cardtxt{font-size:13px;line-height:1.7;color:#dbe3f3;background:#0c1322;border:1px solid #2a3550;border-radius:8px;padding:10px 12px;margin:8px 0}
   /* ---------- 真实卡面素材（缺图时回退到文字渲染） ---------- */
   .card{overflow:hidden}
@@ -3818,8 +3820,12 @@ function renderCourt(){
     if(c.keys>0) meta.appendChild(el('span','keys','🔑×'+c.keys));
     d.appendChild(meta);
     const ag=el('div','ag');
-    Object.entries(c.agents||{}).forEach(([col,n])=>{ if(n>0){ const s=el('span',null,''+n);
-      s.style.background=PCOLORS.find(p=>p.key===col).hex; ag.appendChild(s);} });
+    Object.entries(c.agents||{}).forEach(([col,n])=>{ if(n>0){
+      const art=(typeof pieceArtSrc==='function')?pieceArtSrc('agent',col):null;
+      const s=el('span',null,''+n);
+      if(art){ s.className='agpawn'; s.style.backgroundImage=`url(${art})`; }  // 真实密探 pawn 图（TTS 3D 模型渲出，按阵营色）
+      else s.style.background=(PCOLORS.find(p=>p.key===col)||{hex:'#9aa3b2'}).hex;
+      ag.appendChild(s);} });
     if(!ag.children.length) ag.innerHTML='<span style="background:#33405e;color:#8b96ad">·</span>';
     d.appendChild(ag);
     attachCardImg(d, courtImg(c), 'ccimg');
@@ -4005,7 +4011,7 @@ function pieceArtSrc(type,colorKey){ const k=type+'_'+colorKey; if(PIECE_ART[k])
 function resArtSrc(r){ const p=ASSET_RES_DIR+r+'.png'; return ASSET_OK[p]?p:null; }
 function probeAssets(){ if(_assetsProbed||typeof Image==='undefined') return; _assetsProbed=true;
   const cands=[]; const cols=PCOLORS.map(c=>c.key).concat(['imperial','free']);
-  ['ship','city','starport'].forEach(t=>cols.forEach(c=>cands.push(ASSET_PIECES_DIR+t+'_'+c+'.png')));
+  ['ship','city','starport','agent','flagship'].forEach(t=>cols.forEach(c=>cands.push(ASSET_PIECES_DIR+t+'_'+c+'.png')));
   (typeof RES_ORDER!=='undefined'?RES_ORDER:[]).forEach(r=>cands.push(ASSET_RES_DIR+r+'.png'));
   let pending=cands.length, any=false; if(!pending) return;
   cands.forEach(src=>{ const im=new Image();
@@ -4069,6 +4075,12 @@ function plPieceGlyph(type, hex, px){
   else g=`<polygon points="0,-9 8,8 -8,8" fill="${hex}" stroke="#000a" stroke-width="1"/><circle cx="0" cy="2.5" r="2.4" fill="${ink}"/>`;
   return `<svg width="${px}" height="${px}" viewBox="-10 -10 20 20" style="vertical-align:middle;display:inline-block">${g}</svg>`;
 }
+// 密探（agent）供应小图标：有真实 pawn 素材(TTS 3D 渲出)则用图，缺则回退 🕵 字符
+function agentGlyph(colorKey, px){
+  px=px||15; const a=(typeof pieceArtSrc==='function')?pieceArtSrc('agent',colorKey):null;
+  if(a) return `<img src="${a}" width="${Math.round(px*0.82)}" height="${px}" alt="密探" style="vertical-align:middle;display:inline-block">`;
+  return `<span style="font-size:${px-2}px;vertical-align:middle">🕵</span>`;
+}
 function pieceArtImage(type,colorKey,x,y,s){ // 有可用图片则返回 <image>，否则 null
   const href=pieceArtSrc(type,colorKey); if(!href) return null;
   return svgEl('image',{href,x:x-s,y:y-s,width:2*s,height:2*s,preserveAspectRatio:'xMidYMid meet'});
@@ -4114,8 +4126,11 @@ function drawPieces(g, s, r){
   // 旗舰(Flagship)：系统右侧玩家色大星标，标受损升级数
   if(typeof campFlagshipAt==='function' && G.campaign && G.campaign.enabled){ const fi=campFlagshipAt(s.id);
     if(fi>=0){ const fp=G.players[fi]; const col=fp.color.hex||fp.color.css; const fx=s.x+r+30, fy=s.y;
-      g.appendChild(svgEl('circle',{cx:fx,cy:fy,r:20,fill:col,stroke:'#000','stroke-width':3}));
-      const star=svgEl('text',{x:fx,y:fy+7,'text-anchor':'middle',fill:'#000','font-size':22,'font-weight':800}); star.textContent='✦'; g.appendChild(star);
+      g.appendChild(svgEl('circle',{cx:fx,cy:fy,r:20,fill:'#0a0e18d8',stroke:'#000','stroke-width':3})); // 暗底盘
+      const fart=pieceArtImage('flagship',fp.color.key,fx,fy,21);  // 真实旗舰图（TTS 3D 模型渲出）
+      if(fart) g.appendChild(fart);
+      else { g.appendChild(svgEl('circle',{cx:fx,cy:fy,r:20,fill:col,stroke:'#000','stroke-width':3}));
+        const star=svgEl('text',{x:fx,y:fy+7,'text-anchor':'middle',fill:'#000','font-size':22,'font-weight':800}); star.textContent='✦'; g.appendChild(star); }
       const dmg=Object.values(fp.flagship.up).filter(v=>v==='damaged').length;
       if(dmg>0){ const dn=svgEl('text',{x:fx+16,y:fy-12,'text-anchor':'middle',fill:'#e23b3b','font-size':15,'font-weight':800}); dn.textContent='-'+dmg; g.appendChild(dn); }
     }
@@ -4245,6 +4260,7 @@ function renderPlayers(){
     sup.innerHTML = `<span class="pg" title="城市供应（剩余可建）">${plPieceGlyph('city',hex,15)}<b>${p.supply.cities}</b></span>`
       +`<span class="pg" title="星港供应（剩余可建）">${plPieceGlyph('starport',hex,15)}<b>${p.supply.starports}</b></span>`
       +`<span class="pg" title="舰船供应（剩余可造）">${plPieceGlyph('ship',hex,15)}<b>${p.supply.ships}</b></span>`
+      +`<span class="pg" title="密探供应（影响议会用）">${agentGlyph(p.color.key,15)}<b>${p.supply.agents}</b></span>`
       +`<span class="sep"></span>`
       +`<span class="pg" title="战利品（军阀计分）">⚔<b>${p.trophies}</b></span>`
       +`<span class="pg" title="俘虏（暴君计分）">⛓<b>${p.captives}</b></span>`
