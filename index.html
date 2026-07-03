@@ -278,6 +278,8 @@
   }
   .res-float{position:fixed;pointer-events:none;font-size:15px;font-weight:800;
     color:#d9b25a;z-index:70;animation:res-float .9s ease-out forwards}
+  @keyframes res-flash { 0%{box-shadow:0 0 0 0 var(--gold);transform:scale(1)} 40%{box-shadow:0 0 8px 2px var(--gold);transform:scale(1.18)} 100%{box-shadow:0 0 0 0 transparent;transform:scale(1)} }
+  .rcell.res-flash{animation:res-flash .55s ease-out; border-radius:6px} /* 减少动态由全局 prefers-reduced-motion 块统一压制 */
   /* ---- 新手教学 ---- */
   .tut-spot{position:fixed;z-index:87;border-radius:12px;pointer-events:none;
     box-shadow:0 0 0 9999px rgba(0,0,0,.80),0 0 0 3px #d9b25a,0 0 22px 4px #d9b25a55;
@@ -383,6 +385,9 @@
   #sideToggle{display:none}
   @media (max-width:820px){
     html,body{font-size:14px}
+    /* 触屏可点目标 ≥40px（WCAG 2.5.5）：模态内按钮(含 .sm)与行动栏按钮 */
+    #modal button, #modal .btn, #actionBar button, #actionBar .btn{ min-height:40px }
+    #modal .btn.sm, #modal button.sm{ min-height:40px; padding:8px 12px }
     #app{flex-direction:column;height:100vh;height:100dvh}
     #boardWrap{flex:none;height:56vh;height:56dvh;width:100%}
     #board{width:100%;height:100%}
@@ -1874,10 +1879,18 @@ function campSecureCouncil(playerIdx){
   if(!isAI && typeof openModal==='function'){
     openModal(m=>{
       m.appendChild(el('h2',null,'帝国议会 · 回合末结算哪类事件？'));
-      m.appendChild(el('div','hintbox','你攫取了帝国议会：本回合末由你【二选一】结算 敕令(帝国征收+行动) 或 危机(凋敝/民众效果)。'));
-      const be=el('button','btn gold','📜 结算敕令（Edicts）'); be.style.cssText='display:block;width:100%;margin:6px 0';
+      m.appendChild(el('div','hintbox','你攫取了帝国议会：本回合末由你【二选一】结算 敕令 或 危机。下方是各自本局的实际后果预览。'));
+      // 后果预览（复用 EDICT_POLICIES + campCurrentPolicy，与战役面板同源）
+      const P=EDICT_POLICIES[campCurrentPolicy()]||EDICT_POLICIES.war;
+      const edPrev=el('div','hintbox'); edPrev.style.cssText='text-align:left;font-size:11.5px;line-height:1.6;border-left:3px solid var(--gold)';
+      edPrev.innerHTML=`<b>📜 敕令</b>（当前政策：<b>${P.name}</b>）<br>· 征收：${P.demand}<br>· 帝国行动：${P.action}`;
+      m.appendChild(edPrev);
+      const crPrev=el('div','hintbox'); crPrev.style.cssText='text-align:left;font-size:11.5px;line-height:1.6;border-left:3px solid #d9707a';
+      crPrev.innerHTML='<b>★ 危机</b><br>· 结算凋敝危机：每系统按新鲜凋敝×3/受损×1 击，先命中帝国舰、打光后外溢每名玩家忠诚舰；地堡行星另触发命运效果';
+      m.appendChild(crPrev);
+      const be=el('button','btn gold','📜 结算敕令（Edicts）'); be.style.cssText='display:block;width:100%;margin:8px 0 4px'; be.title=`当前政策「${P.name}」：征收 ${P.demand}；帝国行动 ${P.action}`;
       be.onclick=()=>{ G.campaign.councilChoice='edict'; closeModal(); }; m.appendChild(be);
-      const bc=el('button','btn','★ 结算危机（Crises）'); bc.style.cssText='display:block;width:100%;margin:6px 0';
+      const bc=el('button','btn','★ 结算危机（Crises）'); bc.style.cssText='display:block;width:100%;margin:4px 0'; bc.title='结算凋敝危机（可能伤及各方舰船，含你）';
       bc.onclick=()=>{ G.campaign.councilChoice='crisis'; closeModal(); }; m.appendChild(bc);
     });
   }
@@ -2619,11 +2632,12 @@ function aiDoBattle(target, defC){
 // 静音驱动：假定 G 已指向工作态；临时静音 UI + 换移动感知模态自答 + 驱动引擎，最后还原 UI(不动 G)。
 function aiSilentDrive(move){
   const sRender=render, sToast=toast, sPrompt=setPrompt, sLog=logMsg, sCamp=campLog, sPromptA=promptActions, sModal=openModal;
+  const sSim=G._simulating; G._simulating=true; // 门控 flashRes 等 UI 副作用，避免 MCTS rollout 期间乱闪/建 DOM
   const noop=function(){};
   render=noop; toast=noop; setPrompt=noop; logMsg=noop; campLog=noop; promptActions=noop;
   openModal=function(builder){ aiResolveModal(builder, move); };
   try{ aiDrive(move); }
-  finally{ render=sRender; toast=sToast; setPrompt=sPrompt; logMsg=sLog; campLog=sCamp; promptActions=sPromptA; openModal=sModal; }
+  finally{ render=sRender; toast=sToast; setPrompt=sPrompt; logMsg=sLog; campLog=sCamp; promptActions=sPromptA; openModal=sModal; G._simulating=sSim; }
 }
 // 应用 move → 返回新状态（绝不修改入参 state；内部克隆）。
 function applyMove(state, move){
@@ -3169,7 +3183,7 @@ function resolveResOverflow(player, justGained){
       const cand=RES_ORDER.filter(r=>(player.res[r]||0)>0)
         .sort((a,b)=>(RES_DEF_VALUE[a]-RES_DEF_VALUE[b]) || (a===justGained?1:-1) - (b===justGained?1:-1));
       const drop=cand[0]; if(!drop) break;
-      player.res[drop]--; G.resSupply[drop]++;
+      player.res[drop]--; G.resSupply[drop]++; flashRes(player.idx, drop, -1);
       logMsg(`${pname(player.idx)} 资源槽已满：弃置 1 ${RESOURCES[drop].name}（容量 ${resCap(player)}）`,'act');
     }
     return;
@@ -3195,11 +3209,12 @@ function gainResource(player, rtype, fromSupplyFree=false){
   if(!fromSupplyFree){ if(G.resSupply[rtype]<=0){ return false; } }
   if(G.resSupply[rtype]>0) G.resSupply[rtype]--;
   player.res[rtype]=(player.res[rtype]||0)+1;
+  flashRes(player.idx, rtype, +1);                 // 获得资源 → 玩家板对应格 +闪字
   if(totalRes(player)>resCap(player)) resolveResOverflow(player, rtype);
   return true;
 }
 function spendResource(player, rtype){
-  if(player.res[rtype]>0){ player.res[rtype]--; G.resSupply[rtype]++; return true; }
+  if(player.res[rtype]>0){ player.res[rtype]--; G.resSupply[rtype]++; flashRes(player.idx, rtype, -1); return true; }
   return false;
 }
 
@@ -4394,6 +4409,14 @@ function renderTop(){
     chips.unshift(cc);
   }
   chips.forEach(h=>{const c=el('span','chip');c.innerHTML=h;t.appendChild(c);});
+  // 帝国议会「已裁决」常驻提醒（回合末将由持有者结算敕令/危机）——易被忽略的关键待结算态
+  if(G.campaign && G.campaign.enabled && G.campaign.council==='decided' && G.campaign.councilHolder!=null){
+    const hp=G.players[G.campaign.councilHolder];
+    const cc=el('span','chip'); cc.style.cssText='border-color:#d9b25a;color:#f0d080';
+    cc.innerHTML=`⚖ 议会已裁决 · 回合末由 <b style="color:${hp?pcolTxt(hp):'#fff'}">${hp?hp.name:'?'}</b> 结算 ${G.campaign.councilChoice==='crisis'?'★危机':'📜敕令'}`;
+    cc.title='帝国议会本回合已被攫取，回合末由持有者结算敕令或危机';
+    t.appendChild(cc);
+  }
   const rb=el('button','btn ghost sm','📖 规则'); rb.style.marginLeft='8px'; rb.onclick=showRules; t.appendChild(rb);
   const cdx=el('button','btn ghost sm','📜 图鉴'); cdx.title='卡牌图鉴：领袖/传说/命运（可检索）'; cdx.style.marginLeft='4px'; cdx.onclick=()=>showCodex(); t.appendChild(cdx);
   const muteBtn=el('button','btn ghost sm',SFX._muted?'🔇':'🔊'); muteBtn.title=SFX._muted?'已静音':'点击静音';
@@ -4454,6 +4477,14 @@ function renderPlayers(){
       const idTag = p.identity==='outlaw' ? '⚑法外' : '👑摄政';
       fb.title='点击查看命运详情'; fb.innerHTML=`🎴${f?f.cn:('命运'+p.fate)} <span style="opacity:.7">${idTag}</span>`;
       fb.onclick=()=>showFateCard(p.fate); tags.appendChild(fb);
+      // 命运本幕进度迷你徽章（只读，镜像 openActResolveWizard 判定）：计时型→进度条；非计时型→✓/○
+      const th=fateThresholdCur(i);
+      const pb=el('span','res'); pb.style.cssText='font-size:10px;';
+      if(th!=null){ const cur=Math.min(p.fateProgress||0, th); const done=cur>=th; const pct=Math.round(cur/th*100);
+        pb.title=`第 ${G.campaign.act} 幕命运进度 ${p.fateProgress||0}/${th}`;
+        pb.innerHTML=`<span style="display:inline-block;width:42px;height:7px;border-radius:4px;background:#2a3346;vertical-align:middle;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:${done?'#6fcf8e':'#d9b25a'}"></span></span> <b style="color:${done?'#6fcf8e':'#d9b25a'}">${p.fateProgress||0}/${th}</b>`;
+      } else { const met=campObjectiveMet(i); pb.title='本幕命运目标（非计时型）'; pb.innerHTML=`本幕 <b style="color:${met?'#6fcf8e':'#7f8ea8'}">${met?'✓达成':'○未达'}</b>`; }
+      tags.appendChild(pb);
     }
     if(G.useExpansion && p.leader){ const L=leaderById(p.leader);
       const lb=el('span','res'); lb.style.color='#d9b25a';
@@ -4475,11 +4506,17 @@ function renderPlayers(){
     d.appendChild(hd);
     // —— 胜利进度条：当前权力(金实段) + 若结算雄心预估(斜纹虚段) / 终局阈值 ——
     const gain=proj.perPlayer[i]||0; const wp=winProgress(p.power, gain, winNeed);
-    if(wp.willWin) d.classList.add('will-win');
+    if(!(G.campaign&&G.campaign.enabled) && wp.willWin) d.classList.add('will-win'); // 战役不按权力阈值胜，不高亮
     const wb=el('div','pl-win');
-    wb.title=`距终局阈值还需 ${wp.remain} 权力（${G.numPlayers} 人局阈值 ${winNeed}）${gain>0?`；若此刻结算雄心 +${gain} → ${p.power+gain}${wp.willWin?'（达阈值！）':''}`:''}`;
-    wb.innerHTML=`<span class="plw-bar"><i class="plw-cur" style="width:${wp.curPct.toFixed(1)}%"></i><i class="plw-proj" style="width:${wp.projPct.toFixed(1)}%"></i></span>`
-      +`<span class="plw-txt">${p.power}${gain>0?`<span class="plw-g">+${gain}</span>`:''}/${winNeed}${wp.willWin?' 🏆':''}</span>`;
+    if(G.campaign && G.campaign.enabled){
+      // 战役忽略权力阈值(第三幕靠命运最终目标胜)——不显示误导性的 /POWER_TO_WIN 分母，只显权力 + 若结算雄心预估
+      wb.title=`战役不按权力阈值终局（第三幕达成命运最终目标即胜，见上方命运进度）。当前权力 ${p.power}${gain>0?`；若此刻结算雄心 +${gain} → ${p.power+gain}`:''}`;
+      wb.innerHTML=`<span class="plw-txt">⚡ 权力 <b>${p.power}</b>${gain>0?`<span class="plw-g">+${gain}</span>`:''}　<span style="opacity:.6;font-size:9px">（战役胜负看命运）</span></span>`;
+    } else {
+      wb.title=`距终局阈值还需 ${wp.remain} 权力（${G.numPlayers} 人局阈值 ${winNeed}）${gain>0?`；若此刻结算雄心 +${gain} → ${p.power+gain}${wp.willWin?'（达阈值！）':''}`:''}`;
+      wb.innerHTML=`<span class="plw-bar"><i class="plw-cur" style="width:${wp.curPct.toFixed(1)}%"></i><i class="plw-proj" style="width:${wp.projPct.toFixed(1)}%"></i></span>`
+        +`<span class="plw-txt">${p.power}${gain>0?`<span class="plw-g">+${gain}</span>`:''}/${winNeed}${wp.willWin?' 🏆':''}</span>`;
+    }
     d.appendChild(wb);
     if(collapsed){ box.appendChild(d); return; }   // 折叠：只显示表头 + 胜利进度条
     // —— 雄心来源：本玩家在哪些已宣告雄心中会得分（若此刻结算），+分从何而来（与权力条总分呼应）——
@@ -4498,7 +4535,7 @@ function renderPlayers(){
     const capN=resCap(p), usedN=totalRes(p);
     bank.innerHTML = `<span class="rcell${usedN>=capN?' capfull':''}" title="资源槽 已用/容量 —— 玩家板6槽：3常开+每建1城开1槽(至多6)；放不下的资源必须弃置（规则 p.17）">🧺<b>${usedN}/${capN}</b></span>`
       + RES_ORDER.map(r=>{ const o=p.outraged&&p.outraged[r]; const z=(p.res[r]||0)===0;
-      return `<span class="rcell${o?' out':''}${z?' zero':''}" title="${RESOURCES[r].name} · ${resAmbitionNote(r)}${o?' · 民愤：不可用于序幕行动':''}">${resTokenHTML(r,17)}<b>${p.res[r]}</b>${o?'<i class="ow">⚑</i>':''}</span>`;
+      return `<span class="rcell${o?' out':''}${z?' zero':''}" data-pl="${i}" data-res="${r}" title="${RESOURCES[r].name} · ${resAmbitionNote(r)}${o?' · 民愤：不可用于序幕行动':''}">${resTokenHTML(r,17)}<b>${p.res[r]}</b>${o?'<i class="ow">⚑</i>':''}</span>`;
     }).join('');
     d.appendChild(bank);
     // —— 供应 + 战利品/俘虏/手牌 ——
@@ -4733,7 +4770,7 @@ function renderActionBar(){
     if(hasExpActions(G.players[G.actor])){ const xb=el('button','btn sm','✨扩展行动'); xb.disabled=!!G.pending||G.actionsLeft<=0; xb.onclick=openExpActions; bar.appendChild(xb); }
     if(G.pending){
       // 弹射分批移动进行中（rb_13 多终点放舰）：舰船已移出，不能免费取消 → 提供「完成移动」结束并消耗行动点
-      if(G.pending.type==='move'&&G.pending.movedN){ const f=el('button','btn gold sm','✅ 完成移动'); f.title='结束本次弹射分批移动（共 1 个行动点）'; f.onclick=finishMoveAction; bar.appendChild(f); }
+      if(G.pending.type==='move'&&G.pending.movedN){ const f=el('button','btn gold','✅ 完成移动'); f.style.cssText='font-weight:800;box-shadow:0 0 10px -2px var(--gold)'; f.title='结束本次弹射分批移动（共 1 个行动点）'; f.onclick=finishMoveAction; bar.appendChild(f); } // 分批移动唯一收尾出口→醒目大按钮(非sm)
       else { const c=el('button','btn danger sm','取消当前'); c.onclick=cancelAction; bar.appendChild(c); }
     }
   } else if(G.phase==='follow'){
@@ -4978,7 +5015,9 @@ function eliminationRespawn(seat){
   const isHuman=(typeof window!=='undefined') && !(G.aiSeats&&G.aiSeats[seat]) && !G.demoMode;
   const gates=gatesInPlay();
   if(isHuman && gates.length>1){
-    pickSystem('东山再起 · 选择放置 3 艘新舰的星门（任一星门）', gates, id=>doRespawn(id));
+    // 用 pickFromList 标注「推荐」星门（邻接己方建筑者，重返战略更优）
+    const items=gates.map(g=>({label: g+(g===heuristic?'　★推荐（邻接你的建筑）':''), val:g}));
+    pickFromList('东山再起 · 选择放置 3 艘新舰的星门（任一星门）', items, id=>doRespawn(id));
   } else {
     doRespawn(heuristic);
   }
@@ -5967,7 +6006,11 @@ function doMovePick(id){
       const willMoveFresh=G.useExpansion&&loreHas(me,'sprinterdrives')?nf:0;
       const moved=moveShips(src,id,me,n,nd); // rb_13：移动哪些舰由玩家自选（新鲜/受损分开指定），补给中性、保留受损状态
       SFX.move();
+      const prevMovedN=G.pending.movedN||0;
       G.pending.movedN=(G.pending.movedN||0)+moved;
+      // 移动端软锁死修复：弹射分批移动首舰移出时，「✅完成移动」按钮在侧栏(窄屏默认收起)里 → 自动展开侧栏，
+      //   否则手机玩家点完舰船既无进度反馈也找不到结束按钮。仅在 0→>0 跳变时触发，避免中途手动关抽屉又被弹开。
+      try{ if(prevMovedN===0 && G.pending.movedN>0 && typeof matchMedia==='function' && matchMedia('(max-width:820px)').matches && typeof toggleSide==='function') toggleSide(true); }catch(e){}
       (G.pending.movedLog=G.pending.movedLog||[]).push({n:moved,dest:id});
       // 传说 Gate Ports（扩展）：移入对手控制且有新鲜忠诚星港的星门时，被俘获 1 密探（在消耗行动前结算）
       if(G.useExpansion && G.map[id].kind==='gate'){
@@ -6203,6 +6246,20 @@ function resFloat(txt, x, y){
   d.style.left=x+'px'; d.style.top=y+'px'; document.body.appendChild(d);
   setTimeout(()=>d.remove(), 950);
 }
+// 玩家板资源格浮动闪字（复用 resFloat）：delta 正=获得、负=失去。MCTS 模拟(_simulating)期间不闪，避免海量浮层。
+function flashRes(playerIdx, rtype, delta){
+  try{
+    if(typeof G!=='undefined' && G && G._simulating) return;
+    if(!delta || typeof document==='undefined' || !document.querySelector) return;
+    const cell=document.querySelector('.rcell[data-pl="'+playerIdx+'"][data-res="'+rtype+'"]');
+    if(!cell || typeof cell.getBoundingClientRect!=='function') return; // 无头/无该格 → 跳过
+    const b=cell.getBoundingClientRect(); if(!b || !b.width) return;
+    const ic=(RESOURCES[rtype]&&RESOURCES[rtype].icon)||'';
+    resFloat((delta>0?'+':'−')+Math.abs(delta)+' '+ic, b.left+b.width/2, b.top);
+    if(cell.classList){ cell.classList.remove('res-flash'); void cell.offsetWidth; cell.classList.add('res-flash');
+      setTimeout(()=>cell.classList.remove('res-flash'), 700); }
+  }catch(e){ /* UI 反馈失败绝不影响博弈逻辑 */ }
+}
 // 骰子面结果 HTML（用于 3D 骰子落点展示）
 function faceToHTML(face){
   const syms={hit:'⚔',bldg:'🏠',key:'🔑',self:'🔥',intercept:'🛡'};
@@ -6305,7 +6362,13 @@ function openBattleAllocModal(id,defC,rolled,cb){
       [['city','城市'],['starport','星港'],[null,'自动']].forEach(([v,lbl])=>{ const b=el('button','btn'+(plan.bldgPref===v?' gold':' ghost')+' sm', lbl); b.onclick=()=>{ plan.bldgPref=v; render(); }; row2.appendChild(b); });
       m.appendChild(row2);
     }
+    // 战利品预览：叠击摧毁的受损舰各计 1 战利品（军阀计分）
+    const killEst=plan.defDestroyDmg||0;
+    const tp=el('div','hintbox'); tp.style.cssText='text-align:center;font-size:12px;margin-top:8px;color:#f0d080';
+    tp.innerHTML=killEst>0?`⚔ 本分配预计摧毁 <b>${killEst}</b> 艘受损舰 → <b>+${killEst}</b> 战利品（军阀计分）`:'（当前不叠击摧毁受损舰——命中打散降级新鲜舰，不产战利品）';
+    m.appendChild(tp);
     const ok=el('button','btn gold','确认分配'); ok.style.cssText='display:block;width:100%;margin:10px 0 0'; ok.onclick=()=>{ closeModal(); cb(plan); }; m.appendChild(ok);
+    const rules=el('button','btn ghost sm','📖 战斗规则（结算顺序/战利品）'); rules.style.cssText='display:block;margin:8px 0 0'; rules.onclick=()=>showRules(); m.appendChild(rules);
   });
   render();
 }
@@ -6480,7 +6543,7 @@ function openRaidModal(atkIdx, defC, keysLeft, done, sysId){
           const rt=def._ahRes; def._ahRes=null; atk.res[rt]=(atk.res[rt]||0)+1; resolveResOverflow(atk,rt);
           logMsg(`${pname(atkIdx)} 劫掠：偷取 ${pname(G.players.indexOf(def))} 远古领地 ${RESOURCES[rt]?.name||rt}（4 🔑）`,'bat');
         } else if(item.kind==='res'){
-          def.res[item.rt]--; atk.res[item.rt]++; resolveResOverflow(atk,item.rt);
+          def.res[item.rt]--; atk.res[item.rt]++; flashRes(def.idx,item.rt,-1); flashRes(atk.idx,item.rt,+1); resolveResOverflow(atk,item.rt);
           logMsg(`${pname(atkIdx)} 劫掠：偷取 ${pname(G.players.indexOf(def))} 1 ${RESOURCES[item.rt].name}`,'bat');
         } else {
           const card=item.card;
@@ -6797,9 +6860,15 @@ function doSecure(c){
   // 战役：攫取帝国议会 → 翻到「已裁决」，本回合由你掌握（回合末结算），不计入正常收纳
   if(c && c.council){
     if(G.campaign.council==='decided'){ toast('帝国议会本回合已被裁决，无法再攫取'); return; }
-    for(const k in c.agents){ if(c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); if(rp) rp.supply.agents+=c.agents[k]; } }
-    c.agents={}; campSecureCouncil(G.actor);
-    consumeAction(`${pname(G.actor)} 攫取帝国议会（已裁决，回合末结算）`); return;
+    const doIt=()=>{
+      for(const k in c.agents){ if(c.agents[k]>0){ const rp=G.players.find(p=>p.color.key===k); if(rp) rp.supply.agents+=c.agents[k]; } }
+      c.agents={}; campSecureCouncil(G.actor);
+      consumeAction(`${pname(G.actor)} 攫取帝国议会（已裁决，回合末结算）`); };
+    // 攫取即锁定本回合末结算(敕令/危机)——人类加二次确认防误点(收纳模态里与普通公会卡同款按钮)；AI/演示直执
+    const isHuman = !(G.aiSeats&&G.aiSeats[G.actor]) && !G.demoMode;
+    if(isHuman) confirmThen('攫取帝国议会？', '攫取后翻到「已裁决」，<b>本回合末由你结算敕令或危机</b>，本回合内不可撤销（还将退回卡上各方密探）。', doIt);
+    else doIt();
+    return;
   }
   if(paranoidBlocksSecure(me,c)){ toast('偏执：不能攫取你只有 1 个忠诚密探的公会卡'); return; }
   for(const k in c.agents){ if(k!==col&&c.agents[k]>0){ takeCaptive(me,k,c.agents[k]); captured+=c.agents[k]; } } // 被俘密探入俘虏区扣押(rb_13)，暴君结算才归还
@@ -6976,7 +7045,7 @@ function abFillSlots(me,card,rtype){ const SLOTS=resCap(me); let need=Math.max(0
   finishAbility(me,card,{discard:true,log:`${pname(me.idx)} 序幕「${card.name}」：以${RESOURCES[rtype].name}填满空槽 +${got}${stolen?`（夺取 ${stolen}）`:''}，弃置该卡`}); }
 function abStealRes(me,card,rtype){ const victims=rivalsOf(me).filter(p=>p.res[rtype]>0 && !ownsEff(p,'guardian'));
   if(!victims.length){ toast(`没有可偷取${RESOURCES[rtype].name}的对手`); return; }
-  pickPlayer(`偷取 1 ${RESOURCES[rtype].name} · 选择对手`,victims,opp=>{ opp.res[rtype]--; me.res[rtype]++; resolveResOverflow(me,rtype);
+  pickPlayer(`偷取 1 ${RESOURCES[rtype].name} · 选择对手`,victims,opp=>{ opp.res[rtype]--; me.res[rtype]++; flashRes(opp.idx,rtype,-1); flashRes(me.idx,rtype,+1); resolveResOverflow(me,rtype);
     finishAbility(me,card,{discard:true,log:`${pname(me.idx)} 序幕「${card.name}」：从 ${opp.name} 偷取 1 ${RESOURCES[rtype].name}，弃置该卡`}); }); }
 // 垄断联盟（g03/g06）：把你的 1 个对应资源堆置于本牌——视为你所有（计入大亨），但此后不可动用/被偷/被劫/被民愤。非行动、可反复。
 // 垄断联盟(g03/g06)：收纳本牌时把【公共供应堆】中该资源全部堆置于本牌——视为持有者所有（计入大亨），
@@ -7018,6 +7087,9 @@ function abFarseerDraw(me,card){
     m.appendChild(row);
     const ok=el('button','btn gold',`完成（弃 ${chosen.length} 张，抽 ${chosen.length+1} 张）`); ok.style.cssText='display:block;width:100%;margin:6px 0';
     ok.onclick=()=>{ closeModal(); finishDraw(); }; m.appendChild(ok);
+    // 取消出口：不使用此序幕能力（本牌保留，未弃任何手牌）
+    const cc=el('button','btn ghost','取消（不使用此能力）'); cc.style.cssText='display:block;width:100%;margin:4px 0';
+    cc.onclick=()=>{ closeModal(); }; m.appendChild(cc);
   });
   renderPick(); }
 function abFarseerSwap(me,card){ const victims=rivalsOf(me).filter(p=>p.hand.length>0); if(!victims.length){ toast('没有有手牌的对手'); return; } if(!me.hand.length){ toast('你没有手牌可交换'); return; }
@@ -7031,7 +7103,7 @@ function abStealGuildCard(me,card){ const victims=rivalsOf(me).filter(p=>stealab
     const got=takeStolenGuildCard(opp,me,c);
     finishAbility(me,card,{discard:!!card,log:`${pname(me.idx)} 「${card?card.name:'勾心斗角'}」：从 ${opp.name} ${got?`偷取公会卡「${c.name}」`:`触发「${c.name}」守护——该卡置于议会牌堆底`}${card?'，弃置该卡':''}`}); }); }); }
 function abStealAnyRes(me,card){ const victims=rivalsOf(me).filter(p=>totalRes(p)>0 && !ownsEff(p,'guardian')); if(!victims.length){ toast('没有可偷取资源的对手'); return; }
-  pickPlayer('偷取资源 · 选择对手',victims,opp=>{ pickResource('选择偷取的资源',RES_ORDER.filter(r=>opp.res[r]>0),r=>{ opp.res[r]--; me.res[r]++; resolveResOverflow(me,r);
+  pickPlayer('偷取资源 · 选择对手',victims,opp=>{ pickResource('选择偷取的资源',RES_ORDER.filter(r=>opp.res[r]>0),r=>{ opp.res[r]--; me.res[r]++; flashRes(opp.idx,r,-1); flashRes(me.idx,r,+1); resolveResOverflow(me,r);
     finishAbility(me,card,{discard:!!card,log:`${pname(me.idx)} 「${card?card.name:''}」：从 ${opp.name} 偷取 1 ${RESOURCES[r].name}${card?'，弃置该卡':''}`}); }); }); }
 function abSilverTongue(me,card){ openModal(m=>{ m.appendChild(el('h2',null,'巧舌欺诈师 · 偷取目标'));
     const b1=el('button','btn','偷取 1 张公会卡'); b1.style.cssText='display:block;width:100%;margin:6px 0'; b1.onclick=()=>{ closeModal(); abStealGuildCard(me,card); };
@@ -7842,10 +7914,15 @@ function openActResolveWizard(){
       } else {
         m.appendChild(el('div','hintbox','此命运幕脚本尚未编码（后续阶段补齐）。可记录达成与否，暂不自动增删卡库。'));
       }
+      // 幕结算不可逆（改整局命运卡库/权力，中场无「重开本回合」）——加二次确认，且与引擎判定冲突时强化提示
       const yes=el('button','btn gold','✓ 达成目标（成功）'); yes.style.cssText='display:block;width:100%;margin:6px 0';
-      yes.onclick=()=>{ campResolveActForPlayer(pi,true); closeModal(); step(k+1); };
+      yes.onclick=()=>confirmThen('确认判定为「达成」？',
+        `将按上方「达成」预览执行卡库/权力变动，<b>本幕结算不可撤销</b>（中场休息无「重开本回合」）。${autoMet?'':'<br>⚠ 引擎判定为<b>未达成</b>，你正做出相反判定。'}`,
+        ()=>{ campResolveActForPlayer(pi,true); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); });
       const no=el('button','btn','✗ 未达成（失败）'); no.style.cssText='display:block;width:100%;margin:6px 0';
-      no.onclick=()=>{ campResolveActForPlayer(pi,false); closeModal(); step(k+1); };
+      no.onclick=()=>confirmThen('确认判定为「未达成」？',
+        `将按上方「未达成」预览执行卡库变动，<b>本幕结算不可撤销</b>。${autoMet?'<br>⚠ 引擎判定为<b>达成</b>，你正做出相反判定。':''}`,
+        ()=>{ campResolveActForPlayer(pi,false); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); });
       m.appendChild(yes); m.appendChild(no);
       const cancel=el('button','btn ghost','取消结算'); cancel.onclick=()=>closeModal(); m.appendChild(cancel);
     });
@@ -7991,7 +8068,8 @@ function openMarkPlace(){
           pickFromList(`放置${K.cn} 于哪个系统`, sys.map(id=>({label:`${id}　${expSysBrief(id)}`,val:id})), id=>{ campPlaceMark(t,pi,id); render(); openMarkPlace(); }); }); };
       row.appendChild(add);
       G.players.forEach((p,i)=>{ const c=campMarksOf(i,t); if(c>0){ const rm=el('button','btn ghost sm',`－${pname(i)}(${c})`);
-        rm.onclick=()=>{ campRemoveMark(t,i); render(); closeModal(); openMarkPlace(); }; row.appendChild(rm); } });
+        rm.onclick=()=>confirmThen(`移除 ${pname(i)} 的一个${K.cn}？`, `将从场上移除一个${K.cn}标记（命运专属，误删需手动重放）。`,
+          ()=>{ campRemoveMark(t,i); render(); closeModal(); openMarkPlace(); }, ()=>{ closeModal(); openMarkPlace(); }); row.appendChild(rm); } });
       m.appendChild(row);
     });
     const cc=el('button','btn ghost','返回'); cc.onclick=()=>{ closeModal(); openCampaignPanel(); }; m.appendChild(cc);
