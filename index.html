@@ -1633,7 +1633,9 @@ function campIntermission(){
     s.pieces.dmg={};
     s.pieces.buildings=s.pieces.buildings.filter(b=>{ if(b.damaged){ const o=G.players.find(p=>p.color.key===b.owner); if(o){ if(b.type==='city')o.supply.cities++; else o.supply.starports++; } dBld++; return false; } return true; });
   }
-  summary.push(`D·修复凋敝；销毁 ${dShips} 受损舰 / ${dBld} 受损建筑`);
+  // 战役规则书 p.28 步骤 D.2：受损的「旗舰升级/装甲」也在幕间被销毁（与受损舰船/建筑同）。
+  let dFlag=0; G.players.forEach(p=>{ if(p.flagship && p.flagship.up){ for(const k in p.flagship.up){ if(p.flagship.up[k]==='damaged'){ delete p.flagship.up[k]; dFlag++; } } } });
+  summary.push(`D·修复凋敝；销毁 ${dShips} 受损舰 / ${dBld} 受损建筑${dFlag?` / ${dFlag} 受损旗舰升级`:''}`);
   // E. 转移先攻与权力：先攻给权力最高者；权力>1 者失去一半(向下取整失去)
   let mx=-Infinity,mi=0; G.players.forEach((p,i)=>{ if(p.power>mx){ mx=p.power; mi=i; } }); G.initiative=mi;
   G.players.forEach(p=>{ if(p.power>1) p.power=Math.ceil(p.power/2); });
@@ -1794,6 +1796,7 @@ const FATE_OBJECTIVE_CHECK = {
   5:{ 3:(p,i)=> campGolems(i)>=1 }, // 看护者终局：至少1傀儡（每章可销毁1遗珍+1傀儡，由面板执行）
   8:{ 3:(p,i)=> campAmbMarkersOnIdeals()>=2 }, // 信徒终局：≥2个雄心标记位于带理念的雄心上（3个为完整）
   11:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && campEveryPlayerHasOutrage() && (campBrokenWorlds()>G.chapter || campBuildingsOnMap()===0) }, // 碎星者终局：无对手赢军阀 且 全员民愤 且 破碎世界>章节(或地图无建筑)
+  13:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && (p._blightHungerPieces||0)>G.chapter }, // 凋敝代言者终局(Leder卡库 F13 Act III)：无对手赢军阀 且 凋敝饥饿卡上棋子数>当前章节
   15:{ 3:(p,i)=> campPeaceClusters()>=2 }, // 维和者终局：≥2星簇和平（≥5为完整）
 };
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
@@ -1969,10 +1972,18 @@ function campResolveEdict(){
   const regents=G.players.map((p,i)=>i).filter(i=>G.players[i].identity==='regent');
   // ① 征收需求
   if(pol==='war'){
+    // 战役 p.20：战争征收取「战利品或俘虏，但不含摄政或帝国棋子」。持有者=首席摄政选择取哪一种。
+    const regentColors=new Set(regents.map(i=>G.players[i].color.key));
+    const eligible=e=> e && e.col!=='imperial' && !regentColors.has(e.col);
+    const frp=G.players[fr];
     regents.filter(i=>i!==fr).forEach(i=>{ const p=G.players[i];
-      if(p.trophies>0){ p.trophies--; G.players[fr].trophies++; transferLedgerPiece(p,G.players[fr],'trophy'); campLog(`战争·征收：${pname(i)} 交出 1 战利品`); }
-      else if(p.captives>0){ p.captives--; G.players[fr].captives++; transferLedgerPiece(p,G.players[fr],'captive'); campLog(`战争·征收：${pname(i)} 交出 1 俘虏`); }
-      else if(p.supply.agents>0){ p.supply.agents--; const f=campFavorsOf(G.players[fr]); f[p.color.key]=(f[p.color.key]||0)+1; campLog(`战争·征收：${pname(i)} 无战利品/俘虏 → 交 1 密探作恩惠（置于首席摄政命运卡·战役 p.20）`); }
+      const hasTro=(p.trophyPieces||[]).some(eligible);
+      const hasCap=(p.captivePieces||[]).some(eligible);
+      // 首席摄政二选一（p.20）：启发式取当前己方更多的一类，壮大对应大雄心（战利品→军阀/俘虏→暴君），平手取战利品。
+      let take = (hasTro&&hasCap) ? (((frp.captives|0)>(frp.trophies|0))?'captive':'trophy') : (hasTro?'trophy':(hasCap?'captive':null));
+      if(take==='trophy'){ if(transferEligibleLedgerPiece(p,frp,'trophy',eligible)){ p.trophies=Math.max(0,(p.trophies|0)-1); frp.trophies=(frp.trophies|0)+1; campLog(`战争·征收：${pname(i)} 交出 1 战利品（非摄政/帝国·首席摄政选定）`); } }
+      else if(take==='captive'){ if(transferEligibleLedgerPiece(p,frp,'captive',eligible)){ p.captives=Math.max(0,(p.captives|0)-1); frp.captives=(frp.captives|0)+1; campLog(`战争·征收：${pname(i)} 交出 1 俘虏（首席摄政选定）`); } }
+      else if(p.supply.agents>0){ p.supply.agents--; const f=campFavorsOf(frp); f[p.color.key]=(f[p.color.key]||0)+1; campLog(`战争·征收：${pname(i)} 无可取战利品/俘虏 → 交 1 密探作恩惠（置于首席摄政命运卡·战役 p.20）`); }
       else campLog(`战争·征收：${pname(i)} 无可征（可手动将其变为法外者）`);
     });
   } else {
@@ -1989,8 +2000,72 @@ function campResolveEdict(){
   else if(pol==='escalation'){ const tgt=campEscalationPlaceShips(); if(tgt) campLog(`升级·帝国行动：在 ${tgt} 放置 2 艘新帝国星舰`); }
   autosaveCampaign();
 }
-// 危机结算：凋敝危机（每新鲜凋敝3击/受损1击，先击帝国舰再击各玩家忠诚舰）；危机卡个体效果在 P9 逐卡接线
-function campResolveCrisis(){ campLog('—— 结算危机 ——'); if(typeof campResolveBlightCrisis==='function') campResolveBlightCrisis(); }
+// 危机结算（战役规则书 p.18）：按序结算 ①凋敝危机 → ②命运危机 → ③议会(Vox)危机。
+function campResolveCrisis(){ campLog('—— 结算危机（p.18：凋敝→命运→议会）——');
+  if(typeof campResolveBlightCrisis==='function') campResolveBlightCrisis();   // ① 凋敝危机
+  campResolveFateCrises();                                                     // ② 命运危机
+  campResolveCourtCrises();                                                    // ③ 议会危机
+  if(typeof autosaveCampaign==='function') autosaveCampaign();
+}
+// ② 命运危机：部分命运会给玩家发带「危机」文字的卡，按行动顺位逐一结算。当前卡池无此类命运卡 → 空过（占位）。
+function campResolveFateCrises(){ /* 现有 24 命运的卡池中无「玩家持有的危机卡」；未来若加入在此按 turnOrderRank 结算 */ }
+// ③ 议会危机：从左到右逐张结算议会区 Vox 卡的危机文字（p.18）。
+function campResolveCourtCrises(){
+  const snapshot=(G.court||[]).slice();   // 快照：handler 会改动 G.court
+  snapshot.forEach(card=>{ if(!card) return; const fn=CRISIS_FN[card.id];
+    if(fn && G.court.indexOf(card)>=0){ campLog(`议会危机：${card.cn||card.id}`); try{ fn(card); }catch(e){ campLog(`（危机 ${card.id} 结算异常，跳过：${e.message}）`); } } });
+}
+// 危机卡处置helper：从议会区移除后 埋葬(牌堆底)/弃置/洗回。
+function campRemoveFromCourt(card){ const i=G.court.indexOf(card); if(i>=0) G.court.splice(i,1); return i>=0; }
+function campCrisisBury(card){ campRemoveFromCourt(card); campBuryCard(card); }
+function campCrisisDiscard(card){ campRemoveFromCourt(card); G.courtDiscard.push(card); }
+function campCrisisShuffleBack(card){ campRemoveFromCourt(card); G.courtDeck.push(card); if(typeof shuffle==='function') shuffle(G.courtDeck); }
+// 从议会区退回 1 名指定颜色的忠诚密探到其供应（blight_panic 用）；返回是否成功。
+function campReturnAgentFromCourt(colorKey){ for(const c of (G.court||[])){ if(c && c.agents && (c.agents[colorKey]||0)>0){ c.agents[colorKey]--; if(c.agents[colorKey]<=0) delete c.agents[colorKey]; const o=G.players.find(p=>p.color.key===colorKey); if(o){ o.supply.agents++; settleOutrageDebt(o); } return true; } } return false; }
+// 各 Vox 卡危机文字的机器结算（对照卡面）。数值/ID/星球类型骰沿用引擎既有近似（Math.random，与 campRollEventDie 一致）。
+const CRISIS_FN = {
+  // 帝国崩塌(09)：若掷出战舰(突袭)符号 → 所有摄政变法外者，命中地图每艘帝国星舰，弃此卡。
+  empire_falls:(card)=>{ if(Math.floor(Math.random()*6)!==0){ campLog('帝国崩塌：未掷出战舰符号'); return; }
+    G.players.forEach((p,i)=>{ if(p.identity==='regent') campBecomeOutlaw(i); });
+    for(const id in G.map){ const s=G.map[id]; const n=(s.pieces.ships&&s.pieces.ships.imperial)||0; if(n>0) applyShipHits(id,'imperial',n,null); }
+    campLog('帝国崩塌：掷出战舰符号 → 全体摄政变法外者，命中全部帝国星舰'); campCrisisDiscard(card); },
+  // 海军反击(15)：每艘帝国星舰命中其系统内每个法外者的星舰(新鲜优先)，埋此卡。
+  navy_reprisal:(card)=>{ const outlaws=G.players.filter(p=>p.identity==='outlaw').map(p=>p.color.key);
+    for(const id in G.map){ const s=G.map[id]; const imp=(s.pieces.ships&&s.pieces.ships.imperial)||0; if(imp<=0) continue;
+      outlaws.forEach(col=>{ if((s.pieces.ships[col]||0)>0) applyShipHits(id,col,imp,null); }); }
+    campCrisisBury(card); },
+  // 帝国叛逃者(18-19)：在掷出的星团中，用回合顺序最靠前法外者的星舰替换全部帝国星舰，埋此卡。
+  imperial_defectors:(card)=>{ const cl=1+Math.floor(Math.random()*6);
+    const order=G.players.map((p,i)=>i).sort((a,b)=>turnOrderRank(G.players[a])-turnOrderRank(G.players[b]));
+    const fo=order.find(i=>G.players[i].identity==='outlaw');
+    if(fo!=null){ const col=G.players[fo].color.key; let moved=0;
+      ['G'+cl, cl+'A', cl+'B', cl+'C'].forEach(id=>{ const s=G.map[id]; if(!s||s.outOfPlay) return; const imp=(s.pieces.ships&&s.pieces.ships.imperial)||0;
+        if(imp>0){ delete s.pieces.ships.imperial; const give=Math.min(imp, G.players[fo].supply.ships|0); if(give>0){ s.pieces.ships[col]=(s.pieces.ships[col]||0)+give; G.players[fo].supply.ships-=give; moved+=give; } } });
+      campLog(`帝国叛逃者：星团 ${cl} 内 ${moved} 艘帝国舰被 ${pname(fo)}(法外者)星舰替换`); }
+    campCrisisBury(card); },
+  // 商人联盟(02)：弃掉此卡上冻结的全部物资(归还供应)。卡片留在议会区。
+  merchant_league:(card)=>{ if(card.material){ G.resSupply.material+=card.material; campLog(`商人联盟：弃掉此卡 ${card.material} 冻结物资`); card.material=0; } },
+  // 民愤蔓延(Vox)：每位玩家就掷出的星球类型激起民愤；弃此卡。
+  outrage_spreads:(card)=>{ const rt=RES_ORDER[Math.floor(Math.random()*RES_ORDER.length)];
+    G.players.forEach(p=>provokeOutrage(p,rt)); campLog(`民愤蔓延：全体就 ${RESOURCES[rt].name} 激起民愤`); campCrisisDiscard(card); },
+  // 恐怖突袭(Vox)：摧毁位于任意玩家民愤类型对应星球上的全部受损棋子；洗回牌库。
+  terror_strike:(card)=>{ const otypes=new Set(); G.players.forEach(p=>{ RES_ORDER.forEach(r=>{ if(p.outraged&&p.outraged[r]) otypes.add(r); }); });
+    if(otypes.size){ for(const id in G.map){ const s=G.map[id]; if(s.kind!=='planet'||s.outOfPlay||!otypes.has(s.resource)) continue;
+      for(const col in (s.pieces.dmg||{})){ const d=s.pieces.dmg[col]||0; if(d>0){ s.pieces.ships[col]=(s.pieces.ships[col]||0)-d; if(s.pieces.ships[col]<=0) delete s.pieces.ships[col]; const o=G.players.find(p=>p.color.key===col); if(o) o.supply.ships+=d; } } s.pieces.dmg={};
+      s.pieces.buildings=(s.pieces.buildings||[]).filter(b=>{ if(b.damaged){ const o=G.players.find(p=>p.color.key===b.owner); if(o){ if(b.type==='city')o.supply.cities++; else o.supply.starports++; } return false; } return true; });
+      if(s.pieces.blightDmg){ s.pieces.blightDmg=0; } } }
+    campCrisisShuffleBack(card); },
+  // 凋敝恐慌(10)：按行动顺位，每名玩家为每个位于其忠诚建筑/旗舰处的凋敝，从议会退回1名忠诚密探；埋此卡。
+  blight_panic:(card)=>{ const order=G.players.map((p,i)=>i).sort((a,b)=>turnOrderRank(G.players[a])-turnOrderRank(G.players[b]));
+    order.forEach(i=>{ const p=G.players[i]; let cnt=0;
+      for(const id in G.map){ const s=G.map[id]; const bl=blightTotal(s); if(bl<=0) continue;
+        const hasBldg=(s.pieces.buildings||[]).some(b=>b.owner===p.color.key);
+        const hasFlag=(p.flagship&&p.flagship.sys===id);
+        if(hasBldg||hasFlag) cnt+=bl; }
+      let ret=0; for(let k=0;k<cnt;k++){ if(campReturnAgentFromCourt(p.color.key)) ret++; else break; }
+      if(ret) campLog(`凋敝恐慌：${pname(i)} 从议会退回 ${ret} 名忠诚密探`); });
+    campCrisisBury(card); },
+};
 // 事件骰：📜敕令 / ★危机（面分布近似 3:3，可按实体骰调整）
 function campRollEventDie(){ return (Math.floor(Math.random()*6)<3)?'edict':'crisis'; }
 // 回合末事件结算：议会已裁决→结算议会；否则掷事件骰→敕令/危机
@@ -2040,7 +2115,12 @@ function campLeaveEmpire(idx){ const p=G.players[idx]; if(!p||p.identity!=='rege
   const wasFirst=(G.campaign.firstRegentIdx===idx); campBecomeOutlaw(idx);
   if(wasFirst){ const regents=G.players.map((q,i)=>i).filter(i=>G.players[i].identity==='regent');
     if(regents.length){ regents.sort((x,y)=>G.players[y].power-G.players[x].power); campSetFirstRegent(regents[0]); }
-    else { G.campaign.firstRegentIdx=null; campLog('帝国已无摄政，首席摄政空缺（详见规则书 p.16）'); } }
+    else { // 战役规则书 p.16「Leave the Empire」：无摄政剩余 → 帝国信托全部资源归还供应，
+           //   离场的首席摄政「每归还 1 资源 -1 权力」（可为负），首席摄政标记入供应。
+           const returned=campEmptyTrust();
+           if(returned>0){ p.power-=returned; flashPower(idx); }
+           G.campaign.firstRegentIdx=null;
+           campLog(`帝国已无摄政：帝国信托 ${returned} 资源归还供应，${pname(idx)} -${returned} 权力（规则书 p.16）`); } }
   return true;
 }
 // 复兴帝国：若无任何摄政，本玩家成为摄政并取首席摄政
@@ -2096,16 +2176,19 @@ function campHitBlight(sysId, hits, destroyer){ const s=G.map[sysId]; if(!s) ret
 }
 function campRepairAllBlight(){ let n=0; for(const id in G.map){ const s=G.map[id]; if(s.pieces&&s.pieces.blightDmg){ n+=s.pieces.blightDmg; s.pieces.blightDmg=0; } } if(n) campLog(`修复 ${n} 个受损凋敝（→新鲜）`); return n; }
 // 凋敝危机：每系统 fresh×3 + dmg×1 击；先击帝国舰，无则击该系统每名玩家的忠诚舰（各自承受，新鲜优先）
-function campResolveBlightCrisis(){ let total=0;
+function campResolveBlightCrisis(){ let total=0, destroyedTotal=0;
   for(const id in G.map){ const s=G.map[id]; const fr=blightFresh(s), dm=blightDmg(s); const hits=fr*3+dm*1; if(hits<=0) continue;
     total+=hits; campLog(`凋敝危机 ${id}：${fr}新鲜+${dm}受损 → ${hits} 击`);
     const imp=(s.pieces.ships&&s.pieces.ships.imperial)||0;
     // 战役 p.18：凋敝先击帝国舰；帝国舰打光后【剩余命中】外溢给该系统每名玩家的忠诚舰（各自新鲜优先）。
     let rest=hits;
-    if(imp>0){ const r=applyShipHits(id,'imperial',hits,null); rest=r.overflow|0; }
-    if(rest>0) G.players.forEach(p=>{ if((s.pieces.ships[p.color.key]||0)>0) applyShipHits(id,p.color.key,rest,null); });
+    if(imp>0){ const r=applyShipHits(id,'imperial',hits,null); rest=r.overflow|0; destroyedTotal+=r.destroyed|0; }
+    if(rest>0) G.players.forEach(p=>{ if((s.pieces.ships[p.color.key]||0)>0){ const r=applyShipHits(id,p.color.key,rest,null); destroyedTotal+=r.destroyed|0; } });
     if(typeof campMarksAt==='function' && campMarksAt(id,'bunker').length) campFire('blightCrisisOnBunker',{sysId:id}); // 幸存者：地堡行星凋敝危机
   }
+  // 命运 F13「凋敝饥饿」(Leder 卡库 L13)：被凋敝危机摧毁的棋子(含各方与其自己)放到凋敝代言者的卡上，
+  //   计入其饥饿计数；第三幕终局目标要求「卡上棋子数 > 当前章节」。计数在每章开始(dealNewChapter)清零(计分后退回)。
+  if(destroyedTotal>0){ const bs=G.players.find(p=>p.fate===13); if(bs) bs._blightHungerPieces=(bs._blightHungerPieces||0)+destroyedTotal; }
   if(!total) campLog('凋敝危机：地图上无凋敝');
   return total;
 }
@@ -2122,6 +2205,23 @@ function campAddBlightToGates(){ let n=0; for(let cl=1;cl<=6;cl++){ const id='G'
   if(blightTotal(s)===0 && !anyShip){ campPlaceBlight(id,true,1); n++; } } return n; }
 // Act II/III 布置：在某星簇所有无凋敝行星各放 1 受损凋敝
 function campAddBlightToCluster(cl){ let n=0; ['A','B','C'].forEach(pl=>{ const id=cl+pl; const s=G.map[id]; if(s&&!s.outOfPlay&&blightTotal(s)===0){ campPlaceBlight(id,true,1); n++; } }); return n; }
+// 转幕凋敝扩散（战役规则书 p.7 Act II & III Setup 步骤 C/D）：转入第 2/3 幕时凋敝蔓延——
+//   C：每个「无凋敝且无舰」的星门放 1 受损凋敝；D：掷事件骰取 1 个 ID 符号(行星位)，每个在局星簇在该
+//   符号行星放 1 受损凋敝(若该行星已有凋敝/出局，则改在该簇每个无凋敝行星各放 1)。返回新增凋敝数。
+function campActTransitionBlight(){
+  const gates=campAddBlightToGates();                 // C
+  const sym=['A','B','C'][Math.floor(Math.random()*3)]; // 模拟 ID 骰选一个行星位
+  let seeded=0;
+  for(let cl=1;cl<=6;cl++){
+    const clusterInPlay=['A','B','C'].some(pl=>{ const ss=G.map[cl+pl]; return ss&&!ss.outOfPlay; });
+    if(!clusterInPlay) continue;
+    const s=G.map[cl+sym];
+    if(s && !s.outOfPlay && blightTotal(s)===0){ campPlaceBlight(cl+sym,true,1); seeded++; }
+    else seeded+=campAddBlightToCluster(cl);           // 该符号行星已凋敝/出局 → 整簇无凋敝行星各放 1
+  }
+  campLog(`转幕·凋敝扩散（p.7 C/D）：星门 +${gates}、星簇(ID符号 ${sym}) +${seeded} 受损凋敝`);
+  return gates+seeded;
+}
 // 清剿凋敝：玩家以所在系统新鲜忠诚舰数掷突袭骰攻击凋敝（每 2 击推进一档，摧毁→战利品）
 function campAssaultBlight(sysId, playerIdx){ const s=G.map[sysId]; const p=G.players[playerIdx]; if(!s||!p) return 0;
   const col=p.color.key; const dice=freshShips(s,col); if(dice<=0||blightTotal(s)<=0) return 0;
@@ -3287,6 +3387,9 @@ function spendCaptivePiece(p){ if((p.captives|0)<=0) return null; p.captives--;
 // 转移 1 件明细（峰会转移/敕令征收）：换持有人、保持棋子归属
 function transferLedgerPiece(a,b,kind){ const key=kind==='captive'?'captivePieces':'trophyPieces';
   const e=(a[key]&&a[key].length)?a[key].pop():null; if(e) (b[key]=b[key]||[]).push(e); }
+// 按条件转移一枚明细棋子（战争敕令征收需排除「摄政/帝国」棋子，战役 p.20）：找最后一枚符合条件的转移，返回是否成功。
+function transferEligibleLedgerPiece(a,b,kind,isEligible){ const key=kind==='captive'?'captivePieces':'trophyPieces';
+  const L=a[key]||[]; for(let j=L.length-1;j>=0;j--){ if(isEligible(L[j])){ const e=L.splice(j,1)[0]; (b[key]=b[key]||[]).push(e); return true; } } return false; }
 // 民愤占位欠账（rb_22 Piece Limits 唯一例外）：民愤格无密探可放时记欠账，密探一回到供应立即补扣锁定
 function settleOutrageDebt(p){ if(!p) return; let d=(p._outrageDebt|0);
   while(d>0 && p.supply.agents>0){ p.supply.agents--; d--; }
@@ -5266,6 +5369,8 @@ function campAutoIntermission(){
 }
 // 幕间向导完成后：重置章号为 1、按新幕发牌、开始新幕第 1 章的出牌（承接 openActResolveWizard/openFateReChoose 末尾）。
 function campStartNewActPlay(){
+  // 战役规则书 p.7：进入第 2/3 幕（本函数仅在转幕后调用，act≥2）时，凋敝按 C/D 步骤扩散一次。
+  if(G.campaign && G.campaign.act>=2) campActTransitionBlight();
   G.chapter=1; dealNewChapter();
   logMsg(`—— 第 ${G.campaign.act} 幕 · 第 1 章开始（先攻 ${pname(G.initiative)}）——`,'score');
   toast(`🎬 第 ${G.campaign.act} 幕开始！`, 2000); SFX.newChapter();
@@ -5275,6 +5380,8 @@ function dealNewChapter(){
   G.actionDeck=shuffle(buildActionDeck(G.numPlayers)); G.discard=[];
   G.players.forEach(p=>{ p.hand=[]; for(let k=0;k<6;k++) p.hand.push(G.actionDeck.pop()); sortHand(p); });
   G.passedInARow=0; // rb_08：连续传递仅在本章内计数，新章发牌后归零（否则上章「全员传递」结束会带入新章误触发即时结束）
+  // 命运 F13「凋敝饥饿」：每章计分后卡上棋子退回供应 → 新章开始时清零饥饿计数（章末判定发生在本函数之前，计数不受影响）。
+  G.players.forEach(p=>{ if(p._blightHungerPieces) p._blightHungerPieces=0; });
 }
 // 章末清算：收回所有雄心标记（盒中+可用）到可用区，并把「当前首位权力最低且尚未翻面」的一枚翻到高面。
 // 翻面是持久的（跨章累积）：第1章末翻 2/0→4/2，第2章末翻 3/2→6/4，第3章末翻 5/3→9/5，之后无可翻。
@@ -5428,7 +5535,10 @@ function turnOrderRank(p){ const n=G.numPlayers; const idx=G.players.indexOf(p);
 // 终局排序：战役模式下「达成第三幕最终命运目标」者(_campVictory)最高优先；其次权力；再次行动顺位。
 //   基础局 _campVictory 恒为 undefined → (0-0) 为假，自动回退到「权力→顺位」，对非战役无影响。
 function endGameSort(){ return [...G.players].sort((a,b)=>
-  ((b._campVictory?1:0)-(a._campVictory?1:0)) || (b.power-a.power) || (turnOrderRank(a)-turnOrderRank(b))); }
+  ((b._campVictory?1:0)-(a._campVictory?1:0)) || (b.power-a.power)
+  // 战役规则书 p.8：权力平局按命运套别 A>B>C 决胜（'A'<'B'<'C' 升序即 A 优先），再平才用行动顺位。基础局 fate 为空 → 该项为 0。
+  || ((a.fate&&b.fate)?fateTier(a.fate).localeCompare(fateTier(b.fate)):0)
+  || (turnOrderRank(a)-turnOrderRank(b))); }
 function endGame(){
   G.phase='end';
   clearAutosave();   // 游戏结束：清「继续上一局」存档（避免开始屏出现已结束的对局）
