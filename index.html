@@ -420,6 +420,8 @@
     /* 手牌：横向滚动一行 */
     #hand{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
     #hand .card{flex:none}
+    /* 触屏手牌预览：按住放大(复用桌面 hover 视觉)，松开复位，tap 仍正常选牌(选牌走 JS click，不冲突) */
+    #hand .card:active{transform:scale(1.4);z-index:30;box-shadow:0 12px 30px #000d,0 0 0 2px var(--gold)}
     /* 触控友好：最小点击尺寸 */
     .btn{min-height:40px;padding:9px 14px}
     .btn.sm{min-height:34px}
@@ -1884,6 +1886,7 @@ function campSecureCouncil(playerIdx){
     openModal(m=>{
       m.appendChild(el('h2',null,'帝国议会 · 回合末结算哪类事件？'));
       m.appendChild(el('div','hintbox','你攫取了帝国议会：本回合末由你【二选一】结算 敕令 或 危机。下方是各自本局的实际后果预览。'));
+      { const ftn=firstTimeNote('council','攫取帝国议会是偶发的高影响事件：回合末你须在【敕令】(帝国征收+额外行动)与【危机】(触发凋敝/民众效果)间二选一，选择不可撤销。'); if(ftn) m.appendChild(ftn); }
       // 后果预览（复用 EDICT_POLICIES + campCurrentPolicy，与战役面板同源）
       const P=EDICT_POLICIES[campCurrentPolicy()]||EDICT_POLICIES.war;
       const edPrev=el('div','hintbox'); edPrev.style.cssText='text-align:left;font-size:11.5px;line-height:1.6;border-left:3px solid var(--gold)';
@@ -2413,6 +2416,14 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
 function el(tag,cls,txt){ const e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
 // 同 el，但第三参作 HTML 渲染（用于含 <b>/<span>/<br>/&nbsp; 的提示文本，避免标签被当作纯文本显示）
 function elh(tag,cls,html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
+// 首次流程一次性引导：某 key 首次出现时返回一个 🆕 提示块(存 localStorage，之后不再显示)；已看过或无存储→返回 null。
+function firstTimeNote(key, html){
+  if(!hasLocalStorage()) return null;
+  let seen=false; try{ seen=localStorage.getItem('arcs_seen_'+key)==='1'; }catch(e){}
+  if(seen) return null;
+  try{ localStorage.setItem('arcs_seen_'+key,'1'); }catch(e){}
+  const d=elh('div','hintbox','🆕 '+html); d.style.borderLeft='3px solid var(--gold)'; return d;
+}
 function svgEl(tag,attrs){ const e=document.createElementNS('http://www.w3.org/2000/svg',tag);
   for(const k in attrs)e.setAttribute(k,attrs[k]); return e; }
 /* 真实卡面素材路径（来自桌游模拟器汉化图集，裁切到 assets/）。缺图时各处自动回退到文字渲染。 */
@@ -6365,6 +6376,7 @@ function openBattleAllocModal(id,defC,rolled,cb){
   const render=()=>openModal(m=>{
     m.appendChild(el('h2',null,'⚔ 分配命中（攻方选择）'));
     m.appendChild(elh('div','hintbox',`守方 <b>${colorLabelHTML(defC)}</b>：新鲜舰 ${fresh}、受损舰 ${dmg}${res.hit>0?`；本次舰命中 <b>${res.hit}</b>`:''}${res.bldg>0?`；建筑命中 <b>${res.bldg}</b>`:''}。命中可叠加到受损舰直接摧毁（换战利品/军阀分），或打散降级新鲜舰。`));
+    { const ftn=firstTimeNote('battlealloc','ARCS 允许你自由分配命中：叠击摧毁【受损舰】可多得战利品(军阀计分)；打散则把新鲜舰降级为受损。据战局取舍。'); if(ftn) m.appendChild(ftn); }
     if(res.hit>0 && maxKill>0){
       const hd=el('div'); hd.style.cssText='margin:8px 0 2px;color:#d9b25a;font-weight:700'; hd.textContent=`用命中摧毁几艘受损舰（0–${maxKill}）：`; m.appendChild(hd);
       const row=el('div'); row.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
@@ -7913,7 +7925,14 @@ function openActResolveWizard(){
     const pi=fatePlayers[k]; const p=G.players[pi]; const f=fateByNum(p.fate);
     const sc=fateActScript(p.fate, act);
     openModal(m=>{
-      m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}`));
+      m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}（判定 ${k+1}/${fatePlayers.length}）`));
+      { const ftn=firstTimeNote('actwizard','中场休息·逐位判定各玩家本幕命运目标是否达成——达成/未达成会执行不同的卡库与权力变动，且不可撤销。引擎已给出建议判定，你确认即可。'); if(ftn) m.appendChild(ftn); }
+      // 全员判定进度总览（只读）：已判定✓/✗、当前▶、待判定○
+      const ov=elh('div','hintbox', fatePlayers.map((pi2,j)=>{ const p2=G.players[pi2];
+        const mark=j<k?(p2.fateObjMet[act-1]?'✓':'✗'):(j===k?'▶':'○');
+        const col=j<k?(p2.fateObjMet[act-1]?'#6fcf8e':'#d9707a'):(j===k?'#d9b25a':'#7f8ea8');
+        return `<span style="color:${col}">${mark} ${p2.name}</span>`; }).join('　·　'));
+      ov.style.cssText='text-align:center;font-size:12px'; m.appendChild(ov);
       m.appendChild(elh('div','hintbox',`<b style="color:#c98bd6">${f?f.cn:''}</b> 第 ${act} 幕目标：<br><span style="font-size:12px;line-height:1.6">${(f&&f.acts[act-1])||'（无）'}</span>`));
       // 引擎自动判定提示（半自动：玩家确认）
       const autoMet=campObjectiveMet(pi); const th=fateThresholdCur(pi);
