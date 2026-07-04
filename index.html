@@ -1799,6 +1799,34 @@ const FATE_OBJECTIVE_CHECK = {
   13:{ 3:(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && (p._blightHungerPieces||0)>G.chapter }, // 凋敝代言者终局(Leder卡库 F13 Act III)：无对手赢军阀 且 凋敝饥饿卡上棋子数>当前章节
   15:{ 3:(p,i)=> campPeaceClusters()>=2 }, // 维和者终局：≥2星簇和平（≥5为完整）
 };
+// 战役规则书 p.9：A/B 命运(1-16)保留到第三幕给「两个大雄心(grand ambitions，金色双准星)」——它们**不使用目标标记、不获胜**，
+//   而是每章末与已宣告雄心同时计分：满足其一得 lower、两者皆满足得 higher 权力（值见 CHAPTER_POWER 章节轨）。
+//   仅 C 命运(17-24)有 final objective（计时器满+≥1权力即获胜，见 campChapterEndJudge）。
+// Act III 章节轨（第 1-4 章）→ [满足一个大雄心的权力, 两个都满足的权力]（规则书 p.9 图；与卡面示例「第3章满足一个=4权力」一致）。
+const CHAPTER_POWER = {1:[2,4], 2:[3,8], 3:[4,14], 4:[5,20]};
+// 每个 A/B 命运的两个大雄心（各自独立布尔；条件文本见 _court_tmp/fate_specs.json act3.objectiveConditions）。
+//   注：F5 傀儡销毁 / F12 海盗据点宣告 原为「每章选择」型，此处以状态近似(更多傀儡/藏宝)。
+const GRAND_AMBITIONS = {
+  1:[(p,i)=> p.identity==='regent' && campAllOutlawCitiesControlled(), (p,i)=> G.campaign.firstRegentIdx===i && campTrustTotal()>G.chapter],
+  2:[(p,i)=> campFounderFreeCities()>=3, (p,i)=> campFounderFreeCities()>=7],
+  3:[(p,i)=> campMonopolies(i)>=1, (p,i)=> campMonopolies(i)>=2],
+  4:[(p,i)=> campGuildSuits(i)>G.chapter, (p,i)=> campGuildCardsInCourt()*2>G.court.length],
+  5:[(p,i)=> campGolems(i)>=1, (p,i)=> campGolems(i)>=2],
+  6:[(p,i)=> hasMostGuildCards(p,i), (p,i)=> G.initiative===i],
+  7:[(p,i)=> p.identity==='regent', (p,i)=> (campPlanetsControlled(i)+(G.campaign.firstRegentIdx===i?campEmpireSystems().filter(id=>G.map[id].kind==='planet').length:0))>=9],
+  8:[(p,i)=> campAmbMarkersOnIdeals()>=2, (p,i)=> campAmbMarkersOnIdeals()>=3],
+  9:[(p,i)=> !!p._portalFound, (p,i)=> (p._pilgrimsHome||0)>G.chapter],
+  10:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'tyrant')), (p,i)=> campMarksOf(i,'banner')>G.chapter],
+  11:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')), (p,i)=> campEveryPlayerHasOutrage()],
+  12:[(p,i)=> campHoardTotal(i)>=2, (p,i)=> campHoardTotal(i)>=4],
+  13:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')), (p,i)=> (p._blightHungerPieces||0)>G.chapter],
+  14:[(p,i)=> p.trophies===0 && p.captives===0, (p,i)=> campRivalsPsionicSum(i)>(p.res.psionic||0)],
+  15:[(p,i)=> campPeaceClusters()>=2, (p,i)=> campPeaceClusters()>=5],
+  16:[(p,i)=> G.players.every((q,j)=> j===i || campFiefsCount(i)>campFiefsCount(j)), (p,i)=> campSeatsControlled(i)>G.chapter],
+};
+// A/B 命运第三幕已满足的大雄心数（0/1/2）。非 A/B 命运返回 0。
+function campGrandAmbitionCount(playerIdx){ const p=G.players[playerIdx]; const ga=p&&p.fate&&GRAND_AMBITIONS[p.fate];
+  if(!ga) return 0; return ga.reduce((n,fn)=>{ try{ return n+(fn(p,playerIdx)?1:0); }catch(e){ return n; } }, 0); }
 function campEvLabel(ev){ return {initiativeSeized:'夺取先攻',ambitionWon:'赢得雄心',actionWithInitiative:'持先攻打牌',chapterEnd:'章末',trophyGained:'夺战利品',captiveTaken:'俘获'}[ev]||ev; }
 // 事件总线：向当前幕的进度规则派发，按 delta 推进 fateProgress
 function campFire(ev, data){
@@ -1827,14 +1855,25 @@ function campObjectiveMet(playerIdx){
   const chk=FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][act];
   return chk?!!chk(p,playerIdx):false;
 }
-// 章末：派发 chapterEnd 事件 + 终局幕(3)胜利检查（达标且≥1权力）。返回胜利者 idx 数组。
+// 章末（战役规则书 p.8-9）：派发 chapterEnd 事件 + 第三幕处理——
+//   · C 命运(17-24)有 final objective：计时器满(campObjectiveMet)且≥1权力 → 获胜(supersedes 权力最多)。
+//   · A/B 命运(1-16)保留到第三幕给两个大雄心：**不获胜**，而是章末按满足数(1→lower/2→higher)从章节轨得权力。
+//   基础局默认胜法(权力最多)仍在终局由 endGameSort 处理。返回胜利者 idx 数组。
 function campChapterEndJudge(){
   if(!G.campaign||!G.campaign.enabled) return [];
   campFire('chapterEnd',{}); const winners=[];
   G.players.forEach((p,i)=>{ if(!p.fate) return;
-    const met=campObjectiveMet(i);
-    if(G.campaign.act===3 && met && p.power>=1){ p._campVictory=true; winners.push(i);
-      campLog(`🏆 ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）达成第三幕命运目标且≥1权力 → 战役胜利！`); }
+    if(G.campaign.act!==3) return;
+    const tier=fateTier(p.fate);
+    if(tier==='C'){
+      if(campObjectiveMet(i) && p.power>=1){ p._campVictory=true; winners.push(i);
+        campLog(`🏆 ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）完成第三幕终局目标(final objective)且≥1权力 → 战役胜利！`); }
+    } else { // A/B：大雄心章末计分（不获胜）
+      const cnt=campGrandAmbitionCount(i);
+      if(cnt>=1){ const tbl=CHAPTER_POWER[G.chapter]||CHAPTER_POWER[4]; const gain=cnt>=2?tbl[1]:tbl[0];
+        p.power+=gain; if(typeof flashPower==='function') flashPower(i);
+        campLog(`✨ ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）第 ${G.chapter} 章大雄心 ${cnt}/2 达成 → +${gain} 权力（章节轨 ${tbl[0]}/${tbl[1]}）`); }
+    }
   });
   G.players.forEach(p=>{ p._ambWon={}; }); // 清空本章雄心记录
   autosaveCampaign(); return winners;
@@ -2830,7 +2869,11 @@ function campFateValue(state, seat, wFate){
   let v=0;
   if(th && th>0) v += milestone * Math.min(p.fateProgress||0, th)/th;  // 归一化进度
   if(p.fateObjMet && p.fateObjMet[act-1]) v += milestone;             // 已达本幕命运目标
-  if(p._campVictory) v += 40*wF;                                      // 第三幕终局胜利
+  if(p._campVictory) v += 40*wF;                                      // 仅 C 命运第三幕终局胜利(final objective)
+  // A/B 命运第三幕大雄心：按已满足数×章节轨预期权力估值，引导 AI 主动追求(而非仅在计分后经权力项被动体现)。
+  if(act>=3 && GRAND_AMBITIONS[p.fate]){ const sv=G; G=state; let cnt=0;
+    try{ cnt=campGrandAmbitionCount(seat); } catch(e){} finally{ G=sv; }
+    if(cnt>0){ const tbl=CHAPTER_POWER[state.chapter]||CHAPTER_POWER[4]; v += (cnt>=2?tbl[1]:tbl[0]) * wF * 0.8; } }
   return v;
 }
 function aiStanding(state, j){
@@ -3383,6 +3426,10 @@ function releaseCaptives(p){ (p.captivePieces||[]).forEach(returnPieceToOwner); 
 // 花费/返还 1 俘虏（强制劳动/暴君傲慢等消耗俘虏的能力）：明细取一件并归还原主供应
 function spendCaptivePiece(p){ if((p.captives|0)<=0) return null; p.captives--;
   const e=(p.captivePieces&&p.captivePieces.length)?p.captivePieces.pop():null;
+  if(e) returnPieceToOwner(e); return e; }
+// 花费/返还 1 战利品（霸主恐怖等消耗战利品的能力）：明细取一件并归还原主供应，保持 trophies 与 trophyPieces 同步
+function spendTrophyPiece(p){ if((p.trophies|0)<=0) return null; p.trophies--;
+  const e=(p.trophyPieces&&p.trophyPieces.length)?p.trophyPieces.pop():null;
   if(e) returnPieceToOwner(e); return e; }
 // 转移 1 件明细（峰会转移/敕令征收）：换持有人、保持棋子归属
 function transferLedgerPiece(a,b,kind){ const key=kind==='captive'?'captivePieces':'trophyPieces';
@@ -4643,6 +4690,10 @@ function renderPlayers(){
       if(th!=null){ const cur=Math.min(p.fateProgress||0, th); const done=cur>=th; const pct=Math.round(cur/th*100);
         pb.title=`第 ${G.campaign.act} 幕命运进度 ${p.fateProgress||0}/${th}`;
         pb.innerHTML=`<span style="display:inline-block;width:42px;height:7px;border-radius:4px;background:#2a3346;vertical-align:middle;overflow:hidden"><span style="display:block;height:100%;width:${pct}%;background:${done?'#6fcf8e':'#d9b25a'}"></span></span> <b style="color:${done?'#6fcf8e':'#d9b25a'}">${p.fateProgress||0}/${th}</b>`;
+      } else if(G.campaign.act===3 && GRAND_AMBITIONS[p.fate]){ // A/B 第三幕：大雄心章末计分（非获胜）
+        const cnt=campGrandAmbitionCount(i); const tbl=CHAPTER_POWER[G.chapter]||CHAPTER_POWER[4]; const gain=cnt>=2?tbl[1]:(cnt>=1?tbl[0]:0);
+        pb.title=`第三幕大雄心：满足 ${cnt}/2（章末 +${gain} 权力；章节轨 ${tbl[0]}/${tbl[1]}）`;
+        pb.innerHTML=`大雄心 <b style="color:${cnt>=2?'#ffd700':(cnt>=1?'#6fcf8e':'#7f8ea8')}">${cnt}/2</b>${gain?` <span style="color:#d9b25a">+${gain}⚡</span>`:''}`;
       } else { const met=campObjectiveMet(i); pb.title='本幕命运目标（非计时型）'; pb.innerHTML=`本幕 <b style="color:${met?'#6fcf8e':'#7f8ea8'}">${met?'✓达成':'○未达'}</b>`; }
       tags.appendChild(pb);
     }
@@ -5836,7 +5887,7 @@ function openWarlordTerror(me){
       const row=el('div'); row.style.cssText='display:flex;gap:6px;align-items:center;margin:5px 0';
       const b=el('button','btn'); b.style.cssText='flex:1;text-align:left';
       b.innerHTML=`<b>${c.name}</b>　<span style="opacity:.7;font-size:12px">密探：${Object.entries(c.agents).filter(([k,n])=>n>0).map(([k,n])=>`<span style="color:${PCOLORS.find(p=>p.key===k).css}">${n}</span>`).join(' ')||'无'}</span>`;
-      b.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; me.trophies--; SFX.key();
+      b.onclick=()=>{ c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; spendTrophyPiece(me); SFX.key();  // 战利品明细同步弹出并归还原主供应（rb_14/glossary「return」）
         logMsg(`${pname(G.actor)} 霸主恐怖：消耗 1 战利品在「${c.name}」放置密探（剩余战利品：${me.trophies}）`,'act');
         closeModal(); openWarlordTerror(me); }; row.appendChild(b); m.appendChild(row); });
     const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
@@ -8021,6 +8072,9 @@ function openCampaignPanel(){
         prog=`<div style="margin-top:3px"><span style="font-size:11px;color:#d9b25a">进度 ${p.fateProgress||0}/${th}</span>`+
           `<span style="display:inline-block;width:120px;height:7px;background:#222c44;border-radius:4px;vertical-align:middle;margin-left:6px;overflow:hidden">`+
           `<span style="display:block;height:100%;width:${pct}%;background:${(p.fateProgress||0)>=th?'#6fcf8e':'#d9b25a'}"></span></span></div>`;
+      } else if(cp.act===3 && GRAND_AMBITIONS[p.fate]){ // A/B 第三幕大雄心（章末计分，非获胜）
+        const cnt=campGrandAmbitionCount(i); const tbl=CHAPTER_POWER[G.chapter]||CHAPTER_POWER[4]; const gain=cnt>=2?tbl[1]:(cnt>=1?tbl[0]:0);
+        prog=`<div style="margin-top:3px;font-size:11px;color:${cnt>=2?'#ffd700':(cnt>=1?'#6fcf8e':'#7f8ea8')}">第三幕大雄心：${cnt}/2 达成${gain?` → 章末 +${gain} 权力`:''}（章节轨 ${tbl[0]}/${tbl[1]}，不获胜）</div>`;
       } else if(FATE_OBJECTIVE_CHECK[p.fate]&&FATE_OBJECTIVE_CHECK[p.fate][cp.act]){
         const met=campObjectiveMet(i); prog=`<div style="margin-top:3px;font-size:11px;color:${met?'#6fcf8e':'#7f8ea8'}">本幕目标：${met?'✓ 已达成':'○ 未达成'}</div>`;
       }
