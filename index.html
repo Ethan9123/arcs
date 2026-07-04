@@ -2350,6 +2350,39 @@ function listCampaignSlots(){
 }
 // 战役自动存档：仅当战役模式开启时生效（单场模式零影响）
 function autosaveCampaign(){ if(G && G.campaign && G.campaign.enabled) saveCampaignSlot('auto'); }
+
+/* --------- 「继续上一局」通用自动存档（单场 & 战役都覆盖）：退出/刷新后可恢复进度 --------- */
+// G 为纯数据（可 JSON 序列化，MCTS 已在克隆），故整盘状态可直接存 localStorage。每次 render 落盘一次；
+// 模拟(_simulating)期间 render 被静音故不触发；建局中/已结束不存；游戏结束清档。
+const AUTOSAVE_KEY = 'arcs_autosave';
+const AUTOSAVE_VERSION = 1;
+function autosaveGame(){
+  if(!hasLocalStorage() || !G || G._simulating) return;
+  if(G.phase==='setup' || G.phase==='end') return;
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({v:AUTOSAVE_VERSION, G})); }catch(e){ /* 配额/隐私模式失败：忽略，不影响游戏 */ }
+}
+function clearAutosave(){ if(hasLocalStorage()) try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(e){} }
+// 读取存档摘要（供开始屏「继续上一局」按钮显示局况），无有效存档→null
+function loadAutosaveMeta(){
+  if(!hasLocalStorage()) return null;
+  try{ const s=localStorage.getItem(AUTOSAVE_KEY); if(!s) return null;
+    const o=JSON.parse(s); if(!o || !o.G || o.v!==AUTOSAVE_VERSION) return null; const g=o.G;
+    return { np:g.numPlayers, chapter:g.chapter, phase:g.phase,
+      campaign:!!(g.campaign&&g.campaign.enabled), act:g.campaign&&g.campaign.act,
+      names:(g.players||[]).map(p=>p&&p.name).filter(Boolean).join(' / ') };
+  }catch(e){ return null; }
+}
+function resumeGame(){
+  if(!hasLocalStorage()) return false;
+  try{ const s=localStorage.getItem(AUTOSAVE_KEY); if(!s) return false;
+    const o=JSON.parse(s); if(!o || !o.G || o.v!==AUTOSAVE_VERSION) return false;
+    G=o.G; G._simulating=false;
+    if(typeof UNDO!=='undefined') UNDO.snap=null;   // 跨会话不保留「重开本回合」快照
+    const w=document.getElementById('modalWrap'); if(w) w.style.display='none';
+    render();   // render 会 aiMaybeSchedule 续 AI 回合 / setPrompt 提示人类
+    toast('已继续上一局'); return true;
+  }catch(e){ return false; }
+}
 function loreById(id){ return LORE.find(L=>L.id===id); }
 // 该玩家持有的传说卡里是否有指定机制 eff（扩展关闭或无卡时恒 false）
 function loreHas(p,key){
@@ -3309,6 +3342,7 @@ function render(){
   renderTurnBanner(); renderTrick();
   aiMaybeSchedule();   // AI 对手：轮到 AI 决策时异步调度(浏览器内; 测试中 render 被静音故不触发)
   if(typeof TUT!=='undefined' && TUT.game) TUT.tick();   // 交互式教学：渲染后观察状态→满足条件自动进入下一步
+  autosaveGame();      // 「继续上一局」：每次真实渲染落盘当前对局（模拟期 render 静音故不触发）
 }
 /* ===== AI 对战集成（P1 浏览器集成）：标记为 AI 的座位自动用 MCTS 在真实棋局上行动 ===== */
 var AI_LIVE_OPTS = {K:2, iters:24, depthCap:28};   // 浏览器实时强度/响应折中(每决策约0.3-0.6s) —— 兼容旧引用/缺省=普通
@@ -5397,6 +5431,7 @@ function endGameSort(){ return [...G.players].sort((a,b)=>
   ((b._campVictory?1:0)-(a._campVictory?1:0)) || (b.power-a.power) || (turnOrderRank(a)-turnOrderRank(b))); }
 function endGame(){
   G.phase='end';
+  clearAutosave();   // 游戏结束：清「继续上一局」存档（避免开始屏出现已结束的对局）
   SFX.victory();
   const sorted=endGameSort();
   const w=sorted[0]; logMsg(`🏆 游戏结束！胜者 ${pname(G.players.indexOf(w))}（${w.power}分）`,'score'); render();
@@ -7513,6 +7548,18 @@ function showStartScreen(){
     if(!setupV.startsWith(np+'_')) setupV=np+'_homelands';
     m.innerHTML='';
     m.appendChild(el('h2',null,'ARCS 暗星悬弧 · 电子版'));
+    // 「继续上一局」：存在未结束的自动存档时，置顶显眼恢复入口（单场/战役都覆盖）
+    const resumeMeta=loadAutosaveMeta();
+    if(resumeMeta){
+      const rb=el('button','btn gold','▶ 继续上一局'); rb.style.cssText='width:100%;font-weight:800;margin:2px 0 6px';
+      const sub=resumeMeta.campaign?`战役 第${resumeMeta.act||1}幕`:`单场`;
+      rb.innerHTML=`▶ 继续上一局 <span style="opacity:.8;font-weight:600;font-size:12px">（${resumeMeta.np}人·${sub}·第${resumeMeta.chapter||1}章　${resumeMeta.names||''}）</span>`;
+      rb.onclick=()=>resumeGame();
+      m.appendChild(rb);
+      const dr=el('button','btn ghost sm','🗑 放弃该存档，开新局'); dr.style.cssText='width:100%;margin:0 0 8px;opacity:.7';
+      dr.onclick=()=>{ confirmThen('放弃上一局存档？','将清除「继续上一局」的自动存档（无法恢复）。',()=>{ clearAutosave(); closeModal(); showStartScreen(); }); };
+      m.appendChild(dr);
+    }
     // 模式切换：单场 / 战役
     const modeRow=el('div','row'); modeRow.appendChild(el('span',null,'模式：'));
     const mseg=el('div','seg');
@@ -8649,6 +8696,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   $('#tut-next').onclick=()=>TUT.next();
   const st=$('#sideToggle'); if(st) st.onclick=()=>toggleSide();
   window.addEventListener('keydown', onGlobalKey);
+  window.addEventListener('beforeunload', ()=>{ try{ autosaveGame(); }catch(e){} }); // 退出/刷新前兜底落盘「继续上一局」
   cbLoad(); applyColorblind(CB.on);   // 恢复上次的色盲友好配色偏好（localStorage）
   probeAssets();   // 探测 assets/pieces 与 assets/resources 下的真实素材，存在即自动启用
   showStartScreen();
