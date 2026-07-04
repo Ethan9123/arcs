@@ -388,6 +388,10 @@
     /* 触屏可点目标 ≥40px（WCAG 2.5.5）：模态内按钮(含 .sm)与行动栏按钮 */
     #modal button, #modal .btn, #actionBar button, #actionBar .btn{ min-height:40px }
     #modal .btn.sm, #modal button.sm{ min-height:40px; padding:8px 12px }
+    /* 刘海/底部指示条安全区：侧栏抽屉与模态底部留出 safe-area，避免被 home 指示条遮挡 */
+    #side{ padding-bottom: env(safe-area-inset-bottom, 0px); }
+    #modalWrap{ padding-bottom: env(safe-area-inset-bottom, 0px); }
+    #top{ padding-top: max(4px, env(safe-area-inset-top, 0px)); }
     #app{flex-direction:column;height:100vh;height:100dvh}
     #boardWrap{flex:none;height:56vh;height:56dvh;width:100%}
     #board{width:100%;height:100%}
@@ -1609,7 +1613,7 @@ function campIntermission(){
   G.players.forEach((p,i)=>{ if(!p.fate) return;
     if(!p.fateObjMet[act-1]){ const th=fateThreshold(p.fate,act,G.numPlayers);
       const loss=(th!=null)?Math.max(0,th-(p.fateProgress||0)):0;
-      if(loss>0){ p.power-=loss; summary.push(`A·${pname(i)} 第${act}幕失败 → 失去 ${loss} 权力（目标标记距0剩余${loss}格）`); campLog(`中场A：${pname(i)} 第${act}幕失败，目标标记距0剩余 ${loss} → 失去 ${loss} 权力（当前 ${p.power}）`); } } });
+      if(loss>0){ p.power-=loss; flashPower(i); summary.push(`A·${pname(i)} 第${act}幕失败 → 失去 ${loss} 权力（目标标记距0剩余${loss}格）`); campLog(`中场A：${pname(i)} 第${act}幕失败，目标标记距0剩余 ${loss} → 失去 ${loss} 权力（当前 ${p.power}）`); } } });
   // B. 清理议会：除帝国议会外全部回牌堆、清空议会区密探、销毁弃牌堆，重洗并补满
   const keepCouncil=G.court.filter(c=>c&&c.council); const back=G.court.filter(c=>!(c&&c.council));
   back.forEach(c=>{ if(c.agents){ for(const k in c.agents){ const o=G.players.find(pp=>pp.color.key===k); if(o){ o.supply.agents+=c.agents[k]; settleOutrageDebt(o); } } c.agents={}; } G.courtDeck.push(c); });   // Intermission B2: Return all agents from the Court to their players
@@ -1909,7 +1913,7 @@ function campResolveCouncil(){
     if(fr!=null && campTrustTotal()>0){
       let slots=Math.max(0, resCap(p)-totalRes(p)); let stolen=0; const names=[];
       while(slots>0 && campTrustTotal()>0){ const got=campTrustTakeAny(p); if(!got) break; slots--; stolen++; names.push(RESOURCES[got].name);
-        if(G.players[fr]) G.players[fr].power--; }
+        if(G.players[fr]){ G.players[fr].power--; flashPower(fr); } }
       if(stolen) campLog(`${pname(pi)}（法外者）从帝国信托偷取 ${stolen} 资源（${names.join('、')}，至多空槽数）；${pname(fr)}（首席摄政）-${stolen} 权力`);
       else campLog(`${pname(pi)}（法外者）资源槽已满，无法偷取信托`);
     }
@@ -1978,7 +1982,7 @@ function campResolveEdict(){
   }
   // ② 帝国行动
   if(pol==='war'){ let got=0; regents.forEach(i=>{ if(G.resSupply.weapon>0){ G.resSupply.weapon--; G.players[i].res.weapon++; got++; } else if(campTrustTake('weapon',1)){ G.players[i].res.weapon++; got++; } }); campLog(`战争·帝国行动：${got} 名摄政各获 1 武器`); }
-  else if(pol==='peace'){ regents.forEach(i=>{ const b=cityBonus(G.players[i]); if(b){ G.players[i].power+=b; campLog(`和平·帝国行动：${pname(i)} 城市加成 +${b} 权力`); } }); }
+  else if(pol==='peace'){ regents.forEach(i=>{ const b=cityBonus(G.players[i]); if(b){ G.players[i].power+=b; flashPower(i); campLog(`和平·帝国行动：${pname(i)} 城市加成 +${b} 权力`); } }); }
   else if(pol==='escalation'){ const tgt=campEscalationPlaceShips(); if(tgt) campLog(`升级·帝国行动：在 ${tgt} 放置 2 艘新帝国星舰`); }
   autosaveCampaign();
 }
@@ -4409,6 +4413,14 @@ function renderTop(){
     chips.unshift(cc);
   }
   chips.forEach(h=>{const c=el('span','chip');c.innerHTML=h;t.appendChild(c);});
+  // 战役帝国信托 / 凋敝总量常驻（此前只在📜模态内可见）——关联命运终局与危机烈度
+  if(G.campaign && G.campaign.enabled){
+    const trust=campTrustTotal(); let blight=0; for(const id in G.map){ blight+=blightTotal(G.map[id]); }
+    if(trust>0 || blight>0){ const tc=el('span','chip'); tc.style.color='#cbb28a';
+      const parts=[]; if(trust>0) parts.push(`🏛 信托 <b>${trust}</b>`); if(blight>0) parts.push(`☣ 凋敝 <b>${blight}</b>`);
+      tc.innerHTML=parts.join(' · '); tc.title='帝国信托资源数 / 地图凋敝总量（关联命运终局与危机烈度）'; t.appendChild(tc);
+    }
+  }
   // 帝国议会「已裁决」常驻提醒（回合末将由持有者结算敕令/危机）——易被忽略的关键待结算态
   if(G.campaign && G.campaign.enabled && G.campaign.council==='decided' && G.campaign.councilHolder!=null){
     const hp=G.players[G.campaign.councilHolder];
@@ -5352,11 +5364,7 @@ function award(i,pow,reason){
   G.players[i].power += pow;
   logMsg(`${pname(i)} ${reason} → 总分 <b>${G.players[i].power}</b>`,'score');
   SFX.score();
-  // animate power display
-  setTimeout(()=>{
-    const els=document.querySelectorAll('.pl-pw-'+i);
-    els.forEach(e=>{ e.style.animation='none'; e.offsetHeight; e.style.animation='power-flash .5s ease-out'; });
-  },50);
+  flashPower(i); // 权力数字高亮（复用 flashPower，无头/模拟安全）
 }
 function cityBonus(p){ const built=5-p.supply.cities; return built>=5?5:(built>=4?2:0); }
 function totalRes(p){ return RES_ORDER.reduce((x,r)=>x+p.res[r],0); }
@@ -6259,6 +6267,15 @@ function flashRes(playerIdx, rtype, delta){
     if(cell.classList){ cell.classList.remove('res-flash'); void cell.offsetWidth; cell.classList.add('res-flash');
       setTimeout(()=>cell.classList.remove('res-flash'), 700); }
   }catch(e){ /* UI 反馈失败绝不影响博弈逻辑 */ }
+}
+// 玩家权力数字高亮（power-flash）：任何权力变动都可调（战役敕令/危机/幕间等直接改 power 处）。无头/模拟安全。
+function flashPower(playerIdx){
+  try{
+    if(typeof G!=='undefined' && G && G._simulating) return;
+    if(typeof document==='undefined' || !document.querySelectorAll) return;
+    setTimeout(()=>{ try{ const els=document.querySelectorAll('.pl-pw-'+playerIdx);
+      els.forEach&&els.forEach(e=>{ e.style.animation='none'; void e.offsetHeight; e.style.animation='power-flash .5s ease-out'; }); }catch(e){} }, 50);
+  }catch(e){}
 }
 // 骰子面结果 HTML（用于 3D 骰子落点展示）
 function faceToHTML(face){
@@ -8138,6 +8155,7 @@ function showRules(){
     + sec('🎲 战斗骰', `<b style="color:#3b7fe2">突袭</b>(蓝)：6面有3面命中，稳定、无自损。<br><b style="color:#d6564f">强攻</b>(红)：高伤（含双命中）但多自损，含 1 面「拦截」。<br><b style="color:#d59a3e">劫掠</b>(橙)：命中建筑/用钥匙抢资源；可用条件：敌方在本系统有建筑，或敌方全图无任何建筑。<br>结算顺序：自损 → 拦截（受守方鲜活舰船数限制）→ 命中（先船后建筑）→ 建筑命中 → 钥匙抢资源。每击毁 1 艘敌舰得 1 <b>战利品</b>。`)
     + sec('🏆 雄心与计分', `主导/跟随打出数字 <b>2–6</b> 可声明对应雄心（4人局「7」可任选，「1」不可声明），取走<b>面值最高的未用标记</b>放入该雄心盒，并把该牌点数视为 0。<br>每章末按各<b>已声明</b>的雄心盒结算：该项数量<b>最多者得首位分</b>，次多者得次位分；并列首位各得次位分。<br>初始标记面值（声明越早拿到面值越高）：<b>5/3、3/2、2/0</b>；每章末翻面升级最低一枚（翻后最终为 9/5、6/4、4/2）。首位额外加成：建有 ≥4 城市 +2、≥5 城市 +5。<br>雄心项：${ambRows}。`)
     + sec('🧹 章节清理', `结算后：若本章结算过<b>军阀</b>，全体返还战利品；结算过<b>暴君</b>，全体返还俘虏。标记复位、重洗牌库、每人发 6 张，开始下一章。`)
+    + sec('📜 战役（三幕结构）', `战役分 <b>三幕（Act）</b>：第 1/2 幕各 <b>3 章</b>、第 3 幕 <b>4 章</b>——<b>忽略权力阈值</b>，不因谁到分而提前终局。<br>每人持一张<b>命运（Fate）卡</b>，每幕有目标；第 1/2 幕结束进入<b>中场休息</b>（返还战利品/俘虏、清议会、权力减半、传先攻、选命运：达成者可留、失败者必换），第 1 幕后抽 <b>B 套</b>命运、第 2 幕后抽 <b>C 套</b>。<br><b>终局</b>：第 3 幕某章末，谁的<b>命运最终目标达成</b>（目标标记到 0 且 ≥1 权力）即赢下整局（优先于比权力）；无人达成则第 3 幕第 4 章末<b>权力最高者</b>胜。<br><b>帝国政治</b>：攫取<b>帝国议会</b>→回合末你<b>二选一</b>结算 敕令（帝国征收+行动）或 危机（凋敝等）；成为<b>首席摄政</b>掌管帝国信托。<b>凋敝（Blight）</b>会侵蚀星系、在危机时造成伤害。（顶栏常驻显示 幕/首席摄政/信托/凋敝/议会待结算。）`)
     + sec('⌨ 快捷键', shortcutListHTML());
     // 棋子图示（用与棋盘一致的图标函数生成，保证一致）：让测试者快速识别 舰船/城市/星港
     const legend=el('div'); legend.style.cssText='margin:2px 0 6px';
