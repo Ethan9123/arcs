@@ -1804,8 +1804,13 @@ const FATE_OBJECTIVE_CHECK = {
 //   仅 C 命运(17-24)有 final objective（计时器满+≥1权力即获胜，见 campChapterEndJudge）。
 // Act III 章节轨（第 1-4 章）→ [满足一个大雄心的权力, 两个都满足的权力]（规则书 p.9 图；与卡面示例「第3章满足一个=4权力」一致）。
 const CHAPTER_POWER = {1:[2,4], 2:[3,8], 3:[4,14], 4:[5,20]};
-// 每个 A/B 命运的两个大雄心（各自独立布尔；条件文本见 _court_tmp/fate_specs.json act3.objectiveConditions）。
-//   注：F5 傀儡销毁 / F12 海盗据点宣告 原为「每章选择」型，此处以状态近似(更多傀儡/藏宝)。
+// 每个 A/B 命运的两个大雄心（各自独立布尔；条件文本见 _court_tmp/fate_specs.json act3.objectiveConditions，逐卡对照卡图核实）。
+//   两大雄心「皆满足」应 ⟺ 对应 FATE_OBJECTIVE_CHECK[num][3]（终局条件的分解）。已按此修正 F7(前置摄政门控+忠诚舰条件)、F11(前置无对手军阀门控+破碎世界条件)。
+//   仍为「近似」的（受数字模型限制，非本层能保真）：
+//     · F5 傀儡：卡面为「每章选择销毁遗物/傀儡」的动作型，此处用傀儡数(≥1/≥2)近似（终局判定同用此代理，需接线面板销毁的每章标志才能保真）。
+//     · F12 海盗：卡面为「如实宣告据点系统无敌件/有忠诚件」，此处用藏宝数(≥2/≥4)近似（据点 p._haven 靠面板手设，AI/无头不设→改判真实据点会令 AI 永不达成）。
+//     · F2 缔造者：缺前置「联邦已赢联邦雄心」——联邦雄心机制未在引擎建模，不臆造。
+//     · F3 大亨：计分后强制弃 1 垄断卡已实现（见 campChapterEndJudge）；「一并弃该类型全部资源」因垄断为无类型计数无法建模。
 const GRAND_AMBITIONS = {
   1:[(p,i)=> p.identity==='regent' && campAllOutlawCitiesControlled(), (p,i)=> G.campaign.firstRegentIdx===i && campTrustTotal()>G.chapter],
   2:[(p,i)=> campFounderFreeCities()>=3, (p,i)=> campFounderFreeCities()>=7],
@@ -1813,11 +1818,11 @@ const GRAND_AMBITIONS = {
   4:[(p,i)=> campGuildSuits(i)>G.chapter, (p,i)=> campGuildCardsInCourt()*2>G.court.length],
   5:[(p,i)=> campGolems(i)>=1, (p,i)=> campGolems(i)>=2],
   6:[(p,i)=> hasMostGuildCards(p,i), (p,i)=> G.initiative===i],
-  7:[(p,i)=> p.identity==='regent', (p,i)=> (campPlanetsControlled(i)+(G.campaign.firstRegentIdx===i?campEmpireSystems().filter(id=>G.map[id].kind==='planet').length:0))>=9],
+  7:[(p,i)=> p.identity==='regent' && (campPlanetsControlled(i)+(G.campaign.firstRegentIdx===i?campEmpireSystems().filter(id=>G.map[id].kind==='planet').length:0))>=9, (p,i)=> p.identity==='regent' && campMoreLoyalShipsThanRivals(i)],  // 卡面(back_0_2)：前置『你是摄政』门控两个大雄心=①控≥9行星 ②忠诚舰多于每个对手；原实现把前置误当计分雄心且漏了忠诚舰条件
   8:[(p,i)=> campAmbMarkersOnIdeals()>=2, (p,i)=> campAmbMarkersOnIdeals()>=3],
   9:[(p,i)=> !!p._portalFound, (p,i)=> (p._pilgrimsHome||0)>G.chapter],
   10:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'tyrant')), (p,i)=> campMarksOf(i,'banner')>G.chapter],
-  11:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')), (p,i)=> campEveryPlayerHasOutrage()],
+  11:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && campEveryPlayerHasOutrage(), (p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')) && (campBrokenWorlds()>G.chapter || campBuildingsOnMap()===0)],  // 卡面(back_0_0)：前置『无对手赢军阀』门控两大雄心=①每人有民愤 ②破碎世界>章节或地图无建筑；对齐 FATE_OBJECTIVE_CHECK[11][3]（原实现把前置误当雄心且漏②）
   12:[(p,i)=> campHoardTotal(i)>=2, (p,i)=> campHoardTotal(i)>=4],
   13:[(p,i)=> G.players.every((q,j)=> j===i || !campWonAmbition(j,'warlord')), (p,i)=> (p._blightHungerPieces||0)>G.chapter],
   14:[(p,i)=> p.trophies===0 && p.captives===0, (p,i)=> campRivalsPsionicSum(i)>(p.res.psionic||0)],
@@ -1872,7 +1877,8 @@ function campChapterEndJudge(){
       const cnt=campGrandAmbitionCount(i);
       if(cnt>=1){ const tbl=CHAPTER_POWER[G.chapter]||CHAPTER_POWER[4]; const gain=cnt>=2?tbl[1]:tbl[0];
         p.power+=gain; if(typeof flashPower==='function') flashPower(i);
-        campLog(`✨ ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）第 ${G.chapter} 章大雄心 ${cnt}/2 达成 → +${gain} 权力（章节轨 ${tbl[0]}/${tbl[1]}）`); }
+        campLog(`✨ ${pname(i)}（${(fateByNum(p.fate)||{}).cn||''}）第 ${G.chapter} 章大雄心 ${cnt}/2 达成 → +${gain} 权力（章节轨 ${tbl[0]}/${tbl[1]}）`);
+        if(p.fate===3 && campMonopolies(i)>0){ campLoseMonopoly(i); campLog(`${pname(i)} 大亨大雄心计分后·强制废弃 1 张垄断卡（卡面 F3；数字版垄断为无类型计数，其「同类型资源一并废弃」无法建模，故仅弃卡）`,'sys'); } }  // F3 卡面：计分后必须 scrap 1 垄断+该类型全部资源；此处只做可建模的弃 1 垄断卡
     }
   });
   G.players.forEach(p=>{ p._ambWon={}; }); // 清空本章雄心记录
