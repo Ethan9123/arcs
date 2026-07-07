@@ -265,6 +265,7 @@
   .die3d.landing{animation:die-settle .35s ease-out forwards}
   .die3d.glow-hit{filter:drop-shadow(0 0 9px #ffd700)}
   .die3d.glow-miss{opacity:.45}
+  .die3d img.dieface{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block} /* 官方骰面图占满骰体（图自带底色纹理） */
   #dice-anim{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}
   @keyframes battle-flash {
     0%{filter:drop-shadow(0 0 0px #e56157)}
@@ -559,19 +560,19 @@ const DICE = {
   skirmish:{name:'突袭', css:'#3b7fe2', faces:[
     {hit:1},{hit:1},{hit:1},{},{},{} ]},
   assault:{name:'强攻', css:'#d6564f', faces:[
-    {hit:2},{hit:1,self:1},{hit:1,self:1},{hit:1,self:1},{hit:1,intercept:1},{} ]},
+    {hit:2},{hit:2,self:1},{hit:1,self:1},{hit:1,self:1},{hit:1,intercept:1},{} ]},
   raid:{name:'劫掠', css:'#d59a3e', faces:[
     {key:2,intercept:1},{key:1,self:1},{bldg:1,key:1},{bldg:1,self:1},{bldg:1,self:1},{intercept:1} ]},
 };
 
 // 战斗骰面期望值预览（受 Arcs Arsenal「骰子计算器」启发）。纯函数，便于无头测试。
 // 返回基础（无重掷/无传说修正）的平均结果——重掷只对攻方有利，故显示值偏保守。
-// 期望（每面 1/6）：突袭 hit 3/6=0.5；强攻 hit (2+1+1+1+1+0)/6=1.0 · self 3/6 · intercept 1/6；
+// 期望（每面 1/6）：突袭 hit 3/6=0.5；强攻 hit (2+2+1+1+1+0)/6=7/6≈1.17 · self 3/6 · intercept 1/6；
 //   劫掠 key (2+1+1)/6 · bldg 3/6 · self 3/6 · intercept 2/6。
 // 拦截是「整场一次」触发：任一强攻/劫掠骰出拦截，攻方再损「守方新鲜舰数」艘。
 function battleOdds(alloc, defFresh){
   const sk=alloc.skirmish|0, as=alloc.assault|0, ra=alloc.raid|0;
-  const eHit  = sk*0.5 + as*1;
+  const eHit  = sk*0.5 + as*(7/6);
   const eBldg = ra*(3/6);
   const eKey  = ra*(4/6);
   const eSelfFace = as*(3/6) + ra*(3/6);
@@ -2830,14 +2831,18 @@ function aiBestDiceAlloc(md, defFresh, ctx){
   // 劫掠收益受实际可得封顶：建筑数 nBldg、可掠物数 nLoot（缺省=不封顶，供纯测试）
   const capB = ctx.nBldg!=null ? ctx.nBldg : Infinity;
   const capK = ctx.nLoot!=null ? ctx.nLoot : Infinity;
+  const nShips = ctx.nShips!=null ? ctx.nShips : Infinity; // 守方舰总数(新鲜+受损)：命中的实际舰目标上限
   let best={skirmish:md,assault:0,raid:0}, bestU=-Infinity;
   for(let ra=0; ra<=raidMax; ra++){
     for(let as=0; as<=md-ra; as++){
       const sk=md-ra-as; if(sk+as+ra===0) continue;
       if(ctx.waryLimit && as>sk) continue; // 谨慎(Wary)：强攻骰不能多于突袭骰
       const o=battleOdds({skirmish:sk,assault:as,raid:ra}, defFresh);
-      const eB=Math.min(o.eBldg, capB), eK=Math.min(o.eKey, capK);
-      const u = o.eHit*wKill + eB*wBldg + eK*wKey - o.eSelf*wSelf;
+      // 命中先打舰、舰尽溢出打建筑（rb 口径，见 applyBattleHits）：按目标封顶，避免高命中虚高
+      const shipKills=Math.min(o.eHit, nShips);
+      const spill=Math.max(0, o.eHit - nShips);
+      const eB=Math.min(o.eBldg + spill, capB), eK=Math.min(o.eKey, capK);
+      const u = shipKills*wKill + eB*wBldg + eK*wKey - o.eSelf*wSelf;
       if(u>bestU+1e-9){ bestU=u; best={skirmish:sk,assault:as,raid:ra}; }
     }
   }
@@ -2854,7 +2859,8 @@ function aiDoBattle(target, defC){
   const defHasLoot=nLoot>0;
   const raidOK=raidAllowed(defC,target) && (defHasBldg || defHasLoot); // 与旧逻辑同样以 raidAllowed 把关，杜绝非法收劫掠骰
   const waryLimit=(G.useExpansion&&leaderHas(me,'wary'));
-  const a=aiBestDiceAlloc(md, defFresh, {raidOK, defHasBldg, canSteal:raidOK&&defHasLoot, nBldg, nLoot, waryLimit});
+  const nShips=s.pieces.ships[defC]|0; // 守方舰总数(含受损)：命中的实际舰目标数
+  const a=aiBestDiceAlloc(md, defFresh, {raidOK, defHasBldg, canSteal:raidOK&&defHasLoot, nBldg, nLoot, nShips, waryLimit});
   runBattle(target, defC, a);
 }
 // 静音驱动：假定 G 已指向工作态；临时静音 UI + 换移动感知模态自答 + 驱动引擎，最后还原 UI(不动 G)。
@@ -4277,7 +4283,7 @@ function renderTrick(){
     const wrap=el('div','trick-card');
     wrap.appendChild(cardEl(pl.card,null,{small:true}));
     let mode=({lead:'主导',surpass:'超越',copy:'复制',pivot:'转向'})[pl.mode]||pl.mode;
-    if(pl.mode==='lead' && G.lead && G.lead.ambition && AMBITIONS[G.lead.ambition]) mode+='·宣'+AMBITIONS[G.lead.ambition].name;
+    if(pl.mode==='lead' && G.lead && G.lead.ambition && AMBITIONS[G.lead.ambition]) mode+='·宣'+AMBITIONS[G.lead.ambition].name+'⓪'; // ⓪=official Zero Marker：宣告后此牌点数视为 0，更易被超越夺先攻
     const seized=(G.seizedBy===pl.playerIdx);
     const tag=el('div','trick-tag');
     tag.innerHTML=`<span class="tn" style="color:${pcolTxt(ply)}">${ply.name}</span><span class="tm">${mode}${seized?' 🏁':''}</span>`;
@@ -4489,6 +4495,9 @@ function probeAssets(){ if(_assetsProbed||typeof Image==='undefined') return; _a
   const cands=[]; const cols=PCOLORS.map(c=>c.key).concat(['imperial','free']);
   ['ship','city','starport','agent','flagship','initiative'].forEach(t=>cols.forEach(c=>cands.push(ASSET_PIECES_DIR+t+'_'+c+'.png')));
   (typeof RES_ORDER!=='undefined'?RES_ORDER:[]).forEach(r=>cands.push(ASSET_RES_DIR+r+'.png'));
+  // 官方战斗骰面图（TTS 素材切片）：按 <type>_<内容键> 探测
+  [['skirmish',['blank','h1']],['assault',['blank','h1s1','h1i1','h2s1','h2']],
+   ['raid',['k2i1','k1s1','i1','b1s1','b1k1']]].forEach(([t,keys])=>keys.forEach(k=>cands.push('assets/dice/'+t+'_'+k+'.png')));
   let pending=cands.length, any=false; if(!pending) return;
   cands.forEach(src=>{ const im=new Image();
     im.onload=()=>{ ASSET_OK[src]=true; any=true; if(--pending<=0&&any&&typeof render==='function') render(); };
@@ -6537,8 +6546,16 @@ function flashPower(playerIdx){
       els.forEach&&els.forEach(e=>{ e.style.animation='none'; void e.offsetHeight; e.style.animation='power-flash .5s ease-out'; }); }catch(e){} }, 50);
   }catch(e){}
 }
-// 骰子面结果 HTML（用于 3D 骰子落点展示）
-function faceToHTML(face){
+// 骰面 → 内容键（'h2s1'/'k2i1'/'blank'…），与 assets/dice/<type>_<key>.png 官方骰面图对应
+function diceFaceKey(face){
+  const abbr={hit:'h',bldg:'b',key:'k',self:'s',intercept:'i'}; let key='';
+  for(const k of ['hit','bldg','key','self','intercept']){ const n=face[k]||0; if(n>0) key+=abbr[k]+n; }
+  return key||'blank';
+}
+// 骰子面结果 HTML（用于 3D 骰子落点展示）：有官方骰面图（TTS 素材切片）优先用图，缺图回退符号
+function faceToHTML(face, dieType){
+  if(dieType){ const p='assets/dice/'+dieType+'_'+diceFaceKey(face)+'.png';
+    if(typeof ASSET_OK!=='undefined' && ASSET_OK[p]) return `<img class="dieface" src="${p}" alt="">`; }
   const syms={hit:'⚔',bldg:'🏠',key:'🔑',self:'🔥',intercept:'🛡'};
   const parts=[];
   for(const k of ['hit','bldg','key','self','intercept']){
@@ -6576,7 +6593,7 @@ function animateDice(id,defC,a){
         setTimeout(()=>{
           d.classList.remove('rolling'); d.classList.add('landing');
           const fi=result.faces[i];
-          if(fi){ d.innerHTML=faceToHTML(fi.face);
+          if(fi){ d.innerHTML=faceToHTML(fi.face, fi.type);
             const hasHit=(fi.face.hit||0)+(fi.face.bldg||0)>0, blank=!Object.keys(fi.face).filter(k=>k!=='_rerolled').some(k=>fi.face[k]);
             if(hasHit) d.classList.add('glow-hit'); else if(blank) d.classList.add('glow-miss');
           }
