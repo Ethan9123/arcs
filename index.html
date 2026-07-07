@@ -131,6 +131,7 @@
   #ambitions{display:flex;flex-direction:column;gap:4px}
   .amb{display:flex;align-items:center;gap:8px;font-size:12px;padding:4px 6px;border-radius:6px;background:var(--panel2)}
   .amb .ic{width:18px;text-align:center}
+  .amb-mk{width:22px;height:22px;vertical-align:middle;filter:drop-shadow(0 1px 2px #0009)} /* 官方雄心标记六角图 */
   .amb .val{margin-left:auto;font-weight:700}
   .amb.declared{outline:1px solid var(--gold)}
   /* 按钮 */
@@ -3081,10 +3082,10 @@ function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
     // 3 枚雄心标记：开局蓝面（低）朝上 → 5/3、3/2、2/0（官方规则书 p.4-E/p.5/p.18 实拍核对）。
     // f/s = 当前面的「首位/次位」权力；nf/ns = 翻面后的高面值；flipped = 是否已翻面。
     // 每章清算 Step2：把所有标记收回可用区，并翻面「当前首位权力最低且尚未翻面」的一枚（escalation，p.19）。
-    // 翻面高面值取通行的实体标记数值（2/0→4/2、3/2→6/4、5/3→9/5）。
+    // 翻面高面值=官方实体标记橙面（2/0→4/2、3/2→6/3、5/3→9/4；TTS 官方部件扫描逐格核对 2026-07-08）。
     markersAvailable:[
-      {f:5,s:3,flipped:false,nf:9,ns:5},
-      {f:3,s:2,flipped:false,nf:6,ns:4},
+      {f:5,s:3,flipped:false,nf:9,ns:4},
+      {f:3,s:2,flipped:false,nf:6,ns:3},
       {f:2,s:0,flipped:false,nf:4,ns:2},
     ], // 宣告时取「当前首位最高」者
     declaredThisChapter:{}, // ambitionKey -> true
@@ -4498,6 +4499,8 @@ function probeAssets(){ if(_assetsProbed||typeof Image==='undefined') return; _a
   // 官方战斗骰面图（TTS 素材切片）：按 <type>_<内容键> 探测
   [['skirmish',['blank','h1']],['assault',['blank','h1s1','h1i1','h2s1','h2']],
    ['raid',['k2i1','k1s1','i1','b1s1','b1k1']]].forEach(([t,keys])=>keys.forEach(k=>cands.push('assets/dice/'+t+'_'+k+'.png')));
+  // 官方雄心标记六角图（正面蓝 5/3·3/2·2/0，翻面橙 9/4·6/3·4/2）
+  ['5_3','3_2','2_0','9_4','6_3','4_2'].forEach(v=>cands.push('assets/tokens/amb_'+v+'.png'));
   let pending=cands.length, any=false; if(!pending) return;
   cands.forEach(src=>{ const im=new Image();
     im.onload=()=>{ ASSET_OK[src]=true; any=true; if(--pending<=0&&any&&typeof render==='function') render(); };
@@ -4820,8 +4823,14 @@ function renderAmbitions(){
   const proj=projectAmbitionScores();        // 若此刻结算章末的预估加分（纯只读）
   let anyProj=false;
   // 「可用标记」置于首行：宣告前先看还剩什么标记（决定宣不宣告的关键信息，不该沉底）
-  { const avail=el('div','amb'); avail.title='宣告雄心时取走剩余最高标记；首位得 f、次位得 s（↑=已翻面升值）';
-    avail.innerHTML=`<span class="ic">▣</span><span>可用标记</span><span class="val">${G.markersAvailable.map(m=>m.f+'/'+m.s+(m.flipped?'↑':'')).join(' · ')||'（本章已全部宣告）'}</span>`;
+  { const avail=el('div','amb'); avail.title='宣告雄心时取走剩余最高标记；首位得大字、次位得小字（橙面=已翻面升值）';
+    const mkHTML=G.markersAvailable.map(m=>{
+      const p='assets/tokens/amb_'+m.f+'_'+m.s+'.png';   // 官方标记六角图（TTS 部件扫描）
+      return (typeof ASSET_OK!=='undefined'&&ASSET_OK[p])
+        ? `<img class="amb-mk" src="${p}" alt="${m.f}/${m.s}" title="首位+${m.f} / 次位+${m.s}${m.flipped?'（已翻面）':''}">`
+        : m.f+'/'+m.s+(m.flipped?'↑':'');
+    }).join(' ');
+    avail.innerHTML=`<span class="ic">▣</span><span>可用标记</span><span class="val" style="display:inline-flex;align-items:center;gap:3px">${mkHTML||'（本章已全部宣告）'}</span>`;
     box.appendChild(avail); }
   AMB_ORDER.forEach((k,i)=>{
     const a=AMBITIONS[k];
@@ -5497,7 +5506,7 @@ function dealNewChapter(){
   G.players.forEach(p=>{ if(p._blightHungerPieces) p._blightHungerPieces=0; p._f5Lore=false; p._f5Golem=false; });   // F13 饥饿计数 + F5 看护者每章销毁标志 章初清零
 }
 // 章末清算：收回所有雄心标记（盒中+可用）到可用区，并把「当前首位权力最低且尚未翻面」的一枚翻到高面。
-// 翻面是持久的（跨章累积）：第1章末翻 2/0→4/2，第2章末翻 3/2→6/4，第3章末翻 5/3→9/5，之后无可翻。
+// 翻面是持久的（跨章累积）：第1章末翻 2/0→4/2，第2章末翻 3/2→6/3，第3章末翻 5/3→9/4，之后无可翻。
 function flipLowestAmbitionMarker(){
   const all=[...G.markersAvailable]; AMB_ORDER.forEach(k=>{ all.push(...G.ambitionBox[k]); G.ambitionBox[k]=[]; });
   G.markersAvailable=all;
@@ -8467,7 +8476,7 @@ function showRules(){
     + sec('🛠 七种行动', `<b>课税</b>：在你控制城市的行星取该资源。<br><b>建造</b>：忠诚太空港造舰船；或在你有<b>忠诚棋子（舰船或建筑）</b>的行星空槽建城市/太空港（敌方控制处所建为受损）。<br><b>移动</b>：把忠诚舰船移往相邻系统。<br><b>修理</b>：修复 1 个你的受损建筑。<br><b>影响</b>：在议会卡上放置 1 名密探。<br><b>收纳</b>：将你占多数密探的议会卡收入麾下，俘获其上敌方密探（计入暴君）。<br><b>战斗</b>：在你有舰船且有敌方棋子的系统投骰。`)
     + sec('🎛 控制权 · 占多数 · 新鲜/受损', `<b>控制权</b>：你在某系统的<b>新鲜舰船数</b>多于其中<b>每一名</b>其他玩家，则你控制该系统；并列最多则<b>无人控制</b>（对各方皆视为「忠诚」可用）。课税忠诚城市、建造、弹射等都看控制权。<i>提示：把鼠标悬停到棋盘系统上可直接看到当前控制权。</i><br><b>占多数（议会）</b>：某议会卡上你的密探数 <b>≥ 任意单个对手</b>的密探数，即占多数 → 可<b>收纳</b>该卡。<br><b>新鲜 vs 受损舰</b>：新鲜舰可移动、计入控制权、受劫掠拦截倍数；<b>受损舰不计控制权</b>（图上倒置半透明显示），再受 1 击即被摧毁。`)
     + sec('🎲 战斗骰', `<b style="color:#3b7fe2">突袭</b>(蓝)：6面有3面命中，稳定、无自损。<br><b style="color:#d6564f">强攻</b>(红)：高伤（含双命中）但多自损，含 1 面「拦截」。<br><b style="color:#d59a3e">劫掠</b>(橙)：命中建筑/用钥匙抢资源；可用条件：敌方在本系统有建筑，或敌方全图无任何建筑。<br>结算顺序：自损 → 拦截（受守方鲜活舰船数限制）→ 命中（先船后建筑）→ 建筑命中 → 钥匙抢资源。每击毁 1 艘敌舰得 1 <b>战利品</b>。`)
-    + sec('🏆 雄心与计分', `主导/跟随打出数字 <b>2–6</b> 可声明对应雄心（4人局「7」可任选，「1」不可声明），取走<b>面值最高的未用标记</b>放入该雄心盒，并把该牌点数视为 0。<br>每章末按各<b>已声明</b>的雄心盒结算：该项数量<b>最多者得首位分</b>，次多者得次位分；并列首位各得次位分。<br>初始标记面值（声明越早拿到面值越高）：<b>5/3、3/2、2/0</b>；每章末翻面升级最低一枚（翻后最终为 9/5、6/4、4/2）。首位额外加成：建有 ≥4 城市 +2、≥5 城市 +5。<br>雄心项：${ambRows}。`)
+    + sec('🏆 雄心与计分', `主导/跟随打出数字 <b>2–6</b> 可声明对应雄心（4人局「7」可任选，「1」不可声明），取走<b>面值最高的未用标记</b>放入该雄心盒，并把该牌点数视为 0。<br>每章末按各<b>已声明</b>的雄心盒结算：该项数量<b>最多者得首位分</b>，次多者得次位分；并列首位各得次位分。<br>初始标记面值（声明越早拿到面值越高）：<b>5/3、3/2、2/0</b>；每章末翻面升级最低一枚（翻后最终为 9/4、6/3、4/2）。首位额外加成：建有 ≥4 城市 +2、≥5 城市 +5。<br>雄心项：${ambRows}。`)
     + sec('🧹 章节清理', `结算后：若本章结算过<b>军阀</b>，全体返还战利品；结算过<b>暴君</b>，全体返还俘虏。标记复位、重洗牌库、每人发 6 张，开始下一章。`)
     + sec('📜 战役（三幕结构）', `战役分 <b>三幕（Act）</b>：第 1/2 幕各 <b>3 章</b>、第 3 幕 <b>4 章</b>——<b>忽略权力阈值</b>，不因谁到分而提前终局。<br>每人持一张<b>命运（Fate）卡</b>，每幕有目标；第 1/2 幕结束进入<b>中场休息</b>（返还战利品/俘虏、清议会、权力减半、传先攻、选命运：达成者可留、失败者必换），第 1 幕后抽 <b>B 套</b>命运、第 2 幕后抽 <b>C 套</b>。<br><b>终局</b>：第 3 幕某章末，谁的<b>命运最终目标达成</b>（目标标记到 0 且 ≥1 权力）即赢下整局（优先于比权力）；无人达成则第 3 幕第 4 章末<b>权力最高者</b>胜。<br><b>帝国政治</b>：攫取<b>帝国议会</b>→回合末你<b>二选一</b>结算 敕令（帝国征收+行动）或 危机（凋敝等）；成为<b>首席摄政</b>掌管帝国信托。<b>凋敝（Blight）</b>会侵蚀星系、在危机时造成伤害。（顶栏常驻显示 幕/首席摄政/信托/凋敝/议会待结算。）`)
     + sec('⌨ 快捷键', shortcutListHTML());
