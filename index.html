@@ -27,10 +27,10 @@
   /* ---- 左：棋盘 ---- */
   #boardWrap{flex:1;position:relative;min-width:0;display:flex;align-items:center;justify-content:center;
     background:radial-gradient(circle at 50% 45%,#15203a 0%,#0b0e17 70%)}
-  #board{width:100%;height:100%;max-width:100%;max-height:100%}
+  #board{width:100%;height:100%;max-width:100%;max-height:100%;touch-action:none} /* 触屏：捏合/拖拽归棋盘，不触发浏览器页面缩放 */
   /* ---- 右：信息面板 ---- */
   #side{width:360px;min-width:360px;background:var(--panel);border-left:1px solid var(--line);
-    display:flex;flex-direction:column;height:100vh}
+    display:flex;flex-direction:column;height:100vh;overflow-y:auto} /* 总高溢出时整栏可滚兜底 */
   .side-sec{border-bottom:1px solid var(--line);padding:10px 12px}
   .side-sec h3{margin:0 0 8px;font-size:12px;letter-spacing:1px;color:var(--gold);text-transform:uppercase;font-weight:700;
     border-left:3px solid var(--gold);padding-left:7px;line-height:1.1}
@@ -166,6 +166,20 @@
   .modal-x:hover{color:var(--ink);border-color:var(--gold)}
   .log-newpill{position:sticky;bottom:2px;margin:4px auto 0;width:max-content;padding:2px 12px;border-radius:12px;
     background:#1a2440ee;border:1px solid var(--gold);color:var(--gold);font-size:11px;cursor:pointer;text-align:center}
+  /* AI 战斗战报浮层（官方骰面图） */
+  #battleFloat{position:fixed;right:376px;bottom:14px;z-index:40;background:#10182aee;border:1px solid #d9b25a88;
+    border-radius:12px;padding:10px 12px;box-shadow:0 8px 30px #000a;animation:slide-up .25s ease-out;max-width:330px}
+  #battleFloat.out{opacity:0;transition:opacity .45s}
+  #battleFloat .bf-hd{font-size:12.5px;font-weight:700;color:#f0d080;margin-bottom:6px}
+  #battleFloat .bf-dice{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}
+  #battleFloat .bf-die{width:34px;height:34px;border-radius:7px;overflow:hidden;display:inline-flex;align-items:center;
+    justify-content:center;color:#fff;box-shadow:0 2px 6px #0008;position:relative}
+  #battleFloat .bf-die.sk{background:linear-gradient(145deg,#4a8ef5,#2b5fb8)}
+  #battleFloat .bf-die.as{background:linear-gradient(145deg,#e56157,#b03530)}
+  #battleFloat .bf-die.ra{background:linear-gradient(145deg,#e5aa40,#b07820)}
+  #battleFloat .bf-die img.dieface{width:100%;height:100%;object-fit:cover}
+  #battleFloat .bf-sum{font-size:11.5px;color:#c4cde0}
+  @media(max-width:820px){ #battleFloat{right:10px;bottom:72px} }
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0c1220ee;border:1px solid var(--gold);
     color:var(--ink);padding:10px 18px;border-radius:10px;z-index:60;font-size:14px;display:none;box-shadow:0 6px 20px #000a}
   /* SVG 元素 */
@@ -212,7 +226,7 @@
   #cmtBody .cmt-cold{color:#ff8585}
   @keyframes cmtPulse{0%{transform:scale(.985);opacity:.6}100%{transform:scale(1);opacity:1}}
   #commentary.cmt-flash{animation:cmtPulse 360ms ease}
-  .ccard{width:92px;min-height:64px;background:#21283c;border:1px solid #3a466a;border-radius:8px;
+  .ccard{width:92px;min-height:64px;height:128px;background:#21283c;border:1px solid #3a466a;border-radius:8px; /* 固定高：图载入不再跳变 */
     padding:6px;font-size:11px;color:#dfe6f5;box-shadow:0 3px 8px #0007;cursor:pointer;transition:border-color .15s,transform .1s}
   .ccard:hover{border-color:#e8c97a;transform:translateY(-2px)}
   .ccard.vox{background:#2c2336;border-color:#6b4f7a}
@@ -274,6 +288,9 @@
   .die3d.glow-hit{filter:drop-shadow(0 0 9px #ffd700)}
   .die3d.glow-miss{opacity:.45}
   .die3d img.dieface{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block} /* 官方骰面图占满骰体（图自带底色纹理） */
+  .die3d{position:relative}
+  .die3d::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.28)} /* 高光叠在骰面图之上：有图/缺图质感一致 */
   #dice-anim{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}
   @keyframes battle-flash {
     0%{filter:drop-shadow(0 0 0px #e56157)}
@@ -4386,7 +4403,10 @@ function renderBoard(){
   const svg=$('#board'); svg.innerHTML='';
   if(_boardImgState!=='fail'){
     // 官方棋盘图为底（中文 TTS 纹理，含雄心栏/章节/计分轨）
-    svg.appendChild(svgEl('image',{href:'assets/board.jpg',x:0,y:0,width:3481,height:1860,preserveAspectRatio:'none'}));
+    { const bg=svgEl('image',{href:'assets/board.jpg',x:0,y:0,width:3481,height:1860,preserveAspectRatio:'none'});
+      bg.setAttribute('style','opacity:0;transition:opacity .5s ease-out');
+      bg.addEventListener('load',()=>bg.setAttribute('style','opacity:1;transition:opacity .5s ease-out'),{once:true});
+      svg.appendChild(bg); } // 首载淡入，不再生硬弹现
   } else {
     // 回退：暗色底 + 邻接连线 + 中心标识（无素材环境）
     svg.appendChild(svgEl('rect',{x:0,y:0,width:3481,height:1860,fill:'#0b0f1a'}));
@@ -4400,6 +4420,10 @@ function renderBoard(){
     }
   }
   for(const id in G.map){ drawSystem(svg, G.map[id]); }
+  // 相邻 hit 圈重叠带(4B/4C 等)：合法目标节点提到 DOM 末尾——重叠带内点击判给「发光的那个」而非后绘者
+  if(G.highlight && G.highlight.size){
+    svg.querySelectorAll('g.sys-node').forEach(n=>{ if(G.highlight.has(n.getAttribute('data-sys'))) svg.appendChild(n); });
+  }
   drawBoardState(svg);
 }
 // 把游戏状态画到官方板面的印刷轨道上：权力计分轨 / 章节圈 / 雄心栏宣告标记
@@ -4448,10 +4472,27 @@ function boardViewReset(){ BVIEW.x=0;BVIEW.y=0;BVIEW.w=3481;BVIEW.h=1860; boardV
     BVIEW.y=Math.min(Math.max(pt.y-(pt.y-BVIEW.y)*(h/BVIEW.h),0),1860-h);
     BVIEW.w=w; BVIEW.h=h; boardViewApply();
   },{passive:false});
-  let drag=null;
+  let drag=null; const ptrs=new Map();   // pointerId → 最新屏坐标（触屏多指跟踪，此前第二指直接覆盖起点）
+  const pinch={on:false,d0:0,w0:0,cx:0,cy:0};
   svg.addEventListener('pointerdown',ev=>{ if(ev.button!==0&&ev.pointerType==='mouse') return;
+    ptrs.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+    if(ptrs.size===2){ // 双指 → 捏合缩放（以两指中点为锚）
+      const [a,b]=[...ptrs.values()];
+      pinch.on=true; pinch.d0=Math.hypot(a.x-b.x,a.y-b.y)||1; pinch.w0=BVIEW.w;
+      const pt=toBoard({clientX:(a.x+b.x)/2, clientY:(a.y+b.y)/2}); pinch.cx=pt.x; pinch.cy=pt.y;
+      drag=null; svg._suppressClick=true; return;
+    }
     drag={sx:ev.clientX,sy:ev.clientY,bx:BVIEW.x,by:BVIEW.y,moved:false}; });
-  svg.addEventListener('pointermove',ev=>{ if(!drag) return;
+  svg.addEventListener('pointermove',ev=>{
+    if(ptrs.has(ev.pointerId)) ptrs.set(ev.pointerId,{x:ev.clientX,y:ev.clientY});
+    if(pinch.on && ptrs.size>=2){
+      const [a,b]=[...ptrs.values()]; const d=Math.hypot(a.x-b.x,a.y-b.y)||1;
+      const w=Math.min(3481,Math.max(550,pinch.w0*(pinch.d0/d))); const h=w*1860/3481;
+      BVIEW.x=Math.min(Math.max(pinch.cx-(pinch.cx-BVIEW.x)*(w/BVIEW.w),0),3481-w);
+      BVIEW.y=Math.min(Math.max(pinch.cy-(pinch.cy-BVIEW.y)*(h/BVIEW.h),0),1860-h);
+      BVIEW.w=w; BVIEW.h=h; boardViewApply(); return;
+    }
+    if(!drag) return;
     if(Math.abs(ev.clientX-drag.sx)+Math.abs(ev.clientY-drag.sy)>8) drag.moved=true;
     if(!drag.moved) return;
     const m=scaleOf();
@@ -4459,9 +4500,12 @@ function boardViewReset(){ BVIEW.x=0;BVIEW.y=0;BVIEW.w=3481;BVIEW.h=1860; boardV
     BVIEW.y=Math.min(Math.max(drag.by-(ev.clientY-drag.sy)/m.sc,0),1860-BVIEW.h);
     boardViewApply();
   });
-  const endDrag=()=>{ if(drag&&drag.moved){ svg._suppressClick=true; setTimeout(()=>{svg._suppressClick=false;},0); } drag=null; };
+  const endDrag=(ev)=>{ if(ev&&ev.pointerId!=null) ptrs.delete(ev.pointerId);
+    if(pinch.on && ptrs.size<2){ pinch.on=false; setTimeout(()=>{svg._suppressClick=false;},60); }
+    if(drag&&drag.moved){ svg._suppressClick=true; setTimeout(()=>{svg._suppressClick=false;},0); } drag=null; };
   svg.addEventListener('pointerup',endDrag);
   svg.addEventListener('pointerleave',endDrag);
+  svg.addEventListener('pointercancel',endDrag); // 触屏被系统手势打断时清态（此前缺失致卡拖拽）
   svg.addEventListener('dblclick',(ev)=>{ if(ev.target&&ev.target.closest&&ev.target.closest('.sys-node')) return; boardViewReset(); }); // 双击系统=快速操作，不复位视图；双击空区才复位
 })();
 
@@ -5537,6 +5581,9 @@ function endChapter(){
   logMsg(`—— 第 ${G.chapter} 章结束 · 结算雄心 ——`,'score');
   toast(`📊 第 ${G.chapter} 章结算中…`, 2200);
   SFX.chapter();
+  // 章末摘要数据（审计#9）：结算前抓拍权力/雄心盒/日志游标，结算后汇总成一页——玩家不再翻滚动日志找「谁得了几分」
+  const _sum={ chapter:G.chapter, before:G.players.map(p=>p.power), logStart:G.log.length, box:{} };
+  AMB_ORDER.forEach(k=>{ if(G.ambitionBox[k].length) _sum.box[k]=G.ambitionBox[k].map(m=>({f:m.f,s:m.s})); });
   scoreAmbitions();
   // 战役：章末派发命运进度事件 + 终局幕胜利判定（捕获第三幕达成最终目标的赢家）
   const _campWinners = (G.campaign && G.campaign.enabled) ? campChapterEndJudge() : [];
@@ -5548,6 +5595,8 @@ function endChapter(){
   if(G.ambitionBox.warlord.length>0) G.players.forEach(p=>{ if(p.trophies){logMsg(`${pname(G.players.indexOf(p))} 返还 ${p.trophies} 战利品（棋子归还原主供应）`,'sys'); releaseTrophies(p);} });
   if(G.ambitionBox.tyrant.length>0) G.players.forEach(p=>{ if(p.captives){logMsg(`${pname(G.players.indexOf(p))} 返还 ${p.captives} 俘虏（密探归还原主供应）`,'sys'); releaseCaptives(p);} });
   flipLowestAmbitionMarker(); // 收回全部标记到可用区 + 翻面「权力最低且未翻面」的一枚（官方 p.19 escalation）
+  _sum.after=G.players.map(p=>p.power);
+  _sum.lines=G.log.slice(_sum.logStart).filter(e=>e.cls==='score').map(e=>e.html);
   G.declaredThisChapter={};
   // 战役模式（审计 #37，战役规则书 p.8）：忽略权力阈值，按幕结构结束——
   //   第1/2幕 3 章后进入幕间(intermission→选命运向导→重置章号→幕开局)，第3幕 4 章后终局；
@@ -5566,7 +5615,7 @@ function endChapter(){
     G.chapter++; dealNewChapter();
     logMsg(`—— 第 ${G.campaign.act} 幕 · 第 ${G.chapter} 章开始（先攻 ${pname(G.initiative)}）——`,'score');
     toast(`🌟 第 ${G.chapter} 章开始！`, 1800); SFX.newChapter();
-    beginRound(); return;
+    beginRound(); showChapterSummary(_sum); return;
   }
   // —— 单场（非战役）：权力阈值 / 累计 maxChapters 终局 ——
   const thresh=POWER_TO_WIN[G.numPlayers];
@@ -5577,6 +5626,48 @@ function endChapter(){
   SFX.newChapter();
   offerTwoPlayerMulligan(); // 2 人局：非先攻方可一次性重抽 6 张手牌（官方 p.19）
   beginRound();
+  showChapterSummary(_sum); // 只读摘要叠在新章之上（若补正模态已开则跳过）
+}
+// 章末结算摘要页（审计#9）：权力变动一览 + 各雄心盒标记(官方六角图) + 结算明细。
+// 纯只读信息层，【不参与流程续接】——先开下一章再叠加，无头/模拟/AI 连播天然安全。
+// 全AI/演示不弹（解说已覆盖）；已有模态在开（如 2 人局补正）不顶掉。
+function showChapterSummary(sum){
+  try{
+    if(typeof document==='undefined' || typeof openModal!=='function' || G._simulating) return false;
+    if(G.demoMode || (G.aiSeats && G.players.every((p,i)=>G.aiSeats[i]))) return false;
+    if(typeof isModalOpen==='function' && isModalOpen()) return false;
+    const ranked=G.players.map((p,i)=>({i,d:sum.after[i]-sum.before[i],pw:sum.after[i]})).sort((a,b)=>b.d-a.d||b.pw-a.pw);
+    openModal(m=>{
+      m.appendChild(el('h2',null,`📊 第 ${sum.chapter} 章结算`));
+      // 权力变动一览
+      const tbl=el('div'); tbl.style.cssText='display:flex;flex-direction:column;gap:4px;margin:8px 0';
+      ranked.forEach(o=>{ const p=G.players[o.i];
+        const row=elh('div',null,`<span style="color:${pcolTxt(p)};font-weight:700">${p.name}</span>`
+          +`<span style="float:right"><b style="color:${o.d>0?'#6fcf8e':'var(--muted)'}">${o.d>0?'+'+o.d:o.d}</b>`
+          +` <span style="color:var(--muted)">→ ⚡${o.pw}</span></span>`);
+        row.style.cssText='background:#0c1220;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px';
+        tbl.appendChild(row); });
+      m.appendChild(tbl);
+      // 各雄心盒标记（官方六角图，缺图回退数字）
+      const boxKeys=Object.keys(sum.box||{});
+      if(boxKeys.length){
+        const bx=el('div'); bx.style.cssText='display:flex;flex-wrap:wrap;gap:10px;margin:6px 0;font-size:12px;color:var(--muted)';
+        boxKeys.forEach(k=>{ const mk=sum.box[k];
+          const imgs=mk.map(mm=>{ const pth='assets/tokens/amb_'+mm.f+'_'+mm.s+'.png';
+            return (typeof ASSET_OK!=='undefined'&&ASSET_OK[pth])?`<img class="amb-mk" src="${pth}" alt="${mm.f}/${mm.s}">`:(mm.f+'/'+mm.s); }).join(' ');
+          bx.appendChild(elh('span',null,`${AMBITIONS[k].icon}${AMBITIONS[k].name} ${imgs}`)); });
+        m.appendChild(bx);
+      }
+      // 结算明细（滚动区）
+      if(sum.lines&&sum.lines.length){
+        const det=el('div','hintbox'); det.style.cssText='text-align:left;font-size:11.5px;line-height:1.7;max-height:30vh;overflow:auto';
+        det.innerHTML=sum.lines.join('<br>'); m.appendChild(det);
+      }
+      const go=el('button','btn gold','继续'); go.style.cssText='display:block;width:100%;margin-top:10px';
+      go.onclick=()=>closeModal(); m.appendChild(go);
+    });
+    return true;
+  }catch(e){ return false; } // 展示层失败绝不阻塞开局
 }
 // 战役幕结束决策（审计 #37，战役规则书 p.8）：'endgame'|'intermission'|'continue'
 //   winners：campChapterEndJudge() 返回的「第三幕达成最终目标且≥1权力」赢家；有则终局。
@@ -5810,7 +5901,16 @@ function showVictoryScreen(sorted){
 
 /* ============================== 行动实现 =============================== */
 function onSystemClick(id){
-  if(!G||!G.pending) return;
+  if(!G) return;
+  // 空闲状态点击系统：toast 显示该系统摘要（触屏没有 title 悬停，此前是零反馈的死点击）
+  if(!G.pending){
+    try{ const s=G.map[id]; if(!s) return;
+      const head=s.kind==='gate'?`${id} 星门`:`${id} ${RESOURCES[s.resource].name}行星 · ${s.slots} 槽`;
+      const brief=(typeof expSysBrief==='function')?expSysBrief(id):'';
+      toast(`<b>${head}</b>${brief?('<br>'+brief.replace(/\n/g,'<br>')):''}`, 3200);
+    }catch(e){}
+    return;
+  }
   if(typeof TUT!=='undefined' && TUT.game && !TUT.allowSystem(id)) return;   // 交互式教学：本步只放行指定系统
   const t=G.pending.type;
   if(t==='tax') doTax(id);
@@ -7003,6 +7103,23 @@ function loreRepairDrones(p, sysId){
   if((d[col]||0)>0){ d[col]--; if(!d[col]) delete d[col]; return 1; }
   return 0;
 }
+// AI 发起战斗的战报浮层（审计#15 轻量方案）：AI 路径绕过骰子动画（改模态时序有 aiResolveModal
+// 吞模态+调度竞态风险），改用 4.5s 自动消散的角落浮层展示官方骰面+结果摘要；有人类在座才显示。
+function showBattleReportFloat(id,defC,r){
+  try{
+    if(typeof document==='undefined'||!document.body||G._simulating||G.demoMode) return;
+    if(!G.players.some((p,i)=>!(G.aiSeats&&G.aiSeats[i]))) return;
+    const old=document.getElementById('battleFloat'); if(old) old.remove();
+    const defP=G.players.find(p=>p.color.key===defC);
+    const d=el('div'); d.id='battleFloat';
+    const dice=(r.faces||[]).slice(0,8).map(f=>`<span class="bf-die ${f.type.slice(0,2)}">${faceToHTML(f.face,f.type)}</span>`).join('');
+    d.innerHTML=`<div class="bf-hd">⚔ ${G.players[G.actor].name} 攻击 ${defP?defP.name:(defC==='free'?'自由城市':defC==='imperial'?'帝国星舰':defC)} · ${id}</div>`
+      +(dice?`<div class="bf-dice">${dice}</div>`:'')
+      +`<div class="bf-sum">敌舰 受损${r.defDmg}/毁${r.defKilled} · 我舰 受损${r.atkDmg}/毁${r.atkLost} · 建筑毁${r.bldgDestroyed}</div>`;
+    document.body.appendChild(d);
+    setTimeout(()=>{ try{ d.classList.add('out'); setTimeout(()=>d.remove(),450);}catch(e){} }, 4500);
+  }catch(e){ /* 展示层失败不影响结算 */ }
+}
 function runBattle(id,defC,alloc,preResult){
   G._undoBlocked=true;   // 已掷骰→封禁本回合"重开"，防止重摇骰子作弊
   const r=preResult||resolveBattle(id,defC,alloc); const defIdx=G.players.findIndex(p=>p.color.key===defC);
@@ -7021,6 +7138,8 @@ function runBattle(id,defC,alloc,preResult){
   if(r.res._signalCut>0) html+=`<br><i>📜「信号破坏者」(攻)：进攻舰全新鲜 → 忽略 1 个自损面 ◯</i>`;
   (r.outrages||[]).forEach(o=>{ html+=`<br><b style="color:#e0703a">⚑ 摧毁${RESOURCES[o.rtype].name}城市 → ${pname(G.actor)}引发民愤</b>：${o.msg}`; });
   logMsg(html,'bat');
+  // AI 攻击（无 animateDice 动画路径）→ 战报浮层 + 战场闪烁：人类被打不再只有一条日志
+  if(!preResult && (G.aiSeats&&G.aiSeats[G.actor])){ showBattleReportFloat(id,defC,r); flashSystem(id); }
   // 战斗结果音效：有摧毁用爆炸音，有伤害用命中音
   if(r.defKilled>0||r.bldgDestroyed>0||r.atkLost>0) SFX.destroy();
   else if(r.defDmg>0||r.atkDmg>0) SFX.hit();
