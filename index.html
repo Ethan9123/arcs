@@ -122,6 +122,7 @@
   .card.mob{background:linear-gradient(160deg,#46b39a,#2f8270)}
   /* 顶部状态条 */
   #top{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:flex;gap:7px;align-items:center;
+    flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 400px); /* 战役满状态 chips+按钮会超宽被裁 → 换行兜底(400=侧栏360+边距) */
     background:linear-gradient(180deg,#10182acc,#0a0f1ccc);border:1px solid #34406a;border-radius:30px;padding:5px 10px;
     box-shadow:0 6px 20px #0007;backdrop-filter:blur(4px);z-index:5}
   #top .chip{font-size:12px;color:var(--muted);background:#0c1322;border:1px solid var(--line);border-radius:20px;padding:2px 9px}
@@ -140,6 +141,7 @@
   .btn:disabled{opacity:.6;cursor:not-allowed}   /* 由 .4 提到 .6，禁用态文字仍可读(WCAG) */
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
   .btn.gold{background:var(--gold);color:#221a07}
+  .btn.selgold{background:var(--gold);color:#221a07} /* 选中态：外观同金色，但不被 Enter=「.btn.gold 主按钮」的快捷键选中 */
   .btn.danger{background:transparent;border:1px solid var(--bad);color:var(--bad)}
   .btn.danger:hover{background:var(--bad);color:#fff}
   .btn.sm{padding:4px 9px;font-size:12px}
@@ -159,6 +161,11 @@
   .seg button{background:transparent;color:var(--ink);border:none;padding:7px 14px;font-size:14px}
   .seg button.on{background:var(--accent);color:#fff}
   .hintbox{background:#0c1220;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;color:var(--muted)}
+  .modal-x{float:right;margin:-10px -10px 0 8px;width:30px;height:30px;border-radius:8px;
+    background:#1a2236;border:1px solid var(--line);color:var(--muted);font-size:14px;cursor:pointer;z-index:2}
+  .modal-x:hover{color:var(--ink);border-color:var(--gold)}
+  .log-newpill{position:sticky;bottom:2px;margin:4px auto 0;width:max-content;padding:2px 12px;border-radius:12px;
+    background:#1a2440ee;border:1px solid var(--gold);color:var(--gold);font-size:11px;cursor:pointer;text-align:center}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0c1220ee;border:1px solid var(--gold);
     color:var(--ink);padding:10px 18px;border-radius:10px;z-index:60;font-size:14px;display:none;box-shadow:0 6px 20px #000a}
   /* SVG 元素 */
@@ -1938,7 +1945,7 @@ function campSecureCouncil(playerIdx){
   const isAI = (G.aiSeats && G.aiSeats[playerIdx]) || G.demoMode;
   if(!isAI && typeof openModal==='function'){
     openModal(m=>{
-      m.appendChild(el('h2',null,'帝国议会 · 回合末结算哪类事件？'));
+      m.appendChild(el('h2',null,'帝国议会 · 回合末结算哪类事件？')); m._sticky=true; // 流程必经：Esc/×不可关
       m.appendChild(el('div','hintbox','你攫取了帝国议会：本回合末由你【二选一】结算 敕令 或 危机。下方是各自本局的实际后果预览。'));
       { const ftn=firstTimeNote('council','攫取帝国议会是偶发的高影响事件：回合末你须在【敕令】(帝国征收+额外行动)与【危机】(触发凋敝/民众效果)间二选一，选择不可撤销。'); if(ftn) m.appendChild(ftn); }
       // 后果预览（复用 EDICT_POLICIES + campCurrentPolicy，与战役面板同源）
@@ -2492,14 +2499,19 @@ function fateStars(cx){ return '●'.repeat(cx)+'○'.repeat(3-cx); }
 // G 为纯数据对象（无函数/DOM/循环引用），可直接 JSON 序列化。快照含版本号便于日后迁移。
 const CAMPAIGN_SAVE_VERSION = 1;
 const CAMPAIGN_SLOT_PREFIX = 'arcs_campaign_';
-function campaignSnapshot(){ return JSON.stringify({ v:CAMPAIGN_SAVE_VERSION, ts:null, G }); }
+function campaignSnapshot(){ return JSON.stringify({ v:CAMPAIGN_SAVE_VERSION, ts:null, G }, saveReplacer); }
 function restoreCampaignSnapshot(str){
-  const obj = (typeof str==='string') ? JSON.parse(str) : str;
+  const obj = (typeof str==='string') ? JSON.parse(str, saveReviver) : str;
   if(!obj || !obj.G) throw new Error('存档格式无效');
   G = obj.G;
   return G;
 }
 function hasLocalStorage(){ try { return typeof localStorage!=='undefined' && localStorage; } catch(e){ return false; } }
+// —— Set 存活层：G 里的 Set（pending.legal / _abil._taxed 等）直接 JSON 化会退化成 {}，
+//    恢复后 .has() 调用即崩（曾致「继续上一局」死屏）。所有存档统一走 replacer/reviver。
+const SET_TAG='__set__';
+function saveReplacer(k,v){ return (v instanceof Set) ? {[SET_TAG]:Array.from(v)} : v; }
+function saveReviver(k,v){ return (v && typeof v==='object' && !Array.isArray(v) && Array.isArray(v[SET_TAG])) ? new Set(v[SET_TAG]) : v; }
 function campaignSlotKey(slot){ return CAMPAIGN_SLOT_PREFIX + (slot||'auto'); }
 function saveCampaignSlot(slot, label){
   if(!hasLocalStorage()) return false;
@@ -2532,7 +2544,10 @@ const AUTOSAVE_VERSION = 1;
 function autosaveGame(){
   if(!hasLocalStorage() || !G || G._simulating) return;
   if(G.phase==='setup' || G.phase==='end') return;
-  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({v:AUTOSAVE_VERSION, G})); }catch(e){ /* 配额/隐私模式失败：忽略，不影响游戏 */ }
+  if(G.phase==='leaderdraft' || G.phase==='loredraft') return; // 抽选队列在模态闭包中、不可恢复 → 保留上一安全档
+  if(typeof TUT!=='undefined' && TUT.on) return;               // 教学局不覆盖「继续上一局」
+  if(G.pending) return; // 选目标中间态含不可序列化回调（弹射分批还含半程移动）→ 保留动作开始前的安全档
+  try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({v:AUTOSAVE_VERSION, G}, saveReplacer)); }catch(e){ /* 配额/隐私模式失败：忽略，不影响游戏 */ }
 }
 function clearAutosave(){ if(hasLocalStorage()) try{ localStorage.removeItem(AUTOSAVE_KEY); }catch(e){} }
 // 读取存档摘要（供开始屏「继续上一局」按钮显示局况），无有效存档→null
@@ -2548,8 +2563,9 @@ function loadAutosaveMeta(){
 function resumeGame(){
   if(!hasLocalStorage()) return false;
   try{ const s=localStorage.getItem(AUTOSAVE_KEY); if(!s) return false;
-    const o=JSON.parse(s); if(!o || !o.G || o.v!==AUTOSAVE_VERSION) return false;
-    G=o.G; G._simulating=false;
+    const o=JSON.parse(s, saveReviver); if(!o || !o.G || o.v!==AUTOSAVE_VERSION) return false;
+    G=o.G; G._simulating=false; G.pending=null; G.highlight=null; // 旧版存档可能残留半截中间态
+    G._aiThinking=false;
     if(typeof UNDO!=='undefined') UNDO.snap=null;   // 跨会话不保留「重开本回合」快照
     const w=document.getElementById('modalWrap'); if(w) w.style.display='none';
     render();   // render 会 aiMaybeSchedule 续 AI 回合 / setPrompt 提示人类
@@ -2647,14 +2663,20 @@ function toast(msg,dur=2200){
   t.style.animation='slide-up .22s ease-out';
   clearTimeout(toast._tid); toast._tid=setTimeout(()=>{t.style.display='none';},dur);
 }
-function openModal(builder){
+function openModal(builder, opts){
   const w=$('#modalWrap'); const m=$('#modal');
-  m.innerHTML=''; builder(m);
+  m._sticky=false; m.innerHTML=''; builder(m);
+  // 流程必经模态（抽选/命中分配/幕向导等在 builder 内置 m._sticky=true）：Esc/× 不可关，防止把「模态即唯一续接」的流程一键打断
+  w._sticky = !!(opts&&opts.sticky) || !!m._sticky;
+  if(!w._sticky && !(opts&&opts.noX)){  // 非流程模态默认注入右上 ×（与 Esc 等价的可见出口）
+    const x=el('button','modal-x','✕'); x.title='关闭（Esc）'; x.setAttribute('aria-label','关闭');
+    x.onclick=()=>{ closeModal(); m.classList.remove('victory'); }; m.insertBefore(x, m.firstChild);
+  }
   m.style.animation='none'; m.offsetHeight; m.style.animation='modal-pop .18s ease-out';
   w.style.display='flex';
   SFX.modal();
 }
-function closeModal(){ $('#modalWrap').style.display='none'; }
+function closeModal(){ const w=$('#modalWrap'); w._sticky=false; w.style.display='none'; }
 function cardRank(c){ return SUIT_ORDER.indexOf(c.suit)*10 + c.number; }
 function sortHand(p){ p.hand.sort((a,b)=>cardRank(a)-cardRank(b)); }
 const ACTION_NAMES={tax:'课税',build:'建造',move:'移动',repair:'修理',influence:'影响',secure:'收纳',battle:'战斗'};
@@ -3208,7 +3230,7 @@ function startLeaderDraft(){
     const pIdx=order[qi]; const p=G.players[pIdx];
     const a=leaderById(pool.pop()), b=leaderById(pool.pop());
     openModal(m=>{
-      m.appendChild(el('h2',null,'领袖抽选 · '+p.name));
+      m.appendChild(el('h2',null,'领袖抽选 · '+p.name)); m._sticky=true; // 流程必经：Esc/×不可关
       m.appendChild(el('div','hintbox',`${p.name}，从下列 2 名领袖中选 1 名（点击查看能力，选定后立即应用开局效果）：`));
       const row=el('div'); row.style.cssText='display:flex;gap:10px;justify-content:center;flex-wrap:wrap';
       [a,b].forEach(L=>{
@@ -3258,7 +3280,7 @@ function dealLoreCards(){
     const p=G.players[archivists[ai]]; const draw=(p._loreDraw||[]).map(loreById);
     const chosen=[];
     const renderPick=()=>openModal(m=>{
-      m.appendChild(el('h2',null,'博学 · '+p.name+' 留 2 弃 3'));
+      m.appendChild(el('h2',null,'博学 · '+p.name+' 留 2 弃 3')); m._sticky=true; // 流程必经：Esc/×不可关
       m.appendChild(elh('div','hintbox',`${p.name}（档案官·博学）：从 5 张传说中点选 <b>2</b> 张保留（已选 ${chosen.length}/2）。`));
       draw.forEach(L=>{ const picked=chosen.indexOf(L.id)>=0;
         const b=el('button',picked?'btn gold':'btn'); b.style.cssText='display:flex;align-items:center;gap:8px;width:100%;margin:6px 0;text-align:left';
@@ -3579,17 +3601,40 @@ function aiApplyMoveLive(move){
   try{ aiDrive(move); } finally{ openModal=sModal; }
 }
 // 渲染后调度：若轮到 AI, 显示"思考中"并在下一 tick 计算+落子, 落子后 render 再次触发本函数 → 连续走完 AI 回合。
+// AI 连走结束轮到人类：一次性醒目提示（音效+toast+标签页标题闪）——此前横幅只是静默换字，失焦更是毫无召回
+function humanTurnCue(){
+  try{ SFX.seize(); }catch(e){}
+  try{ const who=(typeof handOwnerIdx==='function')?handOwnerIdx():G.turnPlayer;
+    toast(`🔔 轮到你了 — ${pname(who)}`,2600); }catch(e){}
+  try{ if(typeof document!=='undefined'){
+    if(!humanTurnCue._base) humanTurnCue._base=document.title;
+    document.title='🔔 轮到你了 · '+humanTurnCue._base;
+    clearTimeout(humanTurnCue._tid); humanTurnCue._tid=setTimeout(()=>{ document.title=humanTurnCue._base; },6000);
+  } }catch(e){}
+}
 function aiMaybeSchedule(){
   if(typeof window==='undefined' || !G || G._aiThinking || G.phase==='end') return;
-  const seat=aiSeatActiveNow(); if(seat<0){ if(G.demoMode) demoHidePanel(); return; }
+  const seat=aiSeatActiveNow();
+  if(seat<0){ if(G.demoMode) demoHidePanel();
+    if(G._aiMoved && !G.demoMode && !G._simulating){ G._aiMoved=false; humanTurnCue(); }
+    return; }
   if(G.demoMode){ demoSchedule(seat); return; }   // 演示·解说模式：思考可视化 + 出牌前后解说（教学用）
   G._aiThinking=true;
   try{ setPrompt(`🤖 ${pname(seat)}·${personaFor(G,seat).name} 思考中…`); }catch(e){}
   setTimeout(function(){
-    let mv=null;
-    try{ mv=mctsChooseMove(G, aiOptsFor(G)); if(mv) aiApplyMoveLive(mv); }
-    catch(e){ console.error('AI 出错:', e); }
-    finally{ G._aiThinking=false; render(); }
+    let mv=null, failed=false;
+    try{ mv=mctsChooseMove(G, aiOptsFor(G)); if(mv){ aiApplyMoveLive(mv); G._aiMoved=true; } }
+    catch(e){ console.error('AI 出错:', e); failed=true; }
+    finally{
+      G._aiThinking=false;
+      // 连续失败护栏：以前抛错/无着法会经 render→aiMaybeSchedule 无限 80ms 重试，玩家只见永远的「思考中…」
+      if(failed || !mv){ G._aiErrStreak=(G._aiErrStreak||0)+1; } else { G._aiErrStreak=0; }
+      if(G._aiErrStreak>=3){
+        setPrompt('⚠ AI 连续出错，已暂停调度。可尝试「↩ 重开本回合」，或刷新页面从自动存档继续（详情见控制台）。');
+        toast('AI 已暂停（连续 3 次无法行动）'); return;
+      }
+      render();
+    }
   }, 80);
 }
 /* ===== 全AI演示·解说模式 =====================================================
@@ -4203,7 +4248,7 @@ function demoSchedule(seat){
   G._aiThinking=true; DEMO._seat=seat; DEMO._step=null;   // 自动连播：清掉任何遗留的单步暂存
   if(!G._demoOpened){ G._demoOpened=true; try{ demoOpening(); }catch(e){} }   // 开场白(仅一次, 入「上一手」位)
   let mv=null; try{ mv=mctsChooseMove(G, aiOptsFor(G)); }catch(e){ console.error('AI(demo)出错:',e); }
-  if(!mv){ G._aiThinking=false; return; }
+  if(!mv){ G._aiThinking=false; setPrompt('⚠ 演示 AI 无可选着法，已暂停（详情见控制台）。可点「暂停/继续」重试或刷新页面。'); demoRenderHead(seat,'⚠ 已停'); return; } // 以前静默停摆：玩家只见永远的「思考中…」
   let pred=null; try{ pred=demoPredictTop(G, seat); }catch(e){ pred=null; }   // 独立廉价预测器→押注
   const heat=demoHeat();
   const prev=cloneState(G);
@@ -4316,7 +4361,7 @@ function renderCourt(){
     box.appendChild(d);
   });
 }
-function showCourtCard(c){
+function showCourtCard(c, back){   // back：从流程模态（影响/收纳）查看卡面后原路返回，不打断流程
   openModal(m=>{
     m.appendChild(el('h2',null,c.name));
     attachCardImg(m, courtImg(c), 'courtbig');
@@ -4326,7 +4371,7 @@ function showCourtCard(c){
     if(effKind(c.eff)==='auto') m.appendChild(el('div','hintbox','✓ 本卡能力由程序自动结算。'));
     else if(effKind(c.eff)==='passive') m.appendChild(el('div','hintbox','此为被动/可选能力，需玩家自行运用。'));
     else m.appendChild(el('div','hintbox','此能力较复杂，本版需玩家按文字手动执行。'));
-    const cc=el('button','btn ghost','关闭'); cc.onclick=()=>closeModal(); m.appendChild(cc);
+    const cc=el('button','btn ghost',back?'← 返回':'关闭'); cc.onclick=()=>{ back?back():closeModal(); }; m.appendChild(cc);
   });
 }
 
@@ -4417,7 +4462,7 @@ function boardViewReset(){ BVIEW.x=0;BVIEW.y=0;BVIEW.w=3481;BVIEW.h=1860; boardV
   const endDrag=()=>{ if(drag&&drag.moved){ svg._suppressClick=true; setTimeout(()=>{svg._suppressClick=false;},0); } drag=null; };
   svg.addEventListener('pointerup',endDrag);
   svg.addEventListener('pointerleave',endDrag);
-  svg.addEventListener('dblclick',()=>boardViewReset());
+  svg.addEventListener('dblclick',(ev)=>{ if(ev.target&&ev.target.closest&&ev.target.closest('.sys-node')) return; boardViewReset(); }); // 双击系统=快速操作，不复位视图；双击空区才复位
 })();
 
 // 合法目标高亮配色（按行动语义；SVG fill/stroke 需真实色值，用 hex）
@@ -4467,14 +4512,16 @@ function drawSystem(svg, s){
     g.setAttribute('opacity','0.4');   // 选目标时：非法目标降级变暗，"发光的才能点"
   }
   const hit=svgEl('circle',{cx:s.x,cy:s.y,r:r+26,fill:'transparent',class:'sys-hit','data-sys':s.id});
-  // 悬停信息：系统类型/资源/槽位 + 当前棋子摘要
+  g.appendChild(hit);
+  // 悬停信息与点击挂到整组 g（而非仅中心 hit 圈）：舰队/建筑 token 画在 r+26 之外，
+  // 点棋子=点系统、悬停棋子也有摘要——此前点自己的舰队图标是彻底的死点击。
   const tt=svgEl('title',{});
   const head=s.kind==='gate'?`${s.id} 星门`:`${s.id} ${RESOURCES[s.resource].name}行星 · ${s.slots} 槽`;
   const brief=(typeof expSysBrief==='function')?expSysBrief(s.id):'';
   tt.textContent=head+(brief?`\n${brief}`:'');
-  hit.appendChild(tt);
-  hit.addEventListener('click',()=>{ const b=document.getElementById('board'); if(b&&b._suppressClick) return; onSystemClick(s.id); });
-  g.appendChild(hit);
+  g.appendChild(tt);
+  g.style.cursor='pointer';
+  g.addEventListener('click',()=>{ const b=document.getElementById('board'); if(b&&b._suppressClick) return; onSystemClick(s.id); });
   svg.appendChild(g);
 }
 
@@ -4648,6 +4695,14 @@ function renderTop(){
     pc.innerHTML=`▶ 轮到 <b style="color:${pcolTxt(ap)}">${ap.name}</b> · ${phaseName(G.phase)}${extra}`;
     t.appendChild(pc);
   }
+  // 帝国议会「已裁决」待办 chip 紧跟主 chip（关键待结算态不再沉在按钮前被裁切）
+  if(G.campaign && G.campaign.enabled && G.campaign.council==='decided' && G.campaign.councilHolder!=null){
+    const hp=G.players[G.campaign.councilHolder];
+    const cc=el('span','chip'); cc.style.cssText='border-color:#d9b25a;color:#f0d080';
+    cc.innerHTML=`⚖ 议会已裁决 · 回合末由 <b style="color:${hp?pcolTxt(hp):'#fff'}">${hp?hp.name:'?'}</b> 结算 ${G.campaign.councilChoice==='crisis'?'★危机':'📜敕令'}`;
+    cc.title='帝国议会本回合已被攫取，回合末由持有者结算敕令或危机';
+    t.appendChild(cc);
+  }
   const chips=[
     `第 <b>${G.chapter}</b> 章`,
     `先攻 🏁<b style="color:${pcolTxt(G.players[G.initiative])}">${G.players[G.initiative].name}</b>`,
@@ -4669,20 +4724,9 @@ function renderTop(){
       tc.innerHTML=parts.join(' · '); tc.title='帝国信托资源数 / 地图凋敝总量（关联命运终局与危机烈度）'; t.appendChild(tc);
     }
   }
-  // 帝国议会「已裁决」常驻提醒（回合末将由持有者结算敕令/危机）——易被忽略的关键待结算态
-  if(G.campaign && G.campaign.enabled && G.campaign.council==='decided' && G.campaign.councilHolder!=null){
-    const hp=G.players[G.campaign.councilHolder];
-    const cc=el('span','chip'); cc.style.cssText='border-color:#d9b25a;color:#f0d080';
-    cc.innerHTML=`⚖ 议会已裁决 · 回合末由 <b style="color:${hp?pcolTxt(hp):'#fff'}">${hp?hp.name:'?'}</b> 结算 ${G.campaign.councilChoice==='crisis'?'★危机':'📜敕令'}`;
-    cc.title='帝国议会本回合已被攫取，回合末由持有者结算敕令或危机';
-    t.appendChild(cc);
-  }
-  const rb=el('button','btn ghost sm','📖 规则'); rb.style.marginLeft='8px'; rb.onclick=showRules; t.appendChild(rb);
-  const cdx=el('button','btn ghost sm','📜 图鉴'); cdx.title='卡牌图鉴：领袖/传说/命运（可检索）'; cdx.style.marginLeft='4px'; cdx.onclick=()=>showCodex(); t.appendChild(cdx);
-  const muteBtn=el('button','btn ghost sm',SFX._muted?'🔇':'🔊'); muteBtn.title=SFX._muted?'已静音':'点击静音';
-  muteBtn.style.marginLeft='4px';
-  muteBtn.onclick=()=>{ SFX._muted=!SFX._muted; SFX._c(); renderTop(); }; t.appendChild(muteBtn);
-  const setBtn=el('button','btn ghost sm', CB.on?'⚙✓':'⚙'); setBtn.title='设置：声音 / 色盲配色 / AI难度 / 教学 / 帮助';
+  // 顶栏常驻按钮压缩：📜图鉴/🔇静音 已收进 ⚙ 设置面板（战役满状态下 14 元素会溢出被裁）
+  const rb=el('button','btn ghost sm','📖 规则'); rb.style.marginLeft='8px'; rb.onclick=()=>showRules(); t.appendChild(rb);
+  const setBtn=el('button','btn ghost sm', CB.on?'⚙✓':'⚙'); setBtn.title='设置：声音 / 色盲配色 / AI难度 / 教学 / 图鉴 / 帮助';
   setBtn.style.marginLeft='4px'; if(CB.on) setBtn.style.color='var(--gold)';
   setBtn.onclick=()=>showSettingsPanel(); t.appendChild(setBtn);
   const hintBtn=el('button','btn ghost sm','💡'); hintBtn.title='提示：建议这一步怎么走';
@@ -4840,7 +4884,7 @@ function renderAmbitions(){
     // 各玩家该项数量 + 领先者标识
     const vals=G.players.map(p=>AMBITIONS[k].count(p));
     const maxv=Math.max(0,...vals);
-    const counts=G.players.map((p,pi)=>`<span style="color:${pcolTxt(p)}${vals[pi]===maxv&&maxv>0?';font-weight:800':''}">${vals[pi]}${vals[pi]===maxv&&maxv>0?'<span class="lead-star">★</span>':''}</span>`).join(' ');
+    const counts=G.players.map((p,pi)=>`<span title="${p.name}：${vals[pi]}${vals[pi]===maxv&&maxv>0?'（领先）':''}" style="color:${pcolTxt(p)}${vals[pi]===maxv&&maxv>0?';font-weight:800':''}">${vals[pi]}${vals[pi]===maxv&&maxv>0?'<span class="lead-star">★</span>':''}</span>`).join(' ');
     // 迷你水平条：各玩家按数量占比着色（无人有则空）
     const total=vals.reduce((x,v)=>x+v,0);
     const bar=total>0 ? '<span class="ambbar">'+G.players.map((p,pi)=>vals[pi]>0?`<i style="background:${p.color.css};width:${(vals[pi]/total*100).toFixed(1)}%"></i>`:'').join('')+'</span>' : '';
@@ -4883,15 +4927,27 @@ function renderLog(){
 }
 function renderLogList(){
   const cur=G._logFilter||'all'; const q=(G._logSearch||'').trim().toLowerCase();
-  const box=$('#log'); if(!box) return; box.innerHTML=''; let shown=0;
-  G.log.slice(-200).forEach(e=>{
+  const box=$('#log'); if(!box) return;
+  // 粘底判定：只有本就贴底时才自动跟随新日志；玩家上翻回看历史时保持位置不被拽回（AI 连走时曾每 0.3s 拽一次）
+  const atBottom = (box.scrollTop + box.clientHeight >= box.scrollHeight - 12) || !box.scrollHeight;
+  const keepTop = box.scrollTop;
+  box.innerHTML=''; let shown=0;
+  // 筛选/搜索时查全量日志（长局早期记录可达）；无筛选时仅渲染最近 200 条防 DOM 膨胀
+  const src=(cur!=='all'||q) ? G.log : G.log.slice(-200);
+  src.forEach(e=>{
     const cls=e.cls||'sys';
     if(cur!=='all' && cls!==cur) return;
     if(q && (e.html||'').replace(/<[^>]*>/g,'').toLowerCase().indexOf(q)<0) return;  // 关键字匹配纯文本
     const d=el('div','e '+(e.cls||'')); d.innerHTML=e.html; box.appendChild(d); shown++;
   });
   if(q && !shown){ const em=el('div','e'); em.style.cssText='opacity:.6;font-style:italic'; em.textContent='（无匹配「'+(G._logSearch||'')+'」的记录）'; box.appendChild(em); }
-  box.scrollTop=box.scrollHeight;
+  if(atBottom){ box.scrollTop=box.scrollHeight; }
+  else{
+    box.scrollTop=keepTop;  // innerHTML 重建会把 scrollTop 钳到 0 → 显式恢复
+    // 底部浮「↓ 最新」胶囊：一键回底继续跟随
+    const pill=el('div','log-newpill','↓ 最新'); pill.onclick=()=>{ box.scrollTop=box.scrollHeight; renderLogList(); };
+    box.appendChild(pill);
+  }
 }
 
 function renderHand(){
@@ -5028,9 +5084,13 @@ function confirmThen(title, msgHTML, onYes, onNo){
 }
 function renderActionBar(){
   const bar=$('#actionBar'); bar.innerHTML=''; if(!G) return;
+  // AI 行动者/演示模式：不渲染可点操作（人类点了会替 AI 出牌/结束回合 → 状态错乱）
+  const aiSeatNow=(idx)=>((G.aiSeats&&G.aiSeats[idx])||G.demoMode);
   if(G.phase==='lead'){
-    const b=el('button','btn ghost sm','跳过 · 传递先攻'); b.onclick=leadPass; bar.appendChild(b);
+    if(aiSeatNow(G.initiative)){ const n=el('span','muted-note','🤖 AI 主导中…'); n.style.cssText='font-size:12px;opacity:.7'; bar.appendChild(n); return; }
+    const b=el('button','btn ghost sm','跳过 · 传递先攻'); b.onclick=maybeConfirmLeadPass; bar.appendChild(b);
   } else if(G.phase==='actions'){
+    if(aiSeatNow(G.actor)){ const n=el('span','muted-note','🤖 AI 行动中…'); n.style.cssText='font-size:12px;opacity:.7'; bar.appendChild(n); return; }
     // 行动点点阵：实心=剩余可用，空心=已用（一眼可见还剩几次行动）
     const tot=G.actionsTotal||G.actionsLeft, left=Math.max(0,G.actionsLeft);
     if(tot>0){ const pt=el('span','pip-track'); pt.title=`本回合行动：剩 ${left} / 共 ${tot}`;
@@ -5043,6 +5103,14 @@ function renderActionBar(){
     acts.forEach(a=>{
       const b=el('button','btn sm',ACTION_NAMES[a]+((a==='battle'&&!baseActs.includes('battle'))?'✦':'')); b.disabled=(G.actionsLeft<=0||!!G.pending);
       b.title = b.disabled ? `不可用：${disReason}` : (ACTION_TIPS[a]||'');
+      // 无合法目标预检：以前外观与可用按钮相同，要点一下吃个 toast 才知道不可行
+      if(!b.disabled){ let noTgt=false; const me=G.players[G.actor];
+        try{
+          if(a==='influence') noTgt=!(me.supply.agents>0 && G.court.length>0);
+          else if(a==='secure') noTgt=!G.court.some(c=>majorityOn(c,me.color.key)&&!paranoidBlocksSecure(me,c));
+          else noTgt=legalTargets(a).size===0;
+        }catch(e){}
+        if(noTgt){ b.disabled=true; b.style.opacity='.55'; b.title=`没有合法的「${ACTION_NAMES[a]}」目标`; } }
       b.onclick=()=>beginAction(a); bar.appendChild(b);
     });
     if(G.preludeOpen){ const pb=el('button','btn sm','序幕✨'); pb.disabled=!!G.pending; pb.title=pb.disabled?'不可用：先完成或取消当前操作':'序幕：出牌后、花费首个行动点前，可花资源换取额外行动（不消耗行动点；被民愤的资源不可用）'; pb.onclick=openPrelude; bar.appendChild(pb); }
@@ -5064,16 +5132,49 @@ function renderActionBar(){
 
 /* ============================== 出牌引擎 =============================== */
 function onCardClick(owner,i){
-  if(typeof TUT!=='undefined' && TUT.game && !TUT.allowCard(owner,i)) return;   // 交互式教学：本步只放行指定手牌
+  const tutGame = typeof TUT!=='undefined' && TUT.game;
+  if(tutGame && !TUT.allowCard(owner,i)) return;   // 交互式教学：本步只放行指定手牌
+  // AI 座位的手牌人类不可代打（AI 思考间隙/演示模式点击会替 AI 出牌 → 状态错乱）
+  if(!tutGame && G && ((G.aiSeats&&G.aiSeats[owner]) || G.demoMode)) return;
   if(G.phase==='lead' && owner===G.initiative){
-    SFX.card();
-    const cards=$$('.card'); if(cards[i]){ cards[i].classList.add('playing'); }
-    setTimeout(()=>leadCard(i),280);
+    if(tutGame){ // 教学：保持既定流程（固定牌局，无需确认）
+      SFX.card();
+      const cards=$$('.card'); if(cards[i]){ cards[i].classList.add('playing'); }
+      setTimeout(()=>leadCard(i),280);
+      return;
+    }
+    openLeadConfirm(owner,i);   // 人类：确认模态（宣告与否一并选定，可取消收回——主导出牌此前无退路）
   }
   else if(G.phase==='follow' && G.followQueue.length && owner===G.followQueue[0]){
     const cards=$$('.card'); if(cards[i]) cards[i].classList.add('selecting');
     followCardChoose(i);
   }
+}
+// 主导出牌确认：把「点牌→再弹宣告」两跳合成一跳，且给出「取消·收回」退路。
+// 此前 leadCard 即刻 splice 手牌、宣告模态无取消出口、UNDO 快照又建在其后——误点关键牌不可挽回。
+function openLeadConfirm(owner,i){
+  const p=G.players[owner]; const card=p.hand[i]; if(!card) return;
+  let options=[];
+  if(card.number>=2&&card.number<=6) options=[AMB_ORDER[card.number-2]];
+  else if(card.number===7) options=AMB_ORDER.slice();
+  if(!G.markersAvailable.length) options=[];
+  const play=(dk)=>{ closeModal(); SFX.card();
+    const cards=$$('.card'); if(cards[i]) cards[i].classList.add('playing');
+    setTimeout(()=>leadCard(i,dk),280); };
+  openModal(m=>{
+    m.appendChild(el('h2',null,'主导出牌'));
+    m.appendChild(elh('div','hintbox',`打出 <b style="color:${SUITS[card.suit].color}">${SUITS[card.suit].name}${card.number}</b>（${card.pips} 行动点）定为本轮花色，随后执行行动。`));
+    if(options.length){
+      const mk=G.markersAvailable.reduce((a,b)=>b.f>a.f?b:a);
+      m.appendChild(el('div','hintbox',`可同时宣告雄心：取走最高标记 ${mk.f}/${mk.s} 放入雄心盒，此牌点数视为 0（更易被超越夺先攻）。`));
+      options.forEach(k=>{ const b=el('button','btn',`宣告 ${AMBITIONS[k].icon} ${AMBITIONS[k].name} 并打出`);
+        b.style.cssText='display:block;width:100%;margin:6px 0'; b.onclick=()=>play(k); m.appendChild(b); });
+    }
+    const go=el('button','btn gold','直接打出'+(options.length?'（不宣告）':''));
+    go.style.cssText='display:block;width:100%;margin:6px 0'; go.onclick=()=>play(null); m.appendChild(go);
+    const c=el('button','btn ghost','取消 · 收回'); c.style.cssText='display:block;width:100%;margin:2px 0';
+    c.onclick=()=>closeModal(); m.appendChild(c);
+  });
 }
 
 function beginRound(){
@@ -5091,12 +5192,22 @@ function leadPass(){
   if(G.passedInARow>=Math.max(1,withCards)){ logMsg('（仍有手牌者）全员连续传递，本章结束','sys'); endChapter(); return; }
   G.initiative=(G.initiative+1)%G.numPlayers; beginRound();
 }
-function leadCard(i){
+// 传递先攻若会触发「全员连续传递 → 本章结束」则先确认（结束章=立即结算雄心，误点代价大；普通传递不打扰）
+function maybeConfirmLeadPass(){
+  const withCards=G.players.filter(p=>p.hand.length>0).length;
+  const willEnd=(G.passedInARow+1)>=Math.max(1,withCards);
+  if(willEnd && typeof confirmThen==='function'){
+    confirmThen('传递先攻并结束本章？','所有仍有手牌的玩家都已连续传递：这次传递将【结束本章并立即结算雄心】。',()=>leadPass());
+  } else leadPass();
+}
+function leadCard(i, declareKey){
   const pIdx=G.initiative; const p=G.players[pIdx]; const card=p.hand.splice(i,1)[0];
   G.passedInARow=0; G.lead={playerIdx:pIdx,card,ambition:null,zero:false};
   G.played=[{playerIdx:pIdx,card,mode:'lead',zero:false}];
   logMsg(`${pname(pIdx)} 主导：<b style="color:${SUITS[card.suit].color}">${SUITS[card.suit].name}${card.number}</b>（${card.pips}行动）`,'act');
-  maybeDeclare(pIdx,card,()=>startActions(pIdx,'lead',card.suit,card.pips));
+  const cont=()=>startActions(pIdx,'lead',card.suit,card.pips);
+  if(declareKey===undefined){ maybeDeclare(pIdx,card,cont); }       // AI/教学路径：沿用宣告模态（aiResolveModal 自答）
+  else { if(declareKey) declareAmbition(pIdx,declareKey); cont(); } // 人类路径：确认模态已把「宣告与否」一并选定
 }
 function maybeDeclare(pIdx,card,cont){
   let options=[];
@@ -5104,7 +5215,7 @@ function maybeDeclare(pIdx,card,cont){
   else if(card.number===7) options=AMB_ORDER.slice();
   if(options.length===0||G.markersAvailable.length===0){ cont(); return; }
   openModal(m=>{
-    m.appendChild(el('h2',null,'宣告雄心？'));
+    m.appendChild(el('h2',null,'宣告雄心？')); m._sticky=true; // 流程必经：Esc/×不可关
     const mk=G.markersAvailable.reduce((a,b)=>b.f>a.f?b:a);
     m.appendChild(el('div','hintbox',`宣告将取走最高标记 ${mk.f}/${mk.s} 放入该雄心盒，并把此牌点数视为 0（更易失去先攻）。`));
     options.forEach(k=>{ const b=el('button','btn',`宣告 ${AMBITIONS[k].icon} ${AMBITIONS[k].name}`); b.style.display='block'; b.style.margin='6px 0';
@@ -5123,7 +5234,7 @@ function maybeBardsDeclareFollow(idx,card,mode,cont){
   options=options.filter(k=>!G.declaredThisChapter[k]); // 卡面：仅当该野心「未宣告」
   if(!options.length){ cont(); return; }
   openModal(m=>{
-    m.appendChild(el('h2',null,'星际吟游诗人 · 宣告野心（不放 0 点标记）'));
+    m.appendChild(el('h2',null,'星际吟游诗人 · 宣告野心（不放 0 点标记）')); m._sticky=true; // 流程必经：Esc/×不可关
     m.appendChild(el('div','hintbox','你正面打出行动卡，且该牌野心目标此章尚未宣告：可在行动前宣告，此牌点数不归零。'));
     options.forEach(k=>{ const b=el('button','btn',`宣告 ${AMBITIONS[k].icon} ${AMBITIONS[k].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
       b.onclick=()=>{ closeModal(); const mk=declareAmbitionNoZero(idx,k); if(mk) logMsg(`${pname(idx)} 星际吟游诗人：正面打出宣告 <b>${AMBITIONS[k].name}</b>（标记 ${mk.f}/${mk.s}，点数不归零）`,'act'); cont(); }; m.appendChild(b); });
@@ -5271,7 +5382,7 @@ function promptActions(){
 function endActorTurn(){
   if(typeof TUT!=='undefined' && TUT.game && !TUT.allowEnd()) return;   // 交互式教学：本步先完成指定操作，暂不结束回合
   UNDO.snap=null;   // 回合结束→丢弃快照(不允许跨回合撤销)
-  G.pending=null; G.highlight=null;
+  G.pending=null; G.highlight=null; G._ruthlessRepeat=null; // 无情重复钩子不跨回合悬挂(否则劫持下一个不相干行动)
   eliminationRespawn(G.actor);   // 淘汰与让步(规则书 p22)：无星港无舰 → 回合末在星门放3新舰
   autosaveCampaign(); // 战役模式：回合末自动存档（单场模式空操作）
   if(G.actionContext==='lead'){ startFollow(); }
@@ -5307,7 +5418,7 @@ function eliminationRespawn(seat){
 function cancelAction(){
   // 弹射分批移动已有舰船移出（rb_13）：不能免费取消（等于白走一步）→ 转为结算并消耗行动点
   if(G.pending&&G.pending.type==='move'&&G.pending.movedN){ finishMoveAction(); return; }
-  if(G._freePrelude) abortPrelude(); G.pending=null; G.highlight=null; promptActions(); render(); }
+  if(G._freePrelude) abortPrelude(); G.pending=null; G.highlight=null; G._ruthlessRepeat=null; promptActions(); render(); }
 
 /* ------------------------------ 跟随 ----------------------------------- */
 function startFollow(){
@@ -5337,13 +5448,14 @@ function followCardChoose(i){
     m.appendChild(el('h2',null,`使用 ${SUITS[card.suit].name}${card.number}`));
     const mdLabel={surpass:`超越（取 ${card.pips} 行动 · ${SUITS[lc.suit].name}）`,pivot:`转向（取 1 行动 · ${SUITS[card.suit].name}）`,copy:`复制（取 1 行动 · ${SUITS[lc.suit].name}，盖放）`};
     let seize=false;
+    // 「同时夺取先攻」开关放在模式按钮【之前】：点模式即提交，开关排后面会被无声跳过
+    if(canSeize){
+      const cb=el('button','btn ghost sm','☐ 同时夺取先攻'); cb.style.cssText='margin:2px 0 6px';
+      cb.onclick=()=>{ seize=!seize; cb.textContent=(seize?'☑':'☐')+' 同时夺取先攻'; cb.style.color=seize?'var(--gold)':''; }; m.appendChild(cb);
+      m.appendChild(el('div','hintbox','夺取：先勾选，再点下方出牌方式；额外弃1张牌（或用“7”超越自动夺取）。本回合后续无人可再夺。'));
+    }
     modes.forEach(mode=>{ const b=el('button','btn',mdLabel[mode]); b.style.display='block'; b.style.margin='6px 0';
       b.onclick=()=>{ closeModal(); followPlay(idx,i,mode,seize); }; m.appendChild(b); });
-    if(canSeize){
-      const cb=el('button','btn ghost sm','☐ 同时夺取先攻'); cb.style.marginTop='6px';
-      cb.onclick=()=>{ seize=!seize; cb.textContent=(seize?'☑':'☐')+' 同时夺取先攻'; }; m.appendChild(cb);
-      m.appendChild(el('div','hintbox','夺取：额外弃1张牌（或用“7”超越）。本回合后续无人可再夺。'));
-    }
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc);
   });
 }
@@ -6500,6 +6612,7 @@ function doBattlePick(id){
       const css=pl?pl.color.css:(c==='imperial'?'#7a6a33':'#5b6470');
       const b=el('button','btn',nm);
       b.style.background=css; b.style.display='block'; b.style.margin='6px 0';
+      b.style.color=pieceInk(pl?pl.color.hex:(c==='imperial'?'#7a6a33':'#5b6470')); // 白/黄底白字不可读 → 按底色亮度选墨色
       b.onclick=()=>{closeModal(); goFight(c);}; m.appendChild(b); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{closeModal(); cancelAction();}; m.appendChild(cc); });
 }
@@ -6582,7 +6695,7 @@ function animateDice(id,defC,a){
   ['skirmish','assault','raid'].forEach(dt=>{for(let i=0;i<(a[dt]||0);i++) dieList.push({type:dt,abbr:dt.slice(0,2)});});
   const dieEls=[];
   openModal(m=>{
-    m.appendChild(el('h2',null,'⚔ 战斗骰'));
+    m.appendChild(el('h2',null,'⚔ 战斗骰')); m._sticky=true; // 流程必经：Esc/×不可关
     const hintParts=[]; if(a.skirmish) hintParts.push(`${a.skirmish} 突袭`); if(a.assault) hintParts.push(`${a.assault} 强攻`); if(a.raid) hintParts.push(`${a.raid} 劫掠`);
     m.appendChild(el('div','hintbox',`投掷 ${hintParts.join(' + ')} 骰`));
     // 骰面图例（对齐 Action Summaries 辅助卡：先舰后建筑 / 自伤打自己舰 / 拦截由守方舰触发）
@@ -6653,13 +6766,13 @@ function openBattleAllocModal(id,defC,rolled,cb){
   const hasCity=blds.some(b=>b.type==='city'), hasPort=blds.some(b=>b.type==='starport');
   const plan={ defDestroyDmg:0, bldgPref:null };
   const render=()=>openModal(m=>{
-    m.appendChild(el('h2',null,'⚔ 分配命中（攻方选择）'));
+    m.appendChild(el('h2',null,'⚔ 分配命中（攻方选择）')); m._sticky=true; // 流程必经：Esc/×不可关
     m.appendChild(elh('div','hintbox',`守方 <b>${colorLabelHTML(defC)}</b>：新鲜舰 ${fresh}、受损舰 ${dmg}${res.hit>0?`；本次舰命中 <b>${res.hit}</b>`:''}${res.bldg>0?`；建筑命中 <b>${res.bldg}</b>`:''}。命中可叠加到受损舰直接摧毁（换战利品/军阀分），或打散降级新鲜舰。`));
     { const ftn=firstTimeNote('battlealloc','ARCS 允许你自由分配命中：叠击摧毁【受损舰】可多得战利品(军阀计分)；打散则把新鲜舰降级为受损。据战局取舍。'); if(ftn) m.appendChild(ftn); }
     if(res.hit>0 && maxKill>0){
       const hd=el('div'); hd.style.cssText='margin:8px 0 2px;color:#d9b25a;font-weight:700'; hd.textContent=`用命中摧毁几艘受损舰（0–${maxKill}）：`; m.appendChild(hd);
       const row=el('div'); row.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
-      for(let k=0;k<=maxKill;k++){ const b=el('button','btn'+(plan.defDestroyDmg===k?' gold':' ghost')+' sm', String(k)); b.onclick=()=>{ plan.defDestroyDmg=k; render(); }; row.appendChild(b); }
+      for(let k=0;k<=maxKill;k++){ const b=el('button','btn'+(plan.defDestroyDmg===k?' selgold':' ghost')+' sm', String(k)); b.onclick=()=>{ plan.defDestroyDmg=k; render(); }; row.appendChild(b); }
       m.appendChild(row);
       const spread=Math.max(0,(res.hit||0)-plan.defDestroyDmg);
       m.appendChild(el('div','hintbox',`→ 摧毁 ${plan.defDestroyDmg} 艘受损；其余 ${spread} 命中优先降级新鲜舰（新鲜不足再摧毁受损/溢出建筑）。`));
@@ -6667,7 +6780,7 @@ function openBattleAllocModal(id,defC,rolled,cb){
     if(res.bldg>0 && hasCity && hasPort){
       const hd2=el('div'); hd2.style.cssText='margin:8px 0 2px;color:#d9b25a;font-weight:700'; hd2.textContent='建筑命中优先打：'; m.appendChild(hd2);
       const row2=el('div'); row2.style.cssText='display:flex;gap:6px;flex-wrap:wrap';
-      [['city','城市'],['starport','星港'],[null,'自动']].forEach(([v,lbl])=>{ const b=el('button','btn'+(plan.bldgPref===v?' gold':' ghost')+' sm', lbl); b.onclick=()=>{ plan.bldgPref=v; render(); }; row2.appendChild(b); });
+      [['city','城市'],['starport','星港'],[null,'自动']].forEach(([v,lbl])=>{ const b=el('button','btn'+(plan.bldgPref===v?' selgold':' ghost')+' sm', lbl); b.onclick=()=>{ plan.bldgPref=v; render(); }; row2.appendChild(b); });
       m.appendChild(row2);
     }
     // 战利品预览：叠击摧毁的受损舰各计 1 战利品（军阀计分）
@@ -6676,7 +6789,7 @@ function openBattleAllocModal(id,defC,rolled,cb){
     tp.innerHTML=killEst>0?`⚔ 本分配预计摧毁 <b>${killEst}</b> 艘受损舰 → <b>+${killEst}</b> 战利品（军阀计分）`:'（当前不叠击摧毁受损舰——命中打散降级新鲜舰，不产战利品）';
     m.appendChild(tp);
     const ok=el('button','btn gold','确认分配'); ok.style.cssText='display:block;width:100%;margin:10px 0 0'; ok.onclick=()=>{ closeModal(); cb(plan); }; m.appendChild(ok);
-    const rules=el('button','btn ghost sm','📖 战斗规则（结算顺序/战利品）'); rules.style.cssText='display:block;margin:8px 0 0'; rules.onclick=()=>showRules(); m.appendChild(rules);
+    const rules=el('button','btn ghost sm','📖 战斗规则（结算顺序/战利品）'); rules.style.cssText='display:block;margin:8px 0 0'; rules.onclick=()=>showRules(render); m.appendChild(rules); // 看完规则回到分配（不再摧毁流程）
   });
   render();
 }
@@ -7124,7 +7237,7 @@ function openInfluence(){
           c.agents[me.color.key]=(c.agents[me.color.key]||0)+1; me.supply.agents--; SFX.key(); extra='（影响力：放置第 2 个密探）';
         }
         consumeAction(`${pname(G.actor)} 影响：在「${c.name}」放置密探${extra}`); };
-      const q=el('button','btn ghost sm','？'); q.onclick=()=>showCourtCard(c);
+      const q=el('button','btn ghost sm','？'); q.title='查看卡面能力（看完返回本选择）'; q.onclick=()=>showCourtCard(c, openInfluence);
       row.appendChild(d); row.appendChild(q); m.appendChild(row); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); abortPrelude(); render(); }; m.appendChild(cc);
   });
@@ -7155,9 +7268,12 @@ function _doOpenSecureModal(ok,col){
   openModal(m=>{
     m.appendChild(el('h2',null,'收纳议会卡'));
     m.appendChild(el('div','hintbox','你占多数的议会卡可收入麾下：俘获其上的敌方密探（计入暴君）。帝国之声(Vox)收纳后立即触发并弃置。'));
-    ok.forEach(c=>{ const b=el('button','btn'); b.style.cssText='display:block;width:100%;margin:6px 0';
+    ok.forEach(c=>{ const row=el('div'); row.style.cssText='display:flex;gap:6px;align-items:stretch;margin:6px 0';
+      const b=el('button','btn'); b.style.cssText='flex:1';
       b.innerHTML=`${c.name}　<span style="opacity:.85;font-size:12px">${c.t==='vox'?'帝国之声·':''}${effKindLabel(c.eff)}</span>`;
-      b.onclick=()=>{closeModal(); doSecure(c);}; m.appendChild(b); });
+      b.onclick=()=>{closeModal(); doSecure(c);};
+      const q=el('button','btn ghost sm','？'); q.title='查看卡面能力（看完返回本选择）'; q.onclick=()=>showCourtCard(c, ()=>_doOpenSecureModal(ok,col));
+      row.appendChild(b); row.appendChild(q); m.appendChild(row); });
     const cc=el('button','btn ghost','取消'); cc.onclick=()=>{ closeModal(); abortPrelude(); render(); }; m.appendChild(cc);
   });
 }
@@ -7624,7 +7740,7 @@ const EXP_ACTION_RUN={
         m2.appendChild(el('div','hintbox','选择本次导引移动的舰船颜色。'));
         shipColors.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c);
           const b=el('button','btn',`${pl?pl.name:c}（${s.pieces.ships[c]} 艘）`); b.style.cssText='display:block;width:100%;margin:5px 0';
-          if(pl) b.style.background=pl.color.css;
+          if(pl){ b.style.background=pl.color.css; b.style.color=pieceInk(pl.color.hex); }
           b.onclick=()=>{ closeModal(); pickColorThenCount(c); }; m2.appendChild(b); });
         const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m2.appendChild(cc); });
     });
@@ -7662,7 +7778,7 @@ const EXP_ACTION_RUN={
           defColors.forEach(c=>{ const pl=G.players.find(p=>p.color.key===c);
             const bldCount=ds.pieces.buildings.filter(bld=>bld.owner===c).length;
             const btn=el('button','btn',`${pl?pl.name:c}（舰 ${ds.pieces.ships[c]||0} / 建筑 ${bldCount}）`); btn.style.cssText='display:block;width:100%;margin:5px 0';
-            if(pl) btn.style.background=pl.color.css;
+            if(pl){ btn.style.background=pl.color.css; btn.style.color=pieceInk(pl.color.hex); }
             btn.onclick=()=>{ closeModal(); doFire(c); }; m2.appendChild(btn); });
           const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m2.appendChild(cc); });
       });
@@ -8216,7 +8332,7 @@ function openActResolveWizard(){
       // 全员判定完毕 → 执行中场休息 A–F，再展示摘要与「选命运」(F)
       const summary=campIntermission();
       render();
-      openModal(m=>{ m.appendChild(el('h2',null,`🔄 中场休息 · 已进入第 ${G.campaign.act} 幕`));
+      openModal(m=>{ m.appendChild(el('h2',null,`🔄 中场休息 · 已进入第 ${G.campaign.act} 幕`)); m._sticky=true; // 流程必经：Esc/×不可关
         const box=el('div','hintbox'); box.style.cssText='text-align:left;font-size:12px;line-height:1.7';
         box.innerHTML=(summary||[]).join('<br>'); m.appendChild(box);
         m.appendChild(el('div','hintbox','F·选命运：达成者抽1张、失败者抽2张选1（数字版可在下方为玩家改选命运，或保留当前命运）。'));
@@ -8229,7 +8345,7 @@ function openActResolveWizard(){
     const pi=fatePlayers[k]; const p=G.players[pi]; const f=fateByNum(p.fate);
     const sc=fateActScript(p.fate, act);
     openModal(m=>{
-      m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}（判定 ${k+1}/${fatePlayers.length}）`));
+      m.appendChild(el('h2',null,`第 ${act} 幕结算 · ${p.name}（判定 ${k+1}/${fatePlayers.length}）`)); m._sticky=true; // 流程必经：Esc/×不可关
       { const ftn=firstTimeNote('actwizard','中场休息·逐位判定各玩家本幕命运目标是否达成——达成/未达成会执行不同的卡库与权力变动，且不可撤销。引擎已给出建议判定，你确认即可。'); if(ftn) m.appendChild(ftn); }
       // 全员判定进度总览（只读）：已判定✓/✗、当前▶、待判定○
       const ov=elh('div','hintbox', fatePlayers.map((pi2,j)=>{ const p2=G.players[pi2];
@@ -8275,7 +8391,7 @@ function openSummitModal(hostIdx){
   const others=i=>G.players.map((p,j)=>j).filter(j=>j!==i);
   const refresh=()=>{ closeModal(); openSummitModal(hostIdx); };
   openModal(m=>{
-    m.appendChild(el('h2',null,`🕊 峰会 · 主持：${pname(hostIdx)}`));
+    m.appendChild(el('h2',null,`🕊 峰会 · 主持：${pname(hostIdx)}`)); m._sticky=true; // 流程必经：Esc/×不可关
     // 好感概览
     const fv=el('div','hintbox'); fv.style.cssText='text-align:left;font-size:11.5px';
     fv.innerHTML='<b>好感持有</b>（你命运卡上的对手密探）：<br>'+G.players.map((p,i)=>{
@@ -8342,7 +8458,7 @@ function openSummitPick(kind, hostIdx, back){
 }
 /* 旗舰布置/重新安置：选玩家 → 选其有忠诚棋子的系统 */
 function openFlagshipSetup(){
-  openModal(m=>{ m.appendChild(el('h2',null,'✦ 旗舰布置 / 重新安置'));
+  openModal(m=>{ m.appendChild(el('h2',null,'✦ 旗舰布置 / 重新安置')); m._sticky=true; // 流程必经：Esc/×不可关
     m.appendChild(el('div','hintbox','选择玩家，再选其有忠诚棋子(舰/建筑)的系统放置旗舰；已有旗舰则为重新安置。'));
     G.players.forEach((p,i)=>{ const b=el('button','btn',pname(i)+(campHasFlagship(i)?`（现于 ${p.flagship.sys}）`:'')); b.style.cssText='display:block;width:100%;margin:4px 0;background:'+p.color.css;
       b.onclick=()=>{ closeModal(); const col=p.color.key;
@@ -8373,7 +8489,7 @@ function openFateReChoose(){
       G.players.forEach(q=>{ if(q!==p){ const f=campFavorsOf(p); if(f[q.color.key]){ q.supply.agents+=f[q.color.key]; delete f[q.color.key]; } } }); // 换命运：归还好感（规则）
       campLog(`${pname(i)} 改选命运为 ${fateByNum(n).cn}（${tier} 套）`); closeModal(); step(k+1);
     };
-    openModal(m=>{ m.appendChild(el('h2',null,`选命运 · ${pname(i)}`));
+    openModal(m=>{ m.appendChild(el('h2',null,`选命运 · ${pname(i)}`)); m._sticky=true; // 流程必经：Esc/×不可关
       m.appendChild(elh('div','hintbox',`当前命运：<b style="color:#c98bd6">${cur?cur.cn:'?'}</b>。${completedLast?`上一幕达成：可保留当前命运，或从 <b>${tier}</b> 套改选。`:`上一幕失败：<b>必须归还当前命运</b>，从 <b>${tier}</b> 套改选（不可保留）。`}`));
       if(completedLast){ // 仅达成者可保留当前命运；失败者必须改选（战役 p.29）
         const keep=el('button','btn gold',`保留 ${cur?cur.cn:''}`); keep.style.cssText='display:block;width:100%;margin:4px 0';
@@ -8429,7 +8545,10 @@ function openCampaignLoadMenu(){
       row.appendChild(info);
       const exp=el('button','btn ghost sm','导出'); exp.title='导出为 JSON 文件';
       exp.onclick=()=>exportCampaignFile(sv.slot); row.appendChild(exp);
-      const del=el('button','btn ghost sm','🗑'); del.onclick=()=>{ deleteCampaignSlot(sv.slot); closeModal(); openCampaignLoadMenu(); }; row.appendChild(del);
+      const del=el('button','btn ghost sm','🗑'); del.title='删除此存档';
+      del.onclick=()=>confirmThen('删除此战役存档？',`存档「${sv.label||sv.slot}」将被永久删除，无法恢复。`,
+        ()=>{ deleteCampaignSlot(sv.slot); closeModal(); openCampaignLoadMenu(); },
+        ()=>openCampaignLoadMenu()); row.appendChild(del);
       m.appendChild(row);
     });
     const imp=el('button','btn ghost','📥 导入 JSON 存档'); imp.style.cssText='width:100%;margin-top:8px';
@@ -8458,7 +8577,7 @@ function importCampaignFile(){
   };
   inp.click();
 }
-function showRules(){
+function showRules(back){   // back：从设置面板/流程模态进入时原路返回
   const sec=(title,body)=>`<div style="margin:10px 0 4px;color:#d9b25a;font-weight:800;font-size:14px">${title}</div><div style="color:#c4cde0;font-size:12.5px;line-height:1.7">${body}</div>`;
   const suitRows=SUIT_ORDER.map(s=>`<b style="color:${SUITS[s].color}">${SUITS[s].name}</b>：${SUITS[s].actions.map(a=>ACTION_NAMES[a]).join(' / ')}`).join('　');
   const pipRows=Object.entries(PIPS_BY_NUMBER).map(([n,p])=>`${n}→${p}`).join('，');
@@ -8502,7 +8621,7 @@ function showRules(){
     legend.appendChild(rrow);
     box.insertBefore(legend, box.firstChild);
     m.appendChild(box);
-    const c=el('button','btn gold','明白了'); c.style.marginTop='10px'; c.onclick=()=>closeModal(); m.appendChild(c);
+    const c=el('button','btn gold',back?'← 返回':'明白了'); c.style.marginTop='10px'; c.onclick=()=>{ back?back():closeModal(); }; m.appendChild(c);
   });
 }
 
@@ -8525,11 +8644,11 @@ function shortcutListHTML(){
   return `<div style="color:#9fb0cc;font-size:11.5px;margin:2px 0 4px">键盘</div>${kb.map(([k,d])=>row(k,d)).join('')}`
        + `<div style="color:#9fb0cc;font-size:11.5px;margin:8px 0 4px">鼠标 / 棋盘</div>${ms.map(([k,d])=>row(k,d)).join('')}`;
 }
-function showShortcuts(){
+function showShortcuts(back){
   openModal(m=>{
     m.appendChild(el('h2',null,'⌨ 快捷键'));
     const box=el('div'); box.style.cssText='max-height:60vh;overflow:auto;padding-right:6px'; box.innerHTML=shortcutListHTML(); m.appendChild(box);
-    const c=el('button','btn gold','明白了'); c.style.marginTop='10px'; c.onclick=()=>closeModal(); m.appendChild(c);
+    const c=el('button','btn gold',back?'← 返回':'明白了'); c.style.marginTop='10px'; c.onclick=()=>{ back?back():closeModal(); }; m.appendChild(c);
   });
 }
 
@@ -8553,12 +8672,16 @@ function showSettingsPanel(){
     }
     // 新手教学
     const tut=el('button','btn ghost','📚 新手教学（重开教学局）'); tut.style.cssText='text-align:left;width:100%';
-    tut.onclick=()=>{ closeModal(); TUT.start(); }; wrap.appendChild(tut);
+    tut.onclick=()=>{ closeModal();
+      if(G && G.phase!=='setup' && G.phase!=='end' && !TUT.on){   // 教学会替换当前对局 → 先确认；进度已在自动存档可找回
+        confirmThen('进入新手教学？','当前对局将被教学局替换。你的进度已自动存档，之后可从开始屏「▶ 继续上一局」找回。',()=>TUT.start());
+      } else TUT.start(); }; wrap.appendChild(tut);
     // 帮助入口
     const help=el('div','row'); help.style.marginTop='2px';
-    const r1=el('button','btn ghost sm','📖 规则速查'); r1.onclick=()=>showRules();
-    const r2=el('button','btn ghost sm','📜 卡牌图鉴'); r2.onclick=()=>showCodex();
-    const r3=el('button','btn ghost sm','⌨ 快捷键'); r3.onclick=()=>showShortcuts();
+    const back=()=>showSettingsPanel();   // 帮助页看完回到设置（有去有回）
+    const r1=el('button','btn ghost sm','📖 规则速查'); r1.onclick=()=>showRules(back);
+    const r2=el('button','btn ghost sm','📜 卡牌图鉴'); r2.onclick=()=>showCodex(null,null,back);
+    const r3=el('button','btn ghost sm','⌨ 快捷键'); r3.onclick=()=>showShortcuts(back);
     help.appendChild(r1); help.appendChild(r2); help.appendChild(r3); wrap.appendChild(help);
     m.appendChild(wrap);
     const c=el('button','btn gold','关闭'); c.style.marginTop='10px'; c.onclick=()=>closeModal(); m.appendChild(c);
@@ -8569,10 +8692,10 @@ function showSettingsPanel(){
    可在开始界面与游戏内浏览全部 16 领袖 / 28 传说 / 24 命运的能力与三幕目标，
    支持按名称/能力关键字检索（参考 ArcsFates 资料站的卡牌目录）。纯展示层：
    复用既有数据 LEADERS/LORE/CAMPAIGN_FATES 与单卡详情 showLeaderCard/showLoreCard/showFateCard。 */
-function showCodex(initialTab, initialQuery){
+function showCodex(initialTab, initialQuery, back){
   let tab=initialTab||'leader', q=initialQuery||'';
   const norm=s=>(s||'').toLowerCase();
-  const reopen=()=>showCodex(tab, q);   // 从单卡详情返回时回到当前选项卡与检索词
+  const reopen=()=>showCodex(tab, q, back);   // 从单卡详情返回时回到当前选项卡与检索词
   openModal(m=>{
     m.appendChild(el('h2',null,'📜 卡牌图鉴'));
     m.appendChild(elh('div','hintbox','浏览全部 <b>16 领袖 · 28 传说 · 24 命运</b> 的能力与三幕目标。切换选项卡，或输入关键字按名称/能力检索；点卡面可看大图。'));
@@ -8589,7 +8712,7 @@ function showCodex(initialTab, initialQuery){
     m.appendChild(search);
     const count=el('div'); count.style.cssText='color:#7f8ea8;font-size:11px;margin-bottom:4px'; m.appendChild(count);
     const body=el('div'); body.style.cssText='max-height:52vh;overflow:auto;padding-right:6px'; m.appendChild(body);
-    const c=el('button','btn gold','关闭'); c.style.marginTop='10px'; c.onclick=()=>closeModal(); m.appendChild(c);
+    const c=el('button','btn gold',back?'← 返回设置':'关闭'); c.style.marginTop='10px'; c.onclick=()=>{ back?back():closeModal(); }; m.appendChild(c);
 
     const chip=(txt,color)=>`<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:9px;background:${color}22;color:${color};border:1px solid ${color}66;margin-left:6px">${txt}</span>`;
     const ROMAN=['Ⅰ','Ⅱ','Ⅲ'];
@@ -8625,7 +8748,7 @@ function showCodex(initialTab, initialQuery){
       count.textContent = q ? `匹配 ${n} 张` : `共 ${n} 张`;
       if(n===0) body.appendChild(elh('div','hintbox','没有匹配的卡牌，换个关键字试试。'));
     }
-    function sync(){ Object.keys(tabBtns).forEach(k=>{ tabBtns[k].className = (k===tab)?'btn gold sm':'btn ghost sm'; }); renderBody(); }
+    function sync(){ Object.keys(tabBtns).forEach(k=>{ tabBtns[k].className = (k===tab)?'btn selgold sm':'btn ghost sm'; }); renderBody(); }
     sync();
   });
 }
@@ -8923,11 +9046,14 @@ function onGlobalKey(e){
   }
   if(e.metaKey||e.ctrlKey||e.altKey) return;
   // ?（Shift+/）：随时打开快捷键说明（教学进行中除外）
-  if(e.key==='?'){ if(TUT.on) return; if(isModalOpen()) closeModal(); e.preventDefault(); showShortcuts(); return; }
-  // Esc：优先关闭弹窗，其次取消进行中的行动（教学进行时交由其自身按钮，不干预）
+  if(e.key==='?'){ if(TUT.on) return; if(isModalOpen()){ if($('#modalWrap')._sticky) return; closeModal(); } e.preventDefault(); showShortcuts(); return; }
+  // Esc：优先关闭弹窗，其次取消进行中的行动（教学进行时交由其自身按钮，不干预；sticky 流程模态不可关）
   if(e.key==='Escape'){
     if(TUT.on) return;
-    if(isModalOpen()){ e.preventDefault(); closeModal(); $('#modal').classList.remove('victory'); return; }
+    if(isModalOpen()){
+      if($('#modalWrap')._sticky){ e.preventDefault(); toast('此步骤需在弹窗内完成（选一项继续）'); return; }
+      e.preventDefault(); closeModal(); $('#modal').classList.remove('victory'); return;
+    }
     if(G&&G.pending){ e.preventDefault(); closeModal(); cancelAction(); return; }
     return;
   }
