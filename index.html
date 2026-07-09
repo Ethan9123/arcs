@@ -1620,12 +1620,24 @@ const ACT_SCRIPTS = {
 function fateActScript(fateNum, act){ const s=ACT_SCRIPTS[fateNum]; return s && s[act]; }
 // 运行某玩家当前幕的 setup
 function campRunActSetup(playerIdx){ const p=G.players[playerIdx]; if(!p||!p.fate) return;
+  // 幂等（review#3/#8）：以 (幕,命运) 为键——F 步窗口刷新恢复后「保留命运/重选」都会再调本函数，
+  //   无守卫会把幕开局脚本(发卡/放棋子)执行两遍；改选新命运后键不同，新命运 setup 照常执行。
+  if(!p._actSetupDone) p._actSetupDone={};
+  const key=G.campaign.act+':'+p.fate;
+  if(p._actSetupDone[key]) return;
+  p._actSetupDone[key]=true;
   const sc=fateActScript(p.fate, G.campaign.act); if(sc&&sc.setup) runActInstrs(sc.setup,{playerIdx}); }
 // 结算某玩家当前幕（success/fail 分支）
 function campResolveActForPlayer(playerIdx, success){ const p=G.players[playerIdx]; if(!p||!p.fate) return;
-  const act=G.campaign.act; p.fateObjMet[act-1]=!!success;
+  const act=G.campaign.act;
+  // 幂等保护（审计#19）：向导被 Esc/刷新打断后重进会重复执行卡库/权力变动——每人每幕只结算一次
+  if(!p._actResolved) p._actResolved={};
+  if(p._actResolved[act]){ campLog(`${pname(playerIdx)} 第 ${act} 幕已结算过，跳过重复执行`); return; }
+  p._actResolved[act]=true;
+  p.fateObjMet[act-1]=!!success;
   const sc=fateActScript(p.fate, act);
-  if(sc) runActInstrs(success?sc.success:sc.fail, {playerIdx});
+  // 标志先置位（宁可半套锁定也不可重复执行卡库/权力变动）；脚本异常只记日志不再重试（review#10）
+  if(sc){ try{ runActInstrs(success?sc.success:sc.fail, {playerIdx}); }catch(e){ campLog(`⚠ ${pname(playerIdx)} 幕结算脚本异常：${e.message}（已标记为已结算，不重复执行）`); } }
   campLog(`${pname(playerIdx)}（${(fateByNum(p.fate)||{}).cn||''}）第 ${act} 幕${success?'达成':'未达成'}`);
 }
 // 全体结算本幕后推进到下一幕（封顶第3幕）；推进后运行新幕 setup；返回新幕号
@@ -1637,6 +1649,8 @@ function campAdvanceAct(){ if(G.campaign.act<3){ G.campaign.act++; G.players.for
 function campIntermission(){
   if(!G.campaign||!G.campaign.enabled) return null;
   const act=G.campaign.act; const summary=[];
+  // 幂等保护（审计#19）：A-F 含权力减半/清战利品等不可重复步骤——同一幕只执行一次，重进返回缓存摘要
+  if(G.campaign._intermissionForAct===act) return G.campaign._intermissionSummary||[];
   // A. 结算命运：未达成本幕目标者，按「目标标记距0的剩余值」失去权力。
   //    官方目标标记是「倒数到0」模型(规则书 p28：例 标记在5格→失去5、权力2→-3)。本实现 fateProgress 向上计数到阈值，
   //    故剩余值 = 阈值 - 已推进进度。权力可为负(规则书 p28 用「-」格表示)，不再用 Math.min 钳制。
@@ -1672,6 +1686,7 @@ function campIntermission(){
   G.players.forEach(p=>{ p.fateProgress=0; });
   if(G.campaign.act<3) G.campaign.act++; G.campaign.session=(G.campaign.session||1)+1;
   summary.push(`F·进入第 ${G.campaign.act} 幕（第 ${G.campaign.session} 场）；选命运后运行幕开局设置`);
+  G.campaign._intermissionForAct=act; G.campaign._intermissionSummary=summary; // 幂等缓存（按入口幕号）
   autosaveCampaign(); return summary;
 }
 
@@ -2586,8 +2601,18 @@ function resumeGame(){
     if(typeof UNDO!=='undefined') UNDO.snap=null;   // 跨会话不保留「重开本回合」快照
     const w=document.getElementById('modalWrap'); if(w) w.style.display='none';
     render();   // render 会 aiMaybeSchedule 续 AI 回合 / setPrompt 提示人类
+    maybeResumeActWizard();   // 战役幕间向导中断恢复（审计#19）：幂等标志保证不重复结算
     toast('已继续上一局'); return true;
   }catch(e){ return false; }
+}
+// 战役幕间向导中断恢复统一入口（review#7：resumeGame/读战役槽/导入文件三处共用）：
+// 存档带 wizardPending=true（判定/选命运做到一半）→ 重开向导；幂等标志保证不重复结算。
+function maybeResumeActWizard(){
+  try{
+    if(G && G.campaign && G.campaign.enabled && G.campaign.wizardPending && typeof openActResolveWizard==='function'){
+      setTimeout(()=>{ try{ if(typeof isModalOpen!=='function'||!isModalOpen()) openActResolveWizard(); }catch(e){} }, 150);
+    }
+  }catch(e){}
 }
 function loreById(id){ return LORE.find(L=>L.id===id); }
 // 该玩家持有的传说卡里是否有指定机制 eff（扩展关闭或无卡时恒 false）
@@ -3088,6 +3113,7 @@ function mctsChooseMove(state, opts){
 let G = null; // 全局游戏对象
 
 function newGame(numPlayers, names, useExpansion, setupVariant, campaignOpts){
+  if(typeof PL_COLLAPSE!=='undefined'){ for(const k in PL_COLLAPSE) delete PL_COLLAPSE[k]; } // 折叠偏好不跨局残留（review#13）
   const map = buildMap();
   const players = [];
   for(let i=0;i<numPlayers;i++){
@@ -3618,6 +3644,10 @@ function aiApplyMoveLive(move){
   try{ aiDrive(move); } finally{ openModal=sModal; }
 }
 // 渲染后调度：若轮到 AI, 显示"思考中"并在下一 tick 计算+落子, 落子后 render 再次触发本函数 → 连续走完 AI 回合。
+// —— AI 决策解说（审计#16，非演示局）：AI 落子前用 hintMoveText 写一行「打算做什么」——
+//    普通人机对战不再黑箱（此前三段式解说锁死在演示模式）；可在 ⚙ 设置关闭，localStorage 记忆。
+const AI_NARRATE={ on:(function(){ try{ return typeof localStorage!=='undefined' && localStorage.getItem('arcs_ai_narrate')!=='0'; }catch(e){ return true; } })() };
+function aiNarrateSet(v){ AI_NARRATE.on=!!v; try{ localStorage.setItem('arcs_ai_narrate', v?'1':'0'); }catch(e){} }
 // AI 连走结束轮到人类：一次性醒目提示（音效+toast+标签页标题闪）——此前横幅只是静默换字，失焦更是毫无召回
 function humanTurnCue(){
   try{ SFX.seize(); }catch(e){}
@@ -3640,7 +3670,16 @@ function aiMaybeSchedule(){
   try{ setPrompt(`🤖 ${pname(seat)}·${personaFor(G,seat).name} 思考中…`); }catch(e){}
   setTimeout(function(){
     let mv=null, failed=false;
-    try{ mv=mctsChooseMove(G, aiOptsFor(G)); if(mv){ aiApplyMoveLive(mv); G._aiMoved=true; } }
+    try{ mv=mctsChooseMove(G, aiOptsFor(G));
+      if(mv){
+        // 解说文本须在 apply 之前生成（hintMoveText 按手牌下标取牌名，落子后下标失效），
+        // 但要在 apply 【成功后】才落日志（review#12：失败重试不产生失实解说）。
+        // 只解说「行动」类着法（review#14：lead/follow/pass 引擎日志已足够，逐行重复是噪音）。
+        let ntxt=null;
+        if(AI_NARRATE.on && mv.type==='action'){ try{ ntxt=hintMoveText(G,seat,mv); }catch(e){} }
+        aiApplyMoveLive(mv); G._aiMoved=true;
+        if(ntxt){ try{ logMsg(`<span style="opacity:.9">🤖 ${pname(seat)}：${ntxt}</span>`,'act'); }catch(e){} }
+      } }
     catch(e){ console.error('AI 出错:', e); failed=true; }
     finally{
       G._aiThinking=false;
@@ -4798,7 +4837,10 @@ function renderPlayers(){
   const winNeed=POWER_TO_WIN[G.numPlayers]||27;
   const proj=projectAmbitionScores();   // 若此刻结算章末的预估加分（纯只读）
   G.players.forEach((p,i)=>{
-    const collapsed = !!PL_COLLAPSE[i] && i!==active;   // 当前行动者强制展开
+    // 4人局密度（审计#13）：未手动设置时非当前行动者默认折叠（信息密度自动管理）；点过 caret 以手选为准；当前行动者强制展开
+    const userSet=PL_COLLAPSE[i];
+    const autoC=(G.numPlayers>=4) && i!==active;
+    const collapsed = (userSet!==undefined ? !!userSet : autoC) && i!==active;
     const d=el('div','pl'+(i===active?' cur':'')+(collapsed?' collapsed':''));
     d.style.borderLeftColor=p.color.css;
     d.style.background=`linear-gradient(135deg, ${p.color.hex}22, var(--panel2) 62%)`;  // 阵营色微染
@@ -4810,7 +4852,8 @@ function renderPlayers(){
     const hd=el('div','pl-hd');
     const car=el('span','pl-caret'); car.textContent=collapsed?'▸':'▾';
     car.title=collapsed?'展开此玩家面板':'折叠此玩家面板';
-    car.onclick=(e)=>{ e.stopPropagation(); PL_COLLAPSE[i]=!PL_COLLAPSE[i]; render(); };
+    // 非行动者：相对当前有效态取反（含自动折叠态）；当前行动者显示恒展开 → 切换的是「离任后」偏好存值
+    car.onclick=(e)=>{ e.stopPropagation(); PL_COLLAPSE[i]=(i===active)? !PL_COLLAPSE[i] : !collapsed; render(); };
     hd.appendChild(car);
     const dot=el('span','dot'); dot.style.background=p.color.css; hd.appendChild(dot);
     hd.appendChild(el('span','nm',p.name));
@@ -5694,6 +5737,10 @@ function campAutoIntermission(){
 }
 // 幕间向导完成后：重置章号为 1、按新幕发牌、开始新幕第 1 章的出牌（承接 openActResolveWizard/openFateReChoose 末尾）。
 function campStartNewActPlay(){
+  if(G.campaign){ G.campaign.wizardPending=false;   // 幕间向导完成（审计#19 可恢复标志清除）
+    // review#0-2 blocker：幕间缓存的幂等使命到向导完成为止——不清除的话，下一幕向导中断重进时
+    // (act, _intermissionForAct) 与「合法恢复」同构 (N+1, N)，会被上一幕残留缓存劫持、整幕跳过判定。
+    delete G.campaign._intermissionForAct; delete G.campaign._intermissionSummary; }
   // 战役规则书 p.7：进入第 2/3 幕（本函数仅在转幕后调用，act≥2）时，凋敝按 C/D 步骤扩散一次。
   if(G.campaign && G.campaign.act>=2) campActTransitionBlight();
   G.chapter=1; dealNewChapter();
@@ -8443,22 +8490,32 @@ function openCampaignPanel(){
   });
 }
 /* 幕结算向导：逐玩家询问本幕目标是否达成（半自动·关键确认），自动执行对应成功/失败分支后推进 */
+// 中场休息摘要 + 选命运入口模态（从向导 final step 抽出：崩溃/刷新恢复时可直达此步，不重跑判定）
+function showIntermissionModal(summary){
+  openModal(m=>{ m.appendChild(el('h2',null,`🔄 中场休息 · 已进入第 ${G.campaign.act} 幕`)); m._sticky=true; // 流程必经：Esc/×不可关
+    const box=el('div','hintbox'); box.style.cssText='text-align:left;font-size:12px;line-height:1.7';
+    box.innerHTML=(summary||[]).join('<br>'); m.appendChild(box);
+    m.appendChild(el('div','hintbox','F·选命运：达成者抽1张、失败者抽2张选1（数字版可在下方为玩家改选命运，或保留当前命运）。'));
+    const fb=el('button','btn','🎴 重选命运（F）'); fb.style.cssText='width:100%;margin:4px 0';
+    fb.onclick=()=>{ closeModal(); openFateReChoose(); }; m.appendChild(fb);
+    const ok=el('button','btn gold','保留当前命运，开始新幕'); ok.style.cssText='width:100%';
+    ok.onclick=()=>{ closeModal(); G.players.forEach((p,i)=>campRunActSetup(i)); campStartNewActPlay(); }; m.appendChild(ok); }); // #37：重置章号+发牌+开打新幕
+}
 function openActResolveWizard(){
   const cp=G.campaign; const act=cp.act;
+  // 可恢复（审计#19）：wizardPending 随存档持久化；恢复时若中场休息已执行(act 已+1)，直达「选命运」步
+  const resuming = cp.wizardPending===true;
+  cp.wizardPending=true;
+  if(resuming && cp._intermissionForAct===act-1 && act>1){ showIntermissionModal(cp._intermissionSummary||[]); return; }
   const fatePlayers=G.players.map((p,i)=>i).filter(i=>G.players[i].fate);
+  const resolved=(pi)=>{ const pp=G.players[pi]; return !!(pp._actResolved&&pp._actResolved[act]); };
   const step=(k)=>{
+    while(k<fatePlayers.length && resolved(fatePlayers[k])) k++;   // 已结算者跳过（幂等恢复）
     if(k>=fatePlayers.length){
-      // 全员判定完毕 → 执行中场休息 A–F，再展示摘要与「选命运」(F)
+      // 全员判定完毕 → 执行中场休息 A–F（幂等），再展示摘要与「选命运」(F)
       const summary=campIntermission();
       render();
-      openModal(m=>{ m.appendChild(el('h2',null,`🔄 中场休息 · 已进入第 ${G.campaign.act} 幕`)); m._sticky=true; // 流程必经：Esc/×不可关
-        const box=el('div','hintbox'); box.style.cssText='text-align:left;font-size:12px;line-height:1.7';
-        box.innerHTML=(summary||[]).join('<br>'); m.appendChild(box);
-        m.appendChild(el('div','hintbox','F·选命运：达成者抽1张、失败者抽2张选1（数字版可在下方为玩家改选命运，或保留当前命运）。'));
-        const fb=el('button','btn','🎴 重选命运（F）'); fb.style.cssText='width:100%;margin:4px 0';
-        fb.onclick=()=>{ closeModal(); openFateReChoose(); }; m.appendChild(fb);
-        const ok=el('button','btn gold','保留当前命运，开始新幕'); ok.style.cssText='width:100%';
-        ok.onclick=()=>{ closeModal(); G.players.forEach((p,i)=>campRunActSetup(i)); campStartNewActPlay(); }; m.appendChild(ok); }); // #37：重置章号+发牌+开打新幕
+      showIntermissionModal(summary);
       return;
     }
     const pi=fatePlayers[k]; const p=G.players[pi]; const f=fateByNum(p.fate);
@@ -8468,8 +8525,9 @@ function openActResolveWizard(){
       { const ftn=firstTimeNote('actwizard','中场休息·逐位判定各玩家本幕命运目标是否达成——达成/未达成会执行不同的卡库与权力变动，且不可撤销。引擎已给出建议判定，你确认即可。'); if(ftn) m.appendChild(ftn); }
       // 全员判定进度总览（只读）：已判定✓/✗、当前▶、待判定○
       const ov=elh('div','hintbox', fatePlayers.map((pi2,j)=>{ const p2=G.players[pi2];
-        const mark=j<k?(p2.fateObjMet[act-1]?'✓':'✗'):(j===k?'▶':'○');
-        const col=j<k?(p2.fateObjMet[act-1]?'#6fcf8e':'#d9707a'):(j===k?'#d9b25a':'#7f8ea8');
+        const done=resolved(pi2);   // 以幂等标志为准（恢复后跳过者也正确显示 ✓/✗）
+        const mark=done?(p2.fateObjMet[act-1]?'✓':'✗'):(j===k?'▶':'○');
+        const col=done?(p2.fateObjMet[act-1]?'#6fcf8e':'#d9707a'):(j===k?'#d9b25a':'#7f8ea8');
         return `<span style="color:${col}">${mark} ${p2.name}</span>`; }).join('　·　'));
       ov.style.cssText='text-align:center;font-size:12px'; m.appendChild(ov);
       m.appendChild(elh('div','hintbox',`<b style="color:#c98bd6">${f?f.cn:''}</b> 第 ${act} 幕目标：<br><span style="font-size:12px;line-height:1.6">${(f&&f.acts[act-1])||'（无）'}</span>`));
@@ -8493,13 +8551,13 @@ function openActResolveWizard(){
       const yes=el('button','btn gold','✓ 达成目标（成功）'); yes.style.cssText='display:block;width:100%;margin:6px 0';
       yes.onclick=()=>confirmThen('确认判定为「达成」？',
         `将按上方「达成」预览执行卡库/权力变动，<b>本幕结算不可撤销</b>（中场休息无「重开本回合」）。${autoMet?'':'<br>⚠ 引擎判定为<b>未达成</b>，你正做出相反判定。'}`,
-        ()=>{ campResolveActForPlayer(pi,true); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); });
+        ()=>{ campResolveActForPlayer(pi,true); render(); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); }); // render→autosave：判定逐步落盘（review#9）
       const no=el('button','btn','✗ 未达成（失败）'); no.style.cssText='display:block;width:100%;margin:6px 0';
       no.onclick=()=>confirmThen('确认判定为「未达成」？',
         `将按上方「未达成」预览执行卡库变动，<b>本幕结算不可撤销</b>。${autoMet?'<br>⚠ 引擎判定为<b>达成</b>，你正做出相反判定。':''}`,
-        ()=>{ campResolveActForPlayer(pi,false); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); });
+        ()=>{ campResolveActForPlayer(pi,false); render(); closeModal(); step(k+1); }, ()=>{ closeModal(); step(k); });
       m.appendChild(yes); m.appendChild(no);
-      const cancel=el('button','btn ghost','取消结算'); cancel.onclick=()=>closeModal(); m.appendChild(cancel);
+      const cancel=el('button','btn ghost','取消结算'); cancel.onclick=()=>{ cp.wizardPending=false; closeModal(); }; m.appendChild(cancel); // review#4-6：明确退出即收回标志，读档/刷新不再强弹（已判定者由 _actResolved 保护）
     });
   };
   step(0);
@@ -8598,12 +8656,16 @@ function openFateReChoose(){
       m.appendChild(el('div','hintbox','各命运的本幕开局已自动执行（有脚本者）。开始新幕第 1 章后，可随时点顶栏 📜 查看议会区/律法书/标记变化。'));
       const ok=el('button','btn gold','开始新幕第 1 章'); ok.onclick=()=>{ closeModal(); campStartNewActPlay(); }; m.appendChild(ok); }); }; // #37：重置章号+发牌+开打新幕
   const step=(k)=>{
+    // review：本幕已做过选择者跳过（恢复后二次进入时，changeTo 已把 fateObjMet 清零，
+    // 若不跳过会被误判「上一幕失败」而强制第二次改选）
+    while(k<order.length && G.players[order[k]]._fateChosenAct===G.campaign.act) k++;
     if(k>=order.length){ finish(); return; }
     const i=order[k]; const p=G.players[i]; const cur=fateByNum(p.fate);
     const completedLast = p.fateObjMet[Math.max(0,G.campaign.act-2)]; // 上一幕是否达成（act 已+1）
     const tier=campReChooseTier(); // 抽牌套别：act2→B、act3→C（战役 p.29）
     const pool=campFatePool(tier); // 当前幕对应套别的可选命运（不含自己）
     const changeTo=(n)=>{
+      p._fateChosenAct=G.campaign.act;
       p.fate=n; p.fateObjMet=[false,false,false]; p.fateProgress=0;
       G.players.forEach(q=>{ if(q!==p){ const f=campFavorsOf(p); if(f[q.color.key]){ q.supply.agents+=f[q.color.key]; delete f[q.color.key]; } } }); // 换命运：归还好感（规则）
       campLog(`${pname(i)} 改选命运为 ${fateByNum(n).cn}（${tier} 套）`); closeModal(); step(k+1);
@@ -8612,11 +8674,11 @@ function openFateReChoose(){
       m.appendChild(elh('div','hintbox',`当前命运：<b style="color:#c98bd6">${cur?cur.cn:'?'}</b>。${completedLast?`上一幕达成：可保留当前命运，或从 <b>${tier}</b> 套改选。`:`上一幕失败：<b>必须归还当前命运</b>，从 <b>${tier}</b> 套改选（不可保留）。`}`));
       if(completedLast){ // 仅达成者可保留当前命运；失败者必须改选（战役 p.29）
         const keep=el('button','btn gold',`保留 ${cur?cur.cn:''}`); keep.style.cssText='display:block;width:100%;margin:4px 0';
-        keep.onclick=()=>{ closeModal(); step(k+1); }; m.appendChild(keep);
+        keep.onclick=()=>{ p._fateChosenAct=G.campaign.act; closeModal(); step(k+1); }; m.appendChild(keep);
       }
       if(!pool.length){ // 该套别已无可选命运：失败者也只能留任（防卡死）
         m.appendChild(el('div','hintbox',`${tier} 套已无可选命运，保留当前命运。`));
-        const cont=el('button','btn','继续'); cont.style.cssText='display:block;width:100%;margin:4px 0'; cont.onclick=()=>{ closeModal(); step(k+1); }; m.appendChild(cont);
+        const cont=el('button','btn','继续'); cont.style.cssText='display:block;width:100%;margin:4px 0'; cont.onclick=()=>{ p._fateChosenAct=G.campaign.act; closeModal(); step(k+1); }; m.appendChild(cont);
       } else {
         const hd=el('div'); hd.style.cssText='margin:6px 0 2px;color:#d9b25a;font-weight:700'; hd.textContent=`改选（${tier} 套，${completedLast?'可选':'必选'}）：`; m.appendChild(hd);
         pool.forEach(n=>{ const f=fateByNum(n); const b=el('button','btn',`${f.cn} ${fateStars(f.cx)}`); b.style.cssText='display:block;width:100%;margin:3px 0;text-align:left';
@@ -8660,7 +8722,7 @@ function openCampaignLoadMenu(){
       const row=el('div','row'); row.style.cssText='gap:6px;align-items:center';
       const info=el('button','btn'); info.style.cssText='flex:1;text-align:left';
       info.innerHTML=`<b>${sv.label||sv.slot}</b><br><span style="font-size:11px;opacity:.7">${sv.np||'?'}人 · 第${sv.chapter||1}章 · 第${sv.act||1}幕</span>`;
-      info.onclick=()=>{ if(loadCampaignSlot(sv.slot)){ $('#modalWrap').style.display='none'; render(); toast('战役已读取'); } else toast('读取失败'); };
+      info.onclick=()=>{ if(loadCampaignSlot(sv.slot)){ $('#modalWrap').style.display='none'; render(); toast('战役已读取'); maybeResumeActWizard(); } else toast('读取失败'); };
       row.appendChild(info);
       const exp=el('button','btn ghost sm','导出'); exp.title='导出为 JSON 文件';
       exp.onclick=()=>exportCampaignFile(sv.slot); row.appendChild(exp);
@@ -8691,7 +8753,7 @@ function importCampaignFile(){
   inp.onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return;
     const r=new FileReader();
     r.onload=()=>{ try{ restoreCampaignSnapshot(String(r.result)); saveCampaignSlot('imported', (G.campaign&&G.campaign.label)||'导入的战役');
-      $('#modalWrap').style.display='none'; render(); toast('已导入并读取战役存档'); }catch(err){ toast('导入失败：存档格式无效'); } };
+      $('#modalWrap').style.display='none'; render(); toast('已导入并读取战役存档'); maybeResumeActWizard(); }catch(err){ toast('导入失败：存档格式无效'); } }; // review#7：导入半途向导档不再软锁
     r.readAsText(f);
   };
   inp.click();
@@ -8788,6 +8850,8 @@ function showSettingsPanel(){
     if(G && G.aiSeats && G.aiSeats.some(Boolean)){
       wrap.appendChild(rowBtn(()=>'🤖 AI 难度：'+AI_DIFFICULTY_LABEL[G.aiDifficulty||'normal']+'（点击切换，下回合生效）',
         ()=>{ const ks=AI_DIFFICULTY_KEYS; const i=ks.indexOf(G.aiDifficulty||'normal'); G.aiDifficulty=ks[(i+1)%ks.length]; }));
+      if(!G.demoMode) wrap.appendChild(rowBtn(()=>AI_NARRATE.on?'🎙 AI 决策解说：开（点击关闭）':'🎙 AI 决策解说：关（点击开启）',
+        ()=>aiNarrateSet(!AI_NARRATE.on)));
     }
     // 新手教学
     const tut=el('button','btn ghost','📚 新手教学（重开教学局）'); tut.style.cssText='text-align:left;width:100%';
