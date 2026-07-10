@@ -292,6 +292,17 @@
   .die3d::after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 -2px 0 rgba(0,0,0,.28)} /* 高光叠在骰面图之上：有图/缺图质感一致 */
   #dice-anim{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}
+  /* 选骰模态「骰面一览条」：6 面按内容合并(×N)成迷你骰面——选骰时直接"看见"骰子（实体/TTS 直觉） */
+  .face-strip{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+  .face-chip{position:relative;width:26px;height:26px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;color:#fff;cursor:help;
+    box-shadow:0 2px 5px #0008,inset 0 1px 0 rgba(255,255,255,.18)}
+  .face-chip.sk{background:linear-gradient(145deg,#4a8ef5,#2b5fb8)}
+  .face-chip.as{background:linear-gradient(145deg,#e56157,#b03530)}
+  .face-chip.ra{background:linear-gradient(145deg,#e5aa40,#b07820)}
+  .face-chip img.dieface{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
+  .face-chip>span{transform:scale(.62);white-space:nowrap} /* 缺图回退符号缩排进 26px 骰体 */
+  .face-chip i{position:absolute;right:-5px;bottom:-5px;font-style:normal;font-size:9px;font-weight:800;line-height:1.3;
+    background:#10141f;color:#dfe6f3;border-radius:6px;padding:0 3px;border:1px solid #33405e;pointer-events:none}
   @keyframes battle-flash {
     0%{filter:drop-shadow(0 0 0px #e56157)}
     30%{filter:drop-shadow(0 0 24px #e56157)}
@@ -595,16 +606,27 @@ const DICE = {
 // 期望（每面 1/6）：突袭 hit 3/6=0.5；强攻 hit (2+2+1+1+1+0)/6=7/6≈1.17 · self 3/6 · intercept 1/6；
 //   劫掠 key (2+1+1)/6 · bldg 3/6 · self 3/6 · intercept 2/6。
 // 拦截是「整场一次」触发：任一强攻/劫掠骰出拦截，攻方再损「守方新鲜舰数」艘。
-function battleOdds(alloc, defFresh){
+// 游击部队(Skirmishers)/猎手小队(Hunter Squads)重掷增益（受 Arcs Arsenal「骰子计算器」启发）：
+// 进攻掷骰后可重掷至多 R 颗「空白」游击骰（R=武器标志数），每颗重掷期望再得 0.5 命中。
+// 空白骰数 B~Binomial(sk,1/2)；增益 = 0.5·E[min(B,R)]。游击骰无自损/拦截面，故此增益仅影响命中、
+// 不改 eSelf/pInt —— 精确解，非近似（与实际战斗 runBattle 内「只重掷空白游击骰」的策略一致）。
+function skirmishRerollGain(sk, R){
+  sk=sk|0; R=Math.min(R|0, sk); if(R<=0||sk<=0) return 0;
+  let eMin=0; const p=Math.pow(0.5,sk);
+  for(let b=0;b<=sk;b++){ let c=1; for(let j=0;j<b;j++) c=c*(sk-j)/(j+1); eMin+=Math.min(b,R)*c*p; }
+  return 0.5*eMin; // = 0.5·E[min(B,R)]，B~Bin(sk,1/2)
+}
+function battleOdds(alloc, defFresh, mods){
   const sk=alloc.skirmish|0, as=alloc.assault|0, ra=alloc.raid|0;
-  const eHit  = sk*0.5 + as*(7/6);
+  const skRerollGain = (mods && mods.skReroll) ? skirmishRerollGain(sk, mods.skReroll) : 0;
+  const eHit  = sk*0.5 + as*(7/6) + skRerollGain;
   const eBldg = ra*(3/6);
   const eKey  = ra*(4/6);
   const eSelfFace = as*(3/6) + ra*(3/6);
   const pNoInt = Math.pow(5/6, as) * Math.pow(4/6, ra); // 任一强攻/劫掠骰都不出拦截
   const pInt = 1 - pNoInt;
   const eSelfInt = pInt * (defFresh||0);
-  return { eHit, eBldg, eKey, eSelfFace, pInt, eSelf: eSelfFace + eSelfInt, dice: sk+as+ra };
+  return { eHit, eBldg, eKey, eSelfFace, pInt, eSelf: eSelfFace + eSelfInt, dice: sk+as+ra, skRerollGain };
 }
 
 // 终局权力阈值
@@ -2902,7 +2924,7 @@ function aiBestDiceAlloc(md, defFresh, ctx){
     for(let as=0; as<=md-ra; as++){
       const sk=md-ra-as; if(sk+as+ra===0) continue;
       if(ctx.waryLimit && as>sk) continue; // 谨慎(Wary)：强攻骰不能多于突袭骰
-      const o=battleOdds({skirmish:sk,assault:as,raid:ra}, defFresh);
+      const o=battleOdds({skirmish:sk,assault:as,raid:ra}, defFresh, {skReroll:ctx.skReroll||0});
       // 命中先打舰、舰尽溢出打建筑（rb 口径，见 applyBattleHits）：按目标封顶，避免高命中虚高
       const shipKills=Math.min(o.eHit, nShips);
       const spill=Math.max(0, o.eHit - nShips);
@@ -2925,7 +2947,8 @@ function aiDoBattle(target, defC){
   const raidOK=raidAllowed(defC,target) && (defHasBldg || defHasLoot); // 与旧逻辑同样以 raidAllowed 把关，杜绝非法收劫掠骰
   const waryLimit=(G.useExpansion&&leaderHas(me,'wary'));
   const nShips=s.pieces.ships[defC]|0; // 守方舰总数(含受损)：命中的实际舰目标数
-  const a=aiBestDiceAlloc(md, defFresh, {raidOK, defHasBldg, canSteal:raidOK&&defHasLoot, nBldg, nLoot, nShips, waryLimit});
+  const skReroll=ownsEff(me,'skirmishreroll')?weaponIcons(me):0; // 游击部队：可重掷空白游击骰 → AI 应更看重游击骰
+  const a=aiBestDiceAlloc(md, defFresh, {raidOK, defHasBldg, canSteal:raidOK&&defHasLoot, nBldg, nLoot, nShips, waryLimit, skReroll});
   runBattle(target, defC, a);
 }
 // 静音驱动：假定 G 已指向工作态；临时静音 UI + 换移动感知模态自答 + 驱动引擎，最后还原 UI(不动 G)。
@@ -3499,7 +3522,7 @@ function resolveResOverflow(player, justGained){
     RES_ORDER.filter(r=>(player.res[r]||0)>0)
       .sort((a,b)=>RES_DEF_VALUE[b]-RES_DEF_VALUE[a])
       .forEach(r=>{
-        const b=el('button','btn',`弃置 ${RESOURCES[r].icon} ${RESOURCES[r].name} ×1（持有 ${player.res[r]}）`);
+        const b=elh('button','btn',`弃置 ${resTokenHTML(r,18)} ${RESOURCES[r].name} ×1（持有 ${player.res[r]}）`);
         b.style.cssText='display:block;width:100%;margin:5px 0';
         b.onclick=()=>{ player.res[r]--; G.resSupply[r]++;
           logMsg(`${pname(player.idx)} 资源槽已满：弃置 1 ${RESOURCES[r].name}`,'act');
@@ -5253,7 +5276,7 @@ function openLeadConfirm(owner,i){
     m.appendChild(elh('div','hintbox',`打出 <b style="color:${SUITS[card.suit].color}">${SUITS[card.suit].name}${card.number}</b>（${card.pips} 行动点）定为本轮花色，随后执行行动。`));
     if(options.length){
       const mk=G.markersAvailable.reduce((a,b)=>b.f>a.f?b:a);
-      m.appendChild(el('div','hintbox',`可同时宣告雄心：取走最高标记 ${mk.f}/${mk.s} 放入雄心盒，此牌点数视为 0（更易被超越夺先攻）。`));
+      m.appendChild(elh('div','hintbox',`可同时宣告雄心：取走最高标记 <b>${mk.f}/${mk.s}</b>${ambMarkerHTML(mk)} 放入雄心盒，此牌点数视为 0（更易被超越夺先攻）。`));
       options.forEach(k=>{ const b=el('button','btn',`宣告 ${AMBITIONS[k].icon} ${AMBITIONS[k].name} 并打出`);
         b.style.cssText='display:block;width:100%;margin:6px 0'; b.onclick=()=>play(k); m.appendChild(b); });
     }
@@ -5304,7 +5327,7 @@ function maybeDeclare(pIdx,card,cont){
   openModal(m=>{
     m.appendChild(el('h2',null,'宣告雄心？')); m._sticky=true; // 流程必经：Esc/×不可关
     const mk=G.markersAvailable.reduce((a,b)=>b.f>a.f?b:a);
-    m.appendChild(el('div','hintbox',`宣告将取走最高标记 ${mk.f}/${mk.s} 放入该雄心盒，并把此牌点数视为 0（更易失去先攻）。`));
+    m.appendChild(elh('div','hintbox',`宣告将取走最高标记 <b>${mk.f}/${mk.s}</b>${ambMarkerHTML(mk)} 放入该雄心盒，并把此牌点数视为 0（更易失去先攻）。`));
     options.forEach(k=>{ const b=el('button','btn',`宣告 ${AMBITIONS[k].icon} ${AMBITIONS[k].name}`); b.style.display='block'; b.style.margin='6px 0';
       b.onclick=()=>{ closeModal(); declareAmbition(pIdx,k); cont(); }; m.appendChild(b); });
     const no=el('button','btn ghost','不宣告，直接行动'); no.onclick=()=>{ closeModal(); cont(); }; m.appendChild(no);
@@ -5380,7 +5403,7 @@ function onDeclareAmbition(pIdx,ambKey){
     openModal(m=>{
       m.appendChild(el('h2',null,'领袖·野心 · 获得 1 资源'));
       m.appendChild(el('div','hintbox','你宣告了雄心：选择获得任意 1 个资源（受供应限制）。'));
-      avail.forEach(rt=>{ const b=el('button','btn',`${RESOURCES[rt].icon} ${RESOURCES[rt].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
+      avail.forEach(rt=>{ const b=elh('button','btn',`${resTokenHTML(rt,18)} ${RESOURCES[rt].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
         b.onclick=()=>{ closeModal(); if(ambitiousGain(me,rt)) logMsg(`${pname(pIdx)} 领袖·野心：获得 ${RESOURCES[rt].name}`,'act'); }; m.appendChild(b); });
     });
   }
@@ -5533,6 +5556,16 @@ function followCardChoose(i){
   const canSeize=(G.seizedBy===null);
   openModal(m=>{
     m.appendChild(el('h2',null,`使用 ${SUITS[card.suit].name}${card.number}`));
+    // 桌面直觉：把「主导的牌 → 你要出的牌」摆在一起对比（同花色更大=可超越，一眼可判）
+    const vs=el('div'); vs.style.cssText='display:flex;align-items:center;justify-content:center;gap:10px;margin:4px 0 8px';
+    const mkCol=(lbl,cd,opts)=>{ const c=el('div'); c.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px';
+      const t=elh('span',null,lbl); t.style.cssText='font-size:11px;color:#8b96ad'; c.appendChild(t); // elh：pname 返回带色 HTML
+      c.appendChild(cardEl(cd,null,Object.assign({small:true},opts))); return c; };
+    vs.appendChild(mkCol(`主导 · ${pname(G.lead.playerIdx)}`, lc, G.lead.zero?{badge:'0',dim:true}:{}));
+    const arrow=el('span',null,'→'); arrow.style.cssText='font-size:18px;color:#8b96ad'; vs.appendChild(arrow);
+    vs.appendChild(mkCol('你打出', card, {}));
+    m.appendChild(vs);
+    if(G.lead.zero) m.appendChild(el('div','hintbox','主导已宣告雄心：其牌点数视为 0，任意同花色牌都可超越。'));
     const mdLabel={surpass:`超越（取 ${card.pips} 行动 · ${SUITS[lc.suit].name}）`,pivot:`转向（取 1 行动 · ${SUITS[card.suit].name}）`,copy:`复制（取 1 行动 · ${SUITS[lc.suit].name}，盖放）`};
     let seize=false;
     // 「同时夺取先攻」开关放在模式按钮【之前】：点模式即提交，开关排后面会被无声跳过
@@ -6101,7 +6134,7 @@ function openPrelude(){
     m.appendChild(el('div','hintbox','出牌后、花费首个行动点前，可花资源换取额外行动（不消耗行动点）；资源用后归还供应。被民愤的资源不能用于其序幕行动（忠诚卡例外）。'));
     RES_ORDER.forEach(rt=>{ const o=preludeOption(me, rt);
       const b=el('button','btn'+(o.enabled?'':' ghost')); b.style.cssText='display:block;width:100%;margin:6px 0;text-align:left'; b.disabled=!o.enabled;
-      b.innerHTML=`<b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].icon} ${RESOURCES[rt].name}</b> → ${o.desc}`+(o.enabled?(o.loyal?'　<span style="opacity:.7;font-size:12px">忠诚:可用任意资源支付</span>':''):`　<span style="opacity:.55;font-size:12px">(${o.reason})</span>`);
+      b.innerHTML=`${resTokenHTML(rt,18)} <b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].name}</b> → ${o.desc}`+(o.enabled?(o.loyal?'　<span style="opacity:.7;font-size:12px">忠诚:可用任意资源支付</span>':''):`　<span style="opacity:.55;font-size:12px">(${o.reason})</span>`);
       b.onclick=()=>{ closeModal(); doPreludeSpend(rt); }; m.appendChild(b); });
     // —— 扩展·序幕能力（领袖与传说，均免点数、不结束序幕）——
     if(G.useExpansion){
@@ -6200,7 +6233,7 @@ function openTycoonCharm(me){
     const canDiscard=(me.res.material+me.res.fuel)>0;
     RES_ORDER.forEach(rt=>{ const able=canDiscard&&G.resSupply[rt]>0;
       const b=el('button','btn'+(able?'':' ghost')); b.disabled=!able; b.style.cssText='display:block;width:100%;margin:5px 0';
-      b.innerHTML=`弃 1 → 获得 <b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].icon} ${RESOURCES[rt].name}</b>`;
+      b.innerHTML=`弃 1 → 获得 ${resTokenHTML(rt,18)} <b style="color:${RESOURCES[rt].color}">${RESOURCES[rt].name}</b>`;
       b.onclick=()=>{ const d=tycoonCharmDiscard1(me); if(d){ gainResource(me,rt); logMsg(`${pname(G.actor)} 大亨魅力：弃 ${RESOURCES[d].name} 换 ${RESOURCES[rt].name}`,'act'); } draw(); };
       m.appendChild(b); });
     const done=el('button','btn gold','完成'); done.onclick=()=>{ closeModal(); render(); openPrelude(); }; m.appendChild(done);
@@ -6262,7 +6295,7 @@ function doPreludeSpend(rt){
   const payTypes = loyal ? RES_ORDER.filter(r=>(me.res[r]||0)>0) : [rt];
   if(loyal && payTypes.length>1){
     openModal(m=>{ m.appendChild(el('h2',null,`忠诚卡 · 用哪种资源支付（作为${RESOURCES[rt].name}）`));
-      payTypes.forEach(pr=>{ const b=el('button','btn',`花 ${RESOURCES[pr].icon} ${RESOURCES[pr].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
+      payTypes.forEach(pr=>{ const b=elh('button','btn',`花 ${resTokenHTML(pr,18)} ${RESOURCES[pr].name}`); b.style.cssText='display:block;width:100%;margin:6px 0';
         b.onclick=()=>{ closeModal(); preludePay(me, pr); launchPrelude(rt); }; m.appendChild(b); });
       const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc);
     });
@@ -6320,7 +6353,7 @@ function doTax(id){
       if(avail.length===1){ doGsTax(avail[0]); return; }
       openModal(m=>{ m.appendChild(el('h2',null,`星门站 ${id} · 选择资源`));
         m.appendChild(el('div','hintbox','星门站城市类型匹配星簇所有行星资源，选择本次课税获得的类型。'));
-        avail.forEach(r=>{ const btn=el('button','btn',`${RESOURCES[r].icon} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
+        avail.forEach(r=>{ const btn=elh('button','btn',`${resTokenHTML(r,18)} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
           btn.onclick=()=>{ closeModal(); doGsTax(r); }; m.appendChild(btn); });
         const cc=el('button','btn ghost','取消'); cc.onclick=()=>closeModal(); m.appendChild(cc); });
       return;
@@ -6364,7 +6397,7 @@ function doTax(id){
         openModal(m=>{
           m.appendChild(el('h2',null,'领袖·神话'));
           m.appendChild(el('div','hintbox',`课税城市后可放 1 个资源到 ${id} 的资源图标上，行星类型永久变为该资源（不可逆）。当前：${RESOURCES[s.resource]?.name||'—'}`));
-          avail.forEach(r=>{ const b=el('button','btn',`${RESOURCES[r].icon} 放置 ${RESOURCES[r].name}，${id} 类型变为 ${RESOURCES[r].name}`);
+          avail.forEach(r=>{ const b=elh('button','btn',`${resTokenHTML(r,18)} 放置 ${RESOURCES[r].name}，${id} 类型变为 ${RESOURCES[r].name}`);
             b.style.cssText='display:block;width:100%;margin:5px 0';
             b.onclick=()=>{ closeModal(); const old=s.resource; me.res[r]--; G.resSupply[r]++;
               s.resource=r; s._mythicLocked=true;
@@ -6834,6 +6867,30 @@ function faceToHTML(face, dieType){
   const sz=parts.length<=2?'17px':'13px';
   return `<span style="font-size:${sz};line-height:1.25;text-align:center">${parts.slice(0,4).join('')}</span>`;
 }
+// 骰面中文说明（悬停提示）：一颗骰面上都有什么符号、各是什么意思
+function faceTipText(face){
+  const names={hit:'命中敌舰',bldg:'命中建筑',key:'钥匙(劫掠战利)',self:'自伤我舰',intercept:'拦截(守方新鲜舰反伤)'};
+  const syms={hit:'⚔',bldg:'🏠',key:'🔑',self:'🔥',intercept:'🛡'};
+  const parts=[]; for(const k of ['hit','bldg','key','self','intercept']){ const n=face[k]||0;
+    if(n>0) parts.push(syms[k]+(n>1?'×'+n:'')+' '+names[k]); }
+  return parts.length?parts.join(' ＋ '):'空白面（无效果）';
+}
+// 骰面一览条：把某类骰的 6 面按内容合并(×N)排成迷你骰面图（官方 TTS 骰面切片，缺图回退符号）。
+// 选骰时直接「看见」骰子上有什么面——对齐实体桌面/TTS 的第一直觉，免记"突袭稳/强攻猛"的抽象口诀。
+function diceFaceStripEl(type){
+  const abbr={skirmish:'sk',assault:'as',raid:'ra'}[type]||'';
+  const wrap=el('div','face-strip');
+  const groups=[], idx={};
+  DICE[type].faces.forEach(f=>{ const k=diceFaceKey(f); if(idx[k]==null){ idx[k]=groups.length; groups.push({face:f,n:0}); } groups[idx[k]].n++; });
+  groups.forEach(g=>{ const c=el('span','face-chip '+abbr);
+    c.innerHTML=faceToHTML(g.face,type)+(g.n>1?`<i>×${g.n}</i>`:'');
+    c.title=`${g.n}/6 面：${faceTipText(g.face)}`;
+    wrap.appendChild(c); });
+  return wrap;
+}
+// 雄心标记实物图（官方六角标记，TTS 部件扫描）：宣告模态里「看见」将取走的标记，缺图回退空串（外层保留文字值）
+function ambMarkerHTML(mk,h){ const p='assets/tokens/amb_'+mk.f+'_'+mk.s+'.png';
+  return (typeof ASSET_OK!=='undefined'&&ASSET_OK[p])?` <img src="${p}" alt="${mk.f}/${mk.s}" style="height:${h||34}px;vertical-align:middle;filter:drop-shadow(0 2px 4px #0009)">`:''; }
 function animateDice(id,defC,a){
   flashSystem(id); // 闪烁攻击目标系统
   const result=resolveBattle(id,defC,a,true); // 预先投骰但【不施加】命中(deferApply)：动画后按攻方分配再施加
@@ -7002,7 +7059,11 @@ function openBattleDice(id,defC,_skipPS=false){
     m.appendChild(el('h2',null,'战斗 · '+id));
     m.appendChild(elh('div','hintbox',`最多投 <b>${maxDice}</b> 颗骰（=参战舰船${gateBonus?` +${gateBonus} 星门守备`:''}${rebelBonus?` +${rebelBonus} 叛军坚定`:''}）。劫掠骰：${raidOK?'可用':hhDefBlock?'不可用（隐匿港湾·守方有新鲜星港）':'不可用'}。${waryLimit?'<br><b>谨慎</b>：强攻骰不能多于突袭骰。':''}`));
     [['skirmish','突袭(蓝) 命中较稳'],['assault','强攻(红) 高伤+自损'],['raid','劫掠(橙) 打建筑/抢资源']].forEach(([k,nm])=>{
-      const r=el('div','row'); r.appendChild(el('span',null,nm));
+      const r=el('div','row');
+      // 名称 + 骰面一览条（6面合并×N，悬停看符号说明）：选骰时直接「看见」骰子——实体/TTS 直觉
+      const lab=el('div'); lab.style.cssText='flex:1;min-width:150px;display:flex;flex-direction:column;gap:1px';
+      lab.appendChild(el('span',null,nm)); lab.appendChild(diceFaceStripEl(k));
+      r.appendChild(lab);
       const val=el('span',null,'0'); val.style.cssText='min-width:22px;text-align:center;font-weight:800';
       const minus=el('button','btn ghost sm','−'),plus=el('button','btn ghost sm','＋');
       minus.onclick=()=>{ a[k]=Math.max(0,a[k]-1); val.textContent=a[k]; upd(); };
@@ -7014,11 +7075,13 @@ function openBattleDice(id,defC,_skipPS=false){
     });
     const tot=el('div'); tot.style.margin='8px 0'; m.appendChild(tot);
     const odds=el('div','hintbox'); odds.style.cssText='margin:6px 0;display:none'; m.appendChild(odds);
+    const skReroll=ownsEff(me,'skirmishreroll')?weaponIcons(me):0; // 游击部队：可重掷空白游击骰（数=武器标志）
     function upd(){ tot.innerHTML=`已选 <b>${a.skirmish+a.assault+a.raid}</b> / ${maxDice}`;
-      const o=battleOdds(a,defFresh);
+      const o=battleOdds(a,defFresh,{skReroll});
       if(o.dice>0){ odds.style.display='';
         odds.innerHTML=`<div style="font-size:12px;line-height:1.7">预估战果（平均）：`+
-          `<b style="color:#ff8b6b">⚔ 命中敌方 ~${o.eHit.toFixed(1)}</b> · `+
+          `<b style="color:#ff8b6b">⚔ 命中敌方 ~${o.eHit.toFixed(1)}</b>`+
+          (o.skRerollGain>0?`<span style="opacity:.72;font-size:11px">（含游击重掷 +${o.skRerollGain.toFixed(1)}，可重掷至多 ${Math.min(skReroll,a.skirmish)} 颗空白游击骰）</span>`:'')+` · `+
           `<b style="color:#ffb347">🔥 自损 ~${o.eSelf.toFixed(1)}</b>`+
           (o.eBldg>0?` · <b>🏠 毁建筑 ~${o.eBldg.toFixed(1)}</b>`:'')+
           (o.eKey>0?` · <b>🔑 钥匙 ~${o.eKey.toFixed(1)}</b>`:'')+
@@ -7054,7 +7117,7 @@ function openAncientHoldingsModal(p, pi){
       if(isActor){
         const avail=RES_ORDER.filter(r=>(p.res[r]||0)>0);
         if(!avail.length) m.appendChild(el('div',null,'（你没有可存入的资源）'));
-        avail.forEach(r=>{ const btn=el('button','btn',`存入 ${RESOURCES[r].icon} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
+        avail.forEach(r=>{ const btn=elh('button','btn',`存入 ${resTokenHTML(r,18)} ${RESOURCES[r].name}`); btn.style.cssText='display:block;width:100%;margin:5px 0';
           btn.onclick=()=>{ closeModal(); p.res[r]--; p._ahRes=r; logMsg(`${pname(pi)} 远古领地：存入 ${RESOURCES[r].name}`,'act'); render(); }; m.appendChild(btn); });
       }
     }
@@ -7071,7 +7134,7 @@ function openRaidModal(atkIdx, defC, keysLeft, done, sysId){
     openModal(m=>{
       m.appendChild(el('h2',null,`劫掠自由城市 · 剩余 ${keysLeft} 🔑`));
       m.appendChild(el('div','hintbox',`花 1 🔑 从供应偷取 1 份 ${RESOURCES[rt].name}（该行星类型）。每战每城限一次。`));
-      const b=el('button','btn',`${RESOURCES[rt].icon} 偷取 1 ${RESOURCES[rt].name} (1 🔑)`); b.style.cssText='display:block;width:100%;margin:6px 0';
+      const b=elh('button','btn',`${resTokenHTML(rt,18)} 偷取 1 ${RESOURCES[rt].name} (1 🔑)`); b.style.cssText='display:block;width:100%;margin:6px 0';
       b.onclick=()=>{ closeModal(); SFX.key(); if(gainResource(atk,rt)) logMsg(`${pname(atkIdx)} 劫掠自由城市 ${sysId||''}：获得 1 ${RESOURCES[rt].name}（1🔑）`,'bat'); done(); };
       m.appendChild(b);
       const stop=el('button','btn ghost','停止劫掠'); stop.onclick=()=>{ closeModal(); done(); }; m.appendChild(stop);
@@ -7089,11 +7152,11 @@ function openRaidModal(atkIdx, defC, keysLeft, done, sysId){
     // 逐槽劫掠成本（规则 p.17：偷某件资源须支付其所在槽印的 🔑 数；守方摆位=最优摆位）
     const slotItems=raidResourceItems(def), seen={};
     slotItems.forEach(it=>{ const key=it.rt+':'+it.cost; if(seen[key]) return; seen[key]=true;
-      if(keysLeft>=it.cost) items.push({kind:'res',rt:it.rt,cost:it.cost,label:`${RESOURCES[it.rt].icon}${RESOURCES[it.rt].name} (${it.cost} 🔑)`}); });
+      if(keysLeft>=it.cost) items.push({kind:'res',rt:it.rt,cost:it.cost,label:`${resTokenHTML(it.rt,18)} ${RESOURCES[it.rt].name} (${it.cost} 🔑)`}); });
     (def.guildCards||[]).forEach(card=>{ if(keysLeft>=card.keys) items.push({kind:'guild',card,cost:card.keys,label:`公会卡「${card.name}」(${card.keys} 🔑)`}); });
     // 传说 Ancient Holdings：存放的资源劫掠成本 4 钥匙
     if(G.useExpansion && def && loreHas(def,'ancientholdings') && def._ahRes && keysLeft>=4)
-      items.push({kind:'ah',rt:def._ahRes,cost:4,label:`🏛远古领地 ${RESOURCES[def._ahRes]?.icon||'?'}${RESOURCES[def._ahRes]?.name||def._ahRes} (4 🔑)`});
+      items.push({kind:'ah',rt:def._ahRes,cost:4,label:`🏛远古领地 ${resTokenHTML(def._ahRes,18)} ${RESOURCES[def._ahRes]?.name||def._ahRes} (4 🔑)`});
   }
   if(!items.length){ done(); return; }
   openModal(m=>{
@@ -7103,7 +7166,8 @@ function openRaidModal(atkIdx, defC, keysLeft, done, sysId){
       : '选择要偷取的目标（花费对应 🔑）。';
     m.appendChild(el('div','hintbox',hint));
     items.forEach(item=>{
-      const b=el('button','btn',item.label); b.style.cssText='display:block;width:100%;margin:6px 0';
+      const b=elh('button','btn',item.label); b.style.cssText='display:block;width:100%;margin:6px 0'; // elh：label 含资源实物图
+
       b.onclick=()=>{
         closeModal();
         SFX.key();
